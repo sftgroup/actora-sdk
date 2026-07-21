@@ -223,7 +223,7 @@ Subscriber uses Agent:
 
 | Network | Chain ID | RPC | Gas Token |
 |---------|----------|-----|-----------|
-| **OxaChain L1** | **19505** | `http://REDACTED_HOST:18545` | T0x |
+| **OxaChain L1** | **19505** | `https://rpc-oxa.0xainet.top` | OXA |
 | Sepolia (Testnet) | 11155111 | `https://ethereum-sepolia-rpc.publicnode.com` | ETH |
 
 Auto-detected via `KNOWN_CHAINS[chainId]`.
