@@ -1,5 +1,5 @@
 interface ConversationClientConfig {
-    /** Gateway base URL, e.g. http://REDACTED_HOST:3090 */
+    /** Gateway base URL, e.g. https://agentx.0xainet.top */
     gatewayUrl: string;
     /** Tenant API Key (agentx_...) issued after registration (alternative to accessToken) */
     apiKey?: string;
