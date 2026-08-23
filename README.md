@@ -655,6 +655,35 @@ Configuration: 26 environment variables — see `gateway/.env.example`.
 
 ---
 
+## Payment Method Decision Guide (v0.11.7)
+
+AgentX exposes several payment rails. Pick by **what is being paid for**, **who pays**, and **whether a wallet is present**:
+
+| Payment | What it pays for | Payer | Wallet? | Best for | SDK entry |
+|---|---|---|---|---|---|
+| `chain` | subscribing to a paid Agent (on-chain escrow) | end user | yes | crypto-native users; auditable on-chain subscription; publisher gets 97.5% | `SubscriptionPayments.pay({ method: 'chain' })` |
+| `fiat` | subscribing to a paid Agent (Stripe card) | end user | no | Web2 users without a wallet; credit-card checkout | `SubscriptionPayments.pay({ method: 'fiat' })` → `sessionUrl` |
+| `x402` | subscribing **or** pay-per-call (native-token balance) | end user (balance) | yes (only to fund) | frictionless per-call / auto-funding; server-side A2A pay-per-call (R19.7) | `X402Client` · `BillingClient` pre-check |
+| `tenant-plan` | platform subscription tier (daily quota / rate limits) | B-end tenant | yes (chain/x402) or no (fiat) | B-end buying platform capabilities, **not** Agent access | `TenantPlanPayments.buy()` |
+| `mpp` | high-frequency batched payments via a payment channel | payer | yes | repeated micro-payments without per-tx gas | `MPPClient` |
+| `period` | pre-authorized N periods, charged later without re-signing | payer | yes | recurring billing / subscription periods | `PeriodClient` |
+| `a2a` (on-chain) | auditable multi-agent delegation (task + gas) | user's wallet | yes | cross-org delegation, settlement, reputation | `A2AProtocol` + `onchain_approval_required` SSE |
+
+**Decision rules**
+
+- Subscribing to a paid Agent → `chain` (wallet) / `fiat` (no wallet) / `x402` (auto-funded); `hasAccess()` unifies the check (chain **OR** fiat/x402).
+- Buying platform quota/tier as a B-end tenant → `TenantPlanPayments`.
+- Pay-per-call delegation → pre-check with `BillingClient` (`endUserId` wallet), then let the Gateway auto-deduct from the x402 balance (server-side, R19.7 — zero caller changes).
+- Auditable / settled delegation → on-chain `A2AProtocol` (the user's wallet signs `createTask` and pays the gas; the platform never holds a signing key).
+
+**Frontend adaptation**
+
+- Connect a wallet via wagmi + viem (`oxaChain`, chainId 19505) for the `chain` / `x402` / `a2a` rails; `fiat` only needs a redirect (`window.location.assign(sessionUrl)`).
+- Renewal UI (three-rail picker): `SubscriptionPayments.pay({ method })` → `fiat` returns `sessionUrl` to redirect; `x402`/`chain` return a `txHash` to verify + refresh access.
+- Pay-per-call: `BillingClient.getBalance({ endUserId })` before delegating; if `balanceWei < priceWei`, prompt a top-up to `payTo`.
+- On-chain approval: on SSE `onchain_approval_required`, show a wallet modal so the **user** signs `createTask` (they pay gas) — see the frontend `OnchainApprovalModal`.
+- Runnable B-end examples (Chinese): [docs/sdk-integration-example.md](../docs/sdk-integration-example.md).
+
 ## Multi-Rail Subscription Payments (v0.9.4)
 
 `SubscriptionPayments` is the single entry point for subscribing across every AgentX payment rail — chain (on-chain escrow), fiat (Stripe card via the Gateway) and x402 (native-token period payment). `fiat` / `x402` / `hasAccess()` go through the unified `/api/v1/payments` endpoint (the `@0xinfrax/payments` engine); `chain` works fully off-Gateway.
