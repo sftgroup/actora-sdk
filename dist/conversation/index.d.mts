@@ -165,6 +165,62 @@ declare class ConversationTaskError extends Error {
     readonly code?: string;
     constructor(status: number, message: string, code?: string);
 }
+/** `a2a_task_results.status` values (Gateway worker). */
+declare const A2A_STATUS: {
+    readonly PROCESSING: 1;
+    readonly DONE: 2;
+    readonly ERROR: 3;
+    readonly AWAITING_PAYMENT: 4;
+};
+/** A2A delegated-task row as stored in `a2a_task_results` (GET /api/v1/a2a/task-result/:id). */
+interface A2ADelegatedTaskResult {
+    task_id: number;
+    status: number;
+    agent_id?: number | null;
+    output_data?: string | null;
+    error_message?: string | null;
+    payment_payer?: string | null;
+    payment_pay_to?: string | null;
+    payment_amount_wei?: string | null;
+    payment_target_agent_id?: number | null;
+    payment_ref?: string | null;
+    payment_pending_since?: string | null;
+    /** Payment options offered while `status === A2A_STATUS.AWAITING_PAYMENT` (REQ-2). */
+    payment_pay_options?: {
+        prepay: boolean;
+        sessionKey: boolean;
+    } | null;
+    created_at?: string;
+    updated_at?: string;
+}
+/** Session Key engine capability info (GET /api/v1/a2a/session-key/info). */
+interface SessionKeyInfo {
+    enabled: boolean;
+    chain: string;
+    chainId: number;
+    baseUrl: string;
+}
+/** Session Key authorization status for an end-user wallet (REQ-3, from billing/balance). */
+interface SessionKeyAuthStatus {
+    enabled: boolean;
+    authorized: boolean;
+    sessionAddress?: string;
+    maxPerTx?: string;
+    maxTotal?: string;
+    totalSpent?: string;
+    validUntil?: string;
+}
+/** x402 ledger balance (GET /api/v1/billing/balance). */
+interface BillingBalance {
+    balance: string;
+    balanceWei: string;
+    currency: string;
+    updatedAt?: string | null;
+    subject: string;
+    payTo?: string;
+    priceWei?: string;
+    sessionKey?: SessionKeyAuthStatus;
+}
 declare class ConversationClient {
     private readonly config;
     private readonly baseUrl;
@@ -214,6 +270,27 @@ declare class ConversationClient {
     listTasks(sessionId: string): Promise<ConversationTask[]>;
     /** Cancel a task (queued → cancelled directly, running → aborted). */
     cancelTask(taskId: string): Promise<ConversationTask>;
+    /** Fetch an A2A delegated-task result row (`a2a_task_results`). */
+    getA2ATaskResult(taskId: string | number): Promise<A2ADelegatedTaskResult>;
+    /**
+     * Re-activate an `awaiting_payment` A2A task after the end user has
+     * authorized (and funded) a Session Key. Does NOT deduct from the ledger —
+     * the worker re-runs and auto-pays via the session-key branch. The client
+     * must be configured with `endUserId` = the task's `payment_payer` (or the
+     * caller holds an admin key).
+     */
+    retryA2ATask(taskId: string | number): Promise<{
+        retried: boolean;
+        taskId: number;
+    }>;
+    /**
+     * Session Key engine capability info — used by an end-user frontend to reach
+     * the engine's public `nonce` / `createSession` endpoints directly
+     * (EIP-712-verified; the session private key never transits the Gateway).
+     */
+    getSessionKeyInfo(): Promise<SessionKeyInfo>;
+    /** x402 ledger balance + Session Key authorization status (REQ-3). */
+    getBalance(): Promise<BillingBalance>;
 }
 
-export { type ConversationChatParams, type ConversationChatResult, ConversationClient, type ConversationClientConfig, type ConversationCreateSessionParams, type ConversationCreateTaskParams, type ConversationSSEEvent, type ConversationSkillDef, type ConversationTask, ConversationTaskError, type ConversationTaskStatus, type OnChainApprovalRequest };
+export { type A2ADelegatedTaskResult, A2A_STATUS, type BillingBalance, type ConversationChatParams, type ConversationChatResult, ConversationClient, type ConversationClientConfig, type ConversationCreateSessionParams, type ConversationCreateTaskParams, type ConversationSSEEvent, type ConversationSkillDef, type ConversationTask, ConversationTaskError, type ConversationTaskStatus, type OnChainApprovalRequest, type SessionKeyAuthStatus, type SessionKeyInfo };

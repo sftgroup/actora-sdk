@@ -2481,6 +2481,7 @@ __export(index_exports, {
   A2AClient: () => A2AClient,
   A2ADaemon: () => A2ADaemon,
   A2AProtocol: () => A2AProtocol,
+  A2A_STATUS: () => A2A_STATUS,
   A2A_VERSION: () => A2A_VERSION,
   AGENT_CATEGORIES: () => AGENT_CATEGORIES,
   AgentLoop: () => AgentLoop,
@@ -7314,6 +7315,12 @@ var ConversationTaskError = class extends Error {
     this.code = code;
   }
 };
+var A2A_STATUS = {
+  PROCESSING: 1,
+  DONE: 2,
+  ERROR: 3,
+  AWAITING_PAYMENT: 4
+};
 var ConversationClient = class {
   constructor(config) {
     this.config = config;
@@ -7513,12 +7520,79 @@ var ConversationClient = class {
     }
     return body;
   }
+  // ── A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3) ─────
+  /** Fetch an A2A delegated-task result row (`a2a_task_results`). */
+  async getA2ATaskResult(taskId) {
+    const res = await fetch(`${this.baseUrl}/api/v1/a2a/task-result/${taskId}`, { headers: this._headers() });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new ConversationTaskError(
+        res.status,
+        body?.error || `A2A task result lookup failed (HTTP ${res.status})`,
+        body?.code
+      );
+    }
+    return body;
+  }
+  /**
+   * Re-activate an `awaiting_payment` A2A task after the end user has
+   * authorized (and funded) a Session Key. Does NOT deduct from the ledger —
+   * the worker re-runs and auto-pays via the session-key branch. The client
+   * must be configured with `endUserId` = the task's `payment_payer` (or the
+   * caller holds an admin key).
+   */
+  async retryA2ATask(taskId) {
+    const res = await fetch(`${this.baseUrl}/api/v1/a2a/tasks/${taskId}/retry`, {
+      method: "POST",
+      headers: this._headers()
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new ConversationTaskError(
+        res.status,
+        body?.error || `A2A task retry failed (HTTP ${res.status})`,
+        body?.code
+      );
+    }
+    return body;
+  }
+  /**
+   * Session Key engine capability info — used by an end-user frontend to reach
+   * the engine's public `nonce` / `createSession` endpoints directly
+   * (EIP-712-verified; the session private key never transits the Gateway).
+   */
+  async getSessionKeyInfo() {
+    const res = await fetch(`${this.baseUrl}/api/v1/a2a/session-key/info`, { headers: this._headers() });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new ConversationTaskError(
+        res.status,
+        body?.error || `Session-key info lookup failed (HTTP ${res.status})`,
+        body?.code
+      );
+    }
+    return body;
+  }
+  /** x402 ledger balance + Session Key authorization status (REQ-3). */
+  async getBalance() {
+    const res = await fetch(`${this.baseUrl}/api/v1/billing/balance`, { headers: this._headers() });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new ConversationTaskError(
+        res.status,
+        body?.error || `Balance lookup failed (HTTP ${res.status})`,
+        body?.code
+      );
+    }
+    return body;
+  }
 };
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   A2AClient,
   A2ADaemon,
   A2AProtocol,
+  A2A_STATUS,
   A2A_VERSION,
   AGENT_CATEGORIES,
   AgentLoop,

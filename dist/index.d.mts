@@ -13,7 +13,7 @@ export { IPFSUploadResult, IPFSUploader, IPFSUploaderConfig, defaultIPFSUploader
 export { MemoryConfig, MemoryFact, MemoryProvider } from './memory/index.mjs';
 export { HttpTraceEmitter, NoopTraceEmitter, TraceConfig, TraceEmitter, TraceEvent } from './traces/index.mjs';
 export { BrowserAction, BrowserActionResult, executeBrowserAction, extractAccessibleDOM, sleep } from './skills/index.mjs';
-export { ConversationChatParams, ConversationChatResult, ConversationClient, ConversationClientConfig, ConversationCreateSessionParams, ConversationCreateTaskParams, ConversationSSEEvent, ConversationSkillDef, ConversationTask, ConversationTaskError, ConversationTaskStatus, OnChainApprovalRequest } from './conversation/index.mjs';
+export { A2ADelegatedTaskResult, A2A_STATUS, BillingBalance, ConversationChatParams, ConversationChatResult, ConversationClient, ConversationClientConfig, ConversationCreateSessionParams, ConversationCreateTaskParams, ConversationSSEEvent, ConversationSkillDef, ConversationTask, ConversationTaskError, ConversationTaskStatus, OnChainApprovalRequest, SessionKeyAuthStatus, SessionKeyInfo } from './conversation/index.mjs';
 import { ClientOptions, ChainKey as ChainKey$1 } from '@0xinfrax/payments';
 export { ClientOptions, MPPClient, PaymentsClient, X402Client } from '@0xinfrax/payments';
 export { C as ChainConfig, a as ConfigRegistryOpts, b as ConfigurationRegistry, K as KNOWN_CHAINS } from './config-BFeSR_GK.mjs';
