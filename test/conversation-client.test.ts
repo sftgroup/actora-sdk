@@ -3,7 +3,7 @@
 //   createSession / createTask / getTask / listTasks / cancelTask / getCapabilities
 //   + the P9 capability gate contract (ConversationTaskError, HTTP 403 PARALLEL_TASKS_DISABLED).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { ConversationClient, ConversationTaskError } from '../src/conversation/client'
+import { ConversationClient, ConversationTaskError, A2A_STATUS } from '../src/conversation/client'
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -191,6 +191,62 @@ describe('ConversationClient — parallel tasks (P8/P9)', () => {
     it('throws ConversationTaskError on non-2xx', async () => {
       fetchMock.mockResolvedValue(jsonResponse({ error: 'unauthorized' }, 401))
       await expect(makeClient().getCapabilities()).rejects.toBeInstanceOf(ConversationTaskError)
+    })
+  })
+
+  describe('A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3)', () => {
+    it('getA2ATaskResult GETs /api/v1/a2a/task-result/:id and returns the row', async () => {
+      const row = {
+        task_id: 7,
+        status: 4,
+        payment_pay_to: '0xpay',
+        payment_amount_wei: '1000000000000000',
+        payment_payer: '0xuser',
+        payment_pay_options: { prepay: true, sessionKey: true },
+      }
+      fetchMock.mockResolvedValue(jsonResponse(row))
+      const res = await makeClient().getA2ATaskResult(7)
+      expect(res).toMatchObject({ task_id: 7, status: A2A_STATUS.AWAITING_PAYMENT })
+      expect(res.payment_pay_options?.sessionKey).toBe(true)
+      const { url } = firstCall(fetchMock.mock.calls[0]!)
+      expect(url).toBe('https://gw.example.com/api/v1/a2a/task-result/7')
+    })
+
+    it('retryA2ATask POSTs /api/v1/a2a/tasks/:id/retry', async () => {
+      const client = makeClient({ endUserId: '0xuser' })
+      fetchMock.mockResolvedValue(jsonResponse({ retried: true, taskId: 7 }))
+      const res = await client.retryA2ATask(7)
+      expect(res).toEqual({ retried: true, taskId: 7 })
+      const call = fetchMock.mock.calls[0]!
+      const { url, method, headers } = firstCall(call)
+      expect(url).toBe('https://gw.example.com/api/v1/a2a/tasks/7/retry')
+      expect(method).toBe('POST')
+      expect(headers['X-End-User-Id']).toBe('0xuser')
+    })
+
+    it('getSessionKeyInfo returns engine capability info', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ enabled: true, chain: 'oxachain', chainId: 19505, baseUrl: 'https://sk.example' }))
+      const res = await makeClient().getSessionKeyInfo()
+      expect(res).toMatchObject({ enabled: true, chain: 'oxachain', chainId: 19505 })
+      const { url } = firstCall(fetchMock.mock.calls[0]!)
+      expect(url).toBe('https://gw.example.com/api/v1/a2a/session-key/info')
+    })
+
+    it('getBalance returns ledger balance + sessionKey(REQ-3)', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({
+        balance: '0.000000000000000000', balanceWei: '0', currency: 'OXA', subject: '0xuser',
+        sessionKey: { enabled: true, authorized: true, maxTotal: '10', totalSpent: '2' },
+      }))
+      const res = await makeClient().getBalance()
+      expect(res.sessionKey?.authorized).toBe(true)
+      expect(res.sessionKey?.maxTotal).toBe('10')
+      const { url } = firstCall(fetchMock.mock.calls[0]!)
+      expect(url).toBe('https://gw.example.com/api/v1/billing/balance')
+    })
+
+    it('throws ConversationTaskError on non-2xx', async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ error: 'Task not found' }, 404))
+      await expect(makeClient().getA2ATaskResult(999)).rejects.toBeInstanceOf(ConversationTaskError)
     })
   })
 })

@@ -1,4 +1,4 @@
-# @agentxv2/sdk v0.11.7
+# @agentxv2/sdk v0.11.8
 
 **Decentralized AI Agent Platform SDK** — E2E encryption, on-chain subscriptions, ReAct AgentLoop, multi-tenant LLM providers, A2A multi-agent interop (off-chain + user-wallet-signed on-chain rails), IPFS upload, MCP remote tools, chain-data batch query, hosted conversation sessions & parallel tasks, agent application categories, unified multi-rail payments.
 
@@ -10,14 +10,14 @@ Agent = Prompt + Skills[] + MCP
 
 ## Installation
 
-The current release **0.11.7** is built on the **0.10.0 complete feature release** (agent application categories, sessions & parallel tasks, streaming tool_call fix, typed `onchain_approval_required` SSE event, unified `/api/v1/payments` endpoint) — with the payment engine on the InfraX-maintained `@0xinfrax/payments` `^0.1.4`. R17.6: `0.1.3` restores the a2a / period rails inside the engine; `0.1.4` adds escrow passthrough / ERC20 deposit / structured 402 errors; the AgentX Gateway delegates to the module rails while keeping the HTTP contract identical, so **B-side callers see zero change**. Since **0.11.5** (R19.3) the SDK also ships `TenantPlanPayments` — platform subscription-tier purchases (tenant plans) through the unified payments endpoint — since **0.11.6** the `BillingClient` for B-end balance pre-checks (R19.7 companion), and since **0.11.7** the `AgentWalletConfig` — agent-owned MPC wallet management (bind an agent to an InfraX MPC wallet + email-code payment-session unlock) so A2A per-call fees auto-pay server-side. Install and use:
+The current release **0.11.8** is built on the **0.10.0 complete feature release** (agent application categories, sessions & parallel tasks, streaming tool_call fix, typed `onchain_approval_required` SSE event, unified `/api/v1/payments` endpoint) — with the payment engine on the InfraX-maintained `@0xinfrax/payments` `^0.1.4`. R17.6: `0.1.3` restores the a2a / period rails inside the engine; `0.1.4` adds escrow passthrough / ERC20 deposit / structured 402 errors; the AgentX Gateway delegates to the module rails while keeping the HTTP contract identical, so **B-side callers see zero change**. Since **0.11.5** (R19.3) the SDK also ships `TenantPlanPayments` — platform subscription-tier purchases (tenant plans) through the unified payments endpoint — since **0.11.6** the `BillingClient` for B-end balance pre-checks (R19.7 companion), since **0.11.7** the `AgentWalletConfig` — agent-owned MPC wallet management (bind an agent to an InfraX MPC wallet + email-code payment-session unlock) so A2A per-call fees auto-pay server-side, and since **0.11.8** the **A2A Session Key auto-pay** surface — end-user wallet-authorized `x402-pay` session keys that auto-fund the per-call fee when the x402 ledger balance is short (see the "A2A Delegated Tasks & Session Key Auto-pay" section). Install and use:
 
 ```bash
-# latest (recommended) — 0.11.7
+# latest (recommended) — 0.11.8
 npm install @agentxv2/sdk
 
 # or pin the exact release
-npm install @agentxv2/sdk@0.11.7
+npm install @agentxv2/sdk@0.11.8
 ```
 
 ### Peer Dependencies
@@ -770,6 +770,41 @@ if (priceWei && BigInt(balanceWei) < BigInt(priceWei)) {
 - Auth: same as `ConversationClient` — `X-Api-Key` (tenant key) or Bearer JWT. `401` on missing/invalid auth; `403` on a suspended account.
 - **Legacy partner tenants keyed by a logical name** (e.g. `partner-xxx`) hold no on-ledger balance — the pay-per-call ledger is keyed by the **end user's `0x` wallet** that signs the delegation. For these callers the default (tenant) query returns `"0"`; always pre-check with `getBalance({ endUserId })` (the wallet the delegation will charge).
 
+### A2A Delegated Tasks & Session Key Auto-pay (v0.11.8)
+
+Since **0.11.8** (AItrader REQ-1/2/3) integrators can read the full **A2A delegated-task result** (incl. the `awaiting_payment` state + payment options), drive the **Session Key auto-pay** flow (user wallet authorizes an `x402-pay` session key against the engine; the Gateway auto-transfers from it when the x402 ledger balance is short), and query the Session Key authorization status — all through `ConversationClient`.
+
+```ts
+import { ConversationClient, A2A_STATUS } from '@agentxv2/sdk'
+
+const client = new ConversationClient({
+  gatewayUrl: 'https://gw.example.com',
+  apiKey: 'agentx_xxx',               // or accessToken
+  endUserId: '0xuser…',               // = the delegation's payment_payer (for retry)
+})
+
+// 1) task result — status 4 = awaiting_payment, carries payment_pay_options
+const result = await client.getA2ATaskResult(7)
+if (result.status === A2A_STATUS.AWAITING_PAYMENT && result.payment_pay_options?.sessionKey) {
+  // render the "authorize Session Key" entry (prepay + sessionKey both offered)
+}
+
+// 2) engine capability info — end-user frontend reaches the engine's public
+//    nonce / createSession endpoints directly (EIP-712-verified)
+const info = await client.getSessionKeyInfo() // { enabled, chain, chainId, baseUrl }
+
+// 3) after the user authorized + funded the session, re-activate the task
+const { retried } = await client.retryA2ATask(7) // no ledger deduction; worker re-pays via session key
+
+// 4) REQ-3: ledger balance + Session Key authorization status
+const bal = await client.getBalance()
+// bal.sessionKey = { enabled, authorized, sessionAddress?, maxTotal?, totalSpent?, validUntil? }
+```
+
+- `getA2ATaskResult` / `retryA2ATask` / `getSessionKeyInfo` hit the Gateway's `/api/v1/a2a/…` routes; `getBalance` hits `/api/v1/billing/balance` (same auth as `BillingClient`, but via `ConversationClient`).
+- `retryA2ATask` requires the caller to be the task's `payment_payer` (`X-End-User-Id`) or an admin key — it re-activates a suspended task **without** deducting from the ledger; the worker re-runs and auto-pays through the session-key branch.
+- If the Session Key engine is not configured (or escrow is enabled), `getSessionKeyInfo()` returns `{ enabled: false, … }` and `getBalance().sessionKey = { enabled: false, authorized: false }` — the feature degrades cleanly to the existing prepay path.
+
 ### Protocol Clients (v0.9.3)
 
 Since **0.9.3** the SDK re-exports the generic engine's protocol clients from the root, so integrators can drive the P2-P4 rails directly against any Gateway deployment (AgentX-hosted or your own):
@@ -830,6 +865,7 @@ ORCHESTRATE_MAX_DEPTH=4               # max nested delegation depth
 
 | Version | Date | Highlights |
 |---------|------|-----------|
+| **0.11.8** | 2026-08-25 | **A2A 委派 Session Key 自动扣费（AItrader REQ-1/2/3）** — `ConversationClient` 新增 `getA2ATaskResult`（`a2a_task_results` 行，含 `status=4 awaiting_payment` + `payment_pay_options`）/ `retryA2ATask`（授权 Session Key 后重新激活挂起任务，不扣 ledger）/ `getSessionKeyInfo`（引擎能力信息）/ `getBalance`（x402 余额 + `sessionKey` 授权状态）；新增 `A2A_STATUS` 状态常量 + `A2ADelegatedTaskResult` / `SessionKeyInfo` / `SessionKeyAuthStatus` / `BillingBalance` 类型。端用户钱包 EIP-712 签名授权 `x402-pay` 会话后，Gateway 在余额不足时自动经引擎代签转账补足。**No breaking changes** |
 | **0.11.7** | 2026-08-18 | **Agent 自主钱包 API + `@0xinfrax/payments` `0.1.4`** — 新增 `AgentWalletConfig`（`bindWallet` / `authorizePaymentSession`（邮箱验证码解锁）/ `status` / `list` / `unbind`）：绑定 agent 与 InfraX MPC 钱包（Email 2-of-2 TSS），A2A 委派按次付费由 gateway 服务端自动代付（agent-payer）；依赖升级 `0.1.3 → 0.1.4`（escrow 透传 / ERC20 deposit / 402 结构化错误），HTTP 契约与既有客户端签名不变（补 0.11.6 遗漏的 npm 发布）。**No breaking changes** |
 | **0.11.6** | 2026-08-16 | **B 端余额预检（R19.7 companion）** — 新增 `BillingClient` + `GET /api/v1/billing/balance`：委派未订阅 agent 前程序化预检 x402 余额（租户维度默认，`endUserId` 0x 钱包透传返回端用户余额）；返回 `{ balance (OXA 高精度 decimal), balanceWei, currency, updatedAt, payTo?, priceWei? }`；余额 0 正常返回不报错；鉴权沿用 X-Api-Key / Bearer JWT。解决 aihunter-saas 提出的「先撞 403 再引导充值」体验问题。**No breaking changes** |
 | **0.11.5** | 2026-08-12 | **R19.3/R19.7 商业化闭环** — 新增 `TenantPlanPayments`（平台套餐购买：统一支付入口 `purpose=tenant-plan`，chain/fiat/x402 三轨，`buy()` 返回 `{ method, ... }` 判别结果，绑定租户套餐）；服务端 A2A 按次付费（R19.7）——未订阅 agent 时按次扣 x402 余额（服务端 deduct + 审计幂等），SDK 调用方零改动、对话自动触发；`PaymentsClient.create({ purpose: 'tenant-plan' })` 支持套餐购买元数据。**No breaking changes** |

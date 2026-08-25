@@ -177,6 +177,66 @@ export class ConversationTaskError extends Error {
   }
 }
 
+// ── A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3) ────────
+
+/** `a2a_task_results.status` values (Gateway worker). */
+export const A2A_STATUS = {
+  PROCESSING: 1,
+  DONE: 2,
+  ERROR: 3,
+  AWAITING_PAYMENT: 4,
+} as const
+
+/** A2A delegated-task row as stored in `a2a_task_results` (GET /api/v1/a2a/task-result/:id). */
+export interface A2ADelegatedTaskResult {
+  task_id: number
+  status: number
+  agent_id?: number | null
+  output_data?: string | null
+  error_message?: string | null
+  payment_payer?: string | null
+  payment_pay_to?: string | null
+  payment_amount_wei?: string | null
+  payment_target_agent_id?: number | null
+  payment_ref?: string | null
+  payment_pending_since?: string | null
+  /** Payment options offered while `status === A2A_STATUS.AWAITING_PAYMENT` (REQ-2). */
+  payment_pay_options?: { prepay: boolean; sessionKey: boolean } | null
+  created_at?: string
+  updated_at?: string
+}
+
+/** Session Key engine capability info (GET /api/v1/a2a/session-key/info). */
+export interface SessionKeyInfo {
+  enabled: boolean
+  chain: string
+  chainId: number
+  baseUrl: string
+}
+
+/** Session Key authorization status for an end-user wallet (REQ-3, from billing/balance). */
+export interface SessionKeyAuthStatus {
+  enabled: boolean
+  authorized: boolean
+  sessionAddress?: string
+  maxPerTx?: string
+  maxTotal?: string
+  totalSpent?: string
+  validUntil?: string
+}
+
+/** x402 ledger balance (GET /api/v1/billing/balance). */
+export interface BillingBalance {
+  balance: string
+  balanceWei: string
+  currency: string
+  updatedAt?: string | null
+  subject: string
+  payTo?: string
+  priceWei?: string
+  sessionKey?: SessionKeyAuthStatus
+}
+
 export class ConversationClient {
   private readonly baseUrl: string
 
@@ -393,5 +453,76 @@ export class ConversationClient {
       throw new ConversationTaskError(res.status, body?.error || `Task cancel failed (HTTP ${res.status})`, body?.code)
     }
     return body as ConversationTask
+  }
+
+  // ── A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3) ─────
+
+  /** Fetch an A2A delegated-task result row (`a2a_task_results`). */
+  async getA2ATaskResult(taskId: string | number): Promise<A2ADelegatedTaskResult> {
+    const res = await fetch(`${this.baseUrl}/api/v1/a2a/task-result/${taskId}`, { headers: this._headers() })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new ConversationTaskError(
+        res.status,
+        body?.error || `A2A task result lookup failed (HTTP ${res.status})`,
+        body?.code,
+      )
+    }
+    return body as A2ADelegatedTaskResult
+  }
+
+  /**
+   * Re-activate an `awaiting_payment` A2A task after the end user has
+   * authorized (and funded) a Session Key. Does NOT deduct from the ledger —
+   * the worker re-runs and auto-pays via the session-key branch. The client
+   * must be configured with `endUserId` = the task's `payment_payer` (or the
+   * caller holds an admin key).
+   */
+  async retryA2ATask(taskId: string | number): Promise<{ retried: boolean; taskId: number }> {
+    const res = await fetch(`${this.baseUrl}/api/v1/a2a/tasks/${taskId}/retry`, {
+      method: 'POST',
+      headers: this._headers(),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new ConversationTaskError(
+        res.status,
+        body?.error || `A2A task retry failed (HTTP ${res.status})`,
+        body?.code,
+      )
+    }
+    return body as { retried: boolean; taskId: number }
+  }
+
+  /**
+   * Session Key engine capability info — used by an end-user frontend to reach
+   * the engine's public `nonce` / `createSession` endpoints directly
+   * (EIP-712-verified; the session private key never transits the Gateway).
+   */
+  async getSessionKeyInfo(): Promise<SessionKeyInfo> {
+    const res = await fetch(`${this.baseUrl}/api/v1/a2a/session-key/info`, { headers: this._headers() })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new ConversationTaskError(
+        res.status,
+        body?.error || `Session-key info lookup failed (HTTP ${res.status})`,
+        body?.code,
+      )
+    }
+    return body as SessionKeyInfo
+  }
+
+  /** x402 ledger balance + Session Key authorization status (REQ-3). */
+  async getBalance(): Promise<BillingBalance> {
+    const res = await fetch(`${this.baseUrl}/api/v1/billing/balance`, { headers: this._headers() })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new ConversationTaskError(
+        res.status,
+        body?.error || `Balance lookup failed (HTTP ${res.status})`,
+        body?.code,
+      )
+    }
+    return body as BillingBalance
   }
 }

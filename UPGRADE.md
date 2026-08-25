@@ -1,5 +1,26 @@
 # @agentxv2/sdk Upgrade Guide
 
+## v0.11.7 → v0.11.8（2026-08-25，建议升级）
+
+> A2A 委派 Session Key 自动扣费（AItrader REQ-1/2/3）：`ConversationClient` 新增 A2A 委派任务 / Session Key 自动代付 API。**无 API 破坏**，纯附加。
+
+### 变更点
+
+- **`ConversationClient` 新增 4 个方法**：
+  - `getA2ATaskResult(taskId)` → `GET /api/v1/a2a/task-result/:id`，返回 `a2a_task_results` 行（含 `status`、`payment_payer/pay_to/amount_wei/ref/pending_since`、`payment_pay_options`）
+  - `retryA2ATask(taskId)` → `POST /api/v1/a2a/tasks/:id/retry`，授权 Session Key 后重新激活 `awaiting_payment` 挂起任务（**不扣 ledger**，worker 重放时经 session-key 分支自动代付）；需以 `endUserId` = 任务的 `payment_payer`
+  - `getSessionKeyInfo()` → 引擎能力信息（`{ enabled, chain, chainId, baseUrl }`），供端用户前端直达引擎公开 `nonce`/`createSession` 端点
+  - `getBalance()` → x402 余额 + `sessionKey` 授权状态（REQ-3，同 `BillingClient` 端点但走 `ConversationClient`）
+- **新增类型/常量**：`A2A_STATUS`（1 processing / 2 done / 3 error / 4 awaiting_payment）、`A2ADelegatedTaskResult`、`SessionKeyInfo`、`SessionKeyAuthStatus`、`BillingBalance`。
+- 引擎未配置（或 escrow 启用）时能力优雅降级：`getSessionKeyInfo().enabled=false`、`getBalance().sessionKey={ enabled:false, authorized:false }`。
+
+### 迁移动作
+
+- `npm install @agentxv2/sdk@0.11.8`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- 无代码改动要求；需要 A2A Session Key 自动扣费（端用户授权代付）的调用方使用新增方法。
+
+---
+
 ## v0.11.6 → v0.11.7（2026-08-18，建议升级）
 
 > Agent 自主钱包 API：新增 `AgentWalletConfig`（绑定 agent 与 InfraX MPC 钱包 + 邮箱验证码解锁付款会话）+ 依赖升级 `@0xinfrax/payments@0.1.4`。**无 API 破坏**，纯附加（补 0.11.6 遗漏的 npm 发布）。
