@@ -11,15 +11,20 @@
 //   GET    /api/v1/admin/agent-payers                — 列表
 //   DELETE /api/v1/admin/agent-payers/:agentId       — 解绑
 //
-// 全部走 admin 鉴权（gateway ADMIN_KEY，Authorization: Bearer / X-Admin-Key）。
+// 鉴权双轨（agentPayerAuth）：
+//   - 平台侧：gateway ADMIN_KEY（Authorization: Bearer / X-Admin-Key），scope=admin 全量；
+//   - 租户侧：tenant API Key（X-Api-Key），scope=tenant，仅能操作自己名下的 agent。
+// 二者至少提供一个，同时提供时优先 ADMIN_KEY。
 // ---------------------------------------------------------------------------
 
 /** AgentWalletConfig 客户端配置。 */
 export interface AgentWalletConfigOptions {
   /** Gateway 地址（如 https://agentx.0xainet.top）。 */
   baseUrl: string
-  /** Gateway ADMIN_KEY（admin 路由鉴权）。 */
-  adminKey: string
+  /** Gateway ADMIN_KEY（admin 路由鉴权，平台全量）。与 apiKey 二选一。 */
+  adminKey?: string
+  /** 租户 API Key（agentx_...，租户作用域，仅限自有 agent）。与 adminKey 二选一。 */
+  apiKey?: string
 }
 
 export interface AgentWalletInfo {
@@ -57,10 +62,11 @@ export interface AgentWalletStatus extends AgentWalletInfo {
   chainBalanceWei: string | null
 }
 
-async function adminRequest(baseUrl: string, adminKey: string, path: string, init?: RequestInit): Promise<any> {
-  const base = baseUrl.replace(/\/$/, '')
+async function adminRequest(opts: AgentWalletConfigOptions, path: string, init?: RequestInit): Promise<any> {
+  const base = opts.baseUrl.replace(/\/$/, '')
   const headers: Record<string, string> = {
-    'X-Admin-Key': adminKey,
+    ...(opts.adminKey ? { 'X-Admin-Key': opts.adminKey } : {}),
+    ...(opts.apiKey ? { 'X-Api-Key': opts.apiKey } : {}),
     ...((init?.headers as Record<string, string>) ?? {}),
   }
   const resp = await fetch(`${base}${path}`, { ...init, headers })
@@ -80,11 +86,15 @@ async function adminRequest(baseUrl: string, adminKey: string, path: string, ini
  * 绑定 + 解锁完成后，A2A 委派由 gateway 服务端自动代付，SDK 侧无需再参与付款。
  */
 export class AgentWalletConfig {
-  constructor(private opts: AgentWalletConfigOptions) {}
+  constructor(private opts: AgentWalletConfigOptions) {
+    if (!opts.adminKey && !opts.apiKey) {
+      throw new Error('AgentWalletConfig: adminKey or apiKey is required')
+    }
+  }
 
   /** 绑定 agent 与 MPC 钱包（agent_id 唯一，重复绑定覆盖 email/地址/链）。 */
   async bindWallet(input: BindAgentWalletInput): Promise<{ success: boolean }> {
-    return adminRequest(this.opts.baseUrl, this.opts.adminKey, '/api/v1/admin/agent-payers', {
+    return adminRequest(this.opts, '/api/v1/admin/agent-payers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -94,8 +104,7 @@ export class AgentWalletConfig {
   /** 邮箱验证码解锁 MPC 会话（令牌由 gateway 加密存储，服务端自动代付使用）。 */
   async authorizePaymentSession(input: AuthorizePaymentSessionInput): Promise<AuthorizePaymentSessionResult> {
     return adminRequest(
-      this.opts.baseUrl,
-      this.opts.adminKey,
+      this.opts,
       `/api/v1/admin/agent-payers/${input.agentId}/unlock`,
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: input.code }) }
     )
@@ -103,16 +112,16 @@ export class AgentWalletConfig {
 
   /** 查询单个 agent 自主钱包状态（含链上原生币余额）。 */
   async status(agentId: number): Promise<AgentWalletStatus> {
-    return adminRequest(this.opts.baseUrl, this.opts.adminKey, `/api/v1/admin/agent-payers/${agentId}`)
+    return adminRequest(this.opts, `/api/v1/admin/agent-payers/${agentId}`)
   }
 
-  /** 列出所有已绑定 agent 钱包。 */
+  /** 列出已绑定 agent 钱包（apiKey 模式下仅返回自有 agent）。 */
   async list(): Promise<{ wallets: AgentWalletInfo[] }> {
-    return adminRequest(this.opts.baseUrl, this.opts.adminKey, '/api/v1/admin/agent-payers')
+    return adminRequest(this.opts, '/api/v1/admin/agent-payers')
   }
 
   /** 解绑（清除钱包绑定与会话）。 */
   async unbind(agentId: number): Promise<{ success: boolean }> {
-    return adminRequest(this.opts.baseUrl, this.opts.adminKey, `/api/v1/admin/agent-payers/${agentId}`, { method: 'DELETE' })
+    return adminRequest(this.opts, `/api/v1/admin/agent-payers/${agentId}`, { method: 'DELETE' })
   }
 }
