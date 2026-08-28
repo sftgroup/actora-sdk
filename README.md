@@ -1,4 +1,4 @@
-# @agentxv2/sdk v0.11.8
+# @agentxv2/sdk v0.11.9
 
 **Decentralized AI Agent Platform SDK** — E2E encryption, on-chain subscriptions, ReAct AgentLoop, multi-tenant LLM providers, A2A multi-agent interop (off-chain + user-wallet-signed on-chain rails), IPFS upload, MCP remote tools, chain-data batch query, hosted conversation sessions & parallel tasks, agent application categories, unified multi-rail payments.
 
@@ -10,14 +10,14 @@ Agent = Prompt + Skills[] + MCP
 
 ## Installation
 
-The current release **0.11.8** is built on the **0.10.0 complete feature release** (agent application categories, sessions & parallel tasks, streaming tool_call fix, typed `onchain_approval_required` SSE event, unified `/api/v1/payments` endpoint) — with the payment engine on the InfraX-maintained `@0xinfrax/payments` `^0.1.4`. R17.6: `0.1.3` restores the a2a / period rails inside the engine; `0.1.4` adds escrow passthrough / ERC20 deposit / structured 402 errors; the AgentX Gateway delegates to the module rails while keeping the HTTP contract identical, so **B-side callers see zero change**. Since **0.11.5** (R19.3) the SDK also ships `TenantPlanPayments` — platform subscription-tier purchases (tenant plans) through the unified payments endpoint — since **0.11.6** the `BillingClient` for B-end balance pre-checks (R19.7 companion), since **0.11.7** the `AgentWalletConfig` — agent-owned MPC wallet management (bind an agent to an InfraX MPC wallet + email-code payment-session unlock) so A2A per-call fees auto-pay server-side, and since **0.11.8** the **A2A Session Key auto-pay** surface — end-user wallet-authorized `x402-pay` session keys that auto-fund the per-call fee when the x402 ledger balance is short (see the "A2A Delegated Tasks & Session Key Auto-pay" section). Install and use:
+The current release **0.11.9** is built on the **0.10.0 complete feature release** (agent application categories, sessions & parallel tasks, streaming tool_call fix, typed `onchain_approval_required` SSE event, unified `/api/v1/payments` endpoint) — with the payment engine on the InfraX-maintained `@0xinfrax/payments` `^0.1.4`. R17.6: `0.1.3` restores the a2a / period rails inside the engine; `0.1.4` adds escrow passthrough / ERC20 deposit / structured 402 errors; the AgentX Gateway delegates to the module rails while keeping the HTTP contract identical, so **B-side callers see zero change**. Since **0.11.5** (R19.3) the SDK also ships `TenantPlanPayments` — platform subscription-tier purchases (tenant plans) through the unified payments endpoint — since **0.11.6** the `BillingClient` for B-end balance pre-checks (R19.7 companion), since **0.11.7** the `AgentWalletConfig` — agent-owned MPC wallet management (bind an agent to an InfraX MPC wallet + email-code payment-session unlock) so A2A per-call fees auto-pay server-side, since **0.11.8** the **A2A Session Key auto-pay** surface — end-user wallet-authorized `x402-pay` session keys that auto-fund the per-call fee when the x402 ledger balance is short (see the "A2A Delegated Tasks & Session Key Auto-pay" section), and since **0.11.9** `AgentWalletConfig` gains a **tenant-scoped `apiKey` mode** — manage the MPC wallets of your *own* agents with a tenant API Key instead of the platform `ADMIN_KEY` (SK-1 permission delegation, dual-rail auth on `/api/v1/admin/agent-payers`). Install and use:
 
 ```bash
-# latest (recommended) — 0.11.8
+# latest (recommended) — 0.11.9
 npm install @agentxv2/sdk
 
 # or pin the exact release
-npm install @agentxv2/sdk@0.11.8
+npm install @agentxv2/sdk@0.11.9
 ```
 
 ### Peer Dependencies
@@ -865,6 +865,7 @@ ORCHESTRATE_MAX_DEPTH=4               # max nested delegation depth
 
 | Version | Date | Highlights |
 |---------|------|-----------|
+| **0.11.9** | 2026-08-29 | **租户作用域权限下放（SK-1）** — `AgentWalletConfig` 新增可选 `apiKey` 模式：`{ baseUrl, apiKey }` 用租户 API Key 管理**自有 agent**（`agents.owner = 租户钱包`）的 MPC 钱包（bind/unlock/status/list/delete），越权 403；`{ baseUrl, adminKey }` 平台全量（原行为不变），同时提供时优先 `adminKey`。配套 Gateway `/api/v1/admin/agent-payers` 双轨鉴权已部署。**No breaking changes**，纯附加 |
 | **0.11.8** | 2026-08-25 | **A2A 委派 Session Key 自动扣费（AItrader REQ-1/2/3）** — `ConversationClient` 新增 `getA2ATaskResult`（`a2a_task_results` 行，含 `status=4 awaiting_payment` + `payment_pay_options`）/ `retryA2ATask`（授权 Session Key 后重新激活挂起任务，不扣 ledger）/ `getSessionKeyInfo`（引擎能力信息）/ `getBalance`（x402 余额 + `sessionKey` 授权状态）；新增 `A2A_STATUS` 状态常量 + `A2ADelegatedTaskResult` / `SessionKeyInfo` / `SessionKeyAuthStatus` / `BillingBalance` 类型。端用户钱包 EIP-712 签名授权 `x402-pay` 会话后，Gateway 在余额不足时自动经引擎代签转账补足。**No breaking changes** |
 | **0.11.7** | 2026-08-18 | **Agent 自主钱包 API + `@0xinfrax/payments` `0.1.4`** — 新增 `AgentWalletConfig`（`bindWallet` / `authorizePaymentSession`（邮箱验证码解锁）/ `status` / `list` / `unbind`）：绑定 agent 与 InfraX MPC 钱包（Email 2-of-2 TSS），A2A 委派按次付费由 gateway 服务端自动代付（agent-payer）；依赖升级 `0.1.3 → 0.1.4`（escrow 透传 / ERC20 deposit / 402 结构化错误），HTTP 契约与既有客户端签名不变（补 0.11.6 遗漏的 npm 发布）。**No breaking changes** |
 | **0.11.6** | 2026-08-16 | **B 端余额预检（R19.7 companion）** — 新增 `BillingClient` + `GET /api/v1/billing/balance`：委派未订阅 agent 前程序化预检 x402 余额（租户维度默认，`endUserId` 0x 钱包透传返回端用户余额）；返回 `{ balance (OXA 高精度 decimal), balanceWei, currency, updatedAt, payTo?, priceWei? }`；余额 0 正常返回不报错；鉴权沿用 X-Api-Key / Bearer JWT。解决 aihunter-saas 提出的「先撞 403 再引导充值」体验问题。**No breaking changes** |
