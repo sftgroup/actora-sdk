@@ -307,8 +307,10 @@ declare class BillingClient {
 interface AgentWalletConfigOptions {
     /** Gateway 地址（如 https://agentx.0xainet.top）。 */
     baseUrl: string;
-    /** Gateway ADMIN_KEY（admin 路由鉴权）。 */
-    adminKey: string;
+    /** Gateway ADMIN_KEY（admin 路由鉴权，平台全量）。与 apiKey 二选一。 */
+    adminKey?: string;
+    /** 租户 API Key（agentx_...，租户作用域，仅限自有 agent）。与 adminKey 二选一。 */
+    apiKey?: string;
 }
 interface AgentWalletInfo {
     agentId: number;
@@ -355,7 +357,7 @@ declare class AgentWalletConfig {
     authorizePaymentSession(input: AuthorizePaymentSessionInput): Promise<AuthorizePaymentSessionResult>;
     /** 查询单个 agent 自主钱包状态（含链上原生币余额）。 */
     status(agentId: number): Promise<AgentWalletStatus>;
-    /** 列出所有已绑定 agent 钱包。 */
+    /** 列出已绑定 agent 钱包（apiKey 模式下仅返回自有 agent）。 */
     list(): Promise<{
         wallets: AgentWalletInfo[];
     }>;
