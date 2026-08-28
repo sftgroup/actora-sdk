@@ -1,6 +1,23 @@
 # @agentxv2/sdk Upgrade Guide
 
-## v0.11.7 → v0.11.8（2026-08-25，建议升级）
+## v0.11.8 → v0.11.9（2026-08-28，建议升级）
+
+> `AgentWalletConfig` 支持租户作用域鉴权（SK-1 下放）：`apiKey` 模式用租户 API Key 管理**自己名下 agent** 的 MPC 钱包，无需平台 ADMIN_KEY。**无 API 破坏**，纯附加。
+
+### 变更点
+
+- **`AgentWalletConfigOptions` 新增可选 `apiKey`**：
+  - `{ baseUrl, apiKey }`：租户作用域，仅能 bind/unlock/status/list/delete **自有 agent**（`agents.owner = 租户钱包`），越权返回 403；
+  - `{ baseUrl, adminKey }`：平台全量（原行为不变）；
+  - 二者同时提供时优先 `adminKey`；都不提供时构造抛错。
+- **Gateway 侧**：`/api/v1/admin/agent-payers` 鉴权升级为双轨（平台 ADMIN_KEY 或租户 API Key），配套服务端已部署生产。
+
+### 迁移动作
+
+- `npm install @agentxv2/sdk@0.11.9`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- 现有 `adminKey` 用法无需改动；租户自管 MPC 钱包改为传 `apiKey` 即可。
+
+---
 
 > A2A 委派 Session Key 自动扣费（AItrader REQ-1/2/3）：`ConversationClient` 新增 A2A 委派任务 / Session Key 自动代付 API。**无 API 破坏**，纯附加。
 
