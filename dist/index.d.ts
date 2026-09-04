@@ -117,6 +117,10 @@ interface PaySubscriptionInput {
     /** x402 rail: already-sent on-chain payment tx. When omitted and a wallet
      *  client is configured, the payment is sent automatically. */
     txHash?: string;
+    /** x402 rail: plan price in wei. When set, the automatic x402 payment uses
+     *  this amount instead of reading the plan from the chain contract — needed
+     *  for centralized agents whose plans live off-chain (central_plans). */
+    priceWei?: bigint;
     /** Billing period (default 'month'). */
     period?: SubscriptionPeriod;
 }

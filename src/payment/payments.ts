@@ -57,6 +57,10 @@ export interface PaySubscriptionInput {
   /** x402 rail: already-sent on-chain payment tx. When omitted and a wallet
    *  client is configured, the payment is sent automatically. */
   txHash?: string
+  /** x402 rail: plan price in wei. When set, the automatic x402 payment uses
+   *  this amount instead of reading the plan from the chain contract — needed
+   *  for centralized agents whose plans live off-chain (central_plans). */
+  priceWei?: bigint
   /** Billing period (default 'month'). */
   period?: SubscriptionPeriod
 }
@@ -211,9 +215,16 @@ export class SubscriptionPayments {
     if (!info.enabled || !info.payTo) {
       throw new Error('x402 is not enabled on the Gateway (X402_ENABLED / X402_PAY_TO missing)')
     }
-    const plan = await subscriptionManager.getPlan(input.planId)
     const priceWei = BigInt(info.priceWei || '0')
-    const amount = plan.price > priceWei ? plan.price : priceWei
+    // Centralized agents have no on-chain plan — the caller supplies the plan
+    // price directly (central_plans); otherwise read it from the chain.
+    const amount = input.priceWei !== undefined
+      ? (input.priceWei > priceWei ? input.priceWei : priceWei)
+      : (async () => {
+          const plan = await subscriptionManager!.getPlan(input.planId)
+          return plan.price > priceWei ? plan.price : priceWei
+        })()
+    const resolvedAmount = typeof amount === 'bigint' ? amount : await amount
     let account = (walletClient.account as { address?: Address } | undefined)?.address
     if (!account) {
       const [addr] = await walletClient.getAddresses()
@@ -222,7 +233,7 @@ export class SubscriptionPayments {
     if (!account) throw new Error('Wallet not connected for x402 payment')
     const hash = await walletClient.sendTransaction({
       to: info.payTo as Address,
-      value: amount,
+      value: resolvedAmount,
       chain: undefined,
       account,
     })

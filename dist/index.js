@@ -5795,9 +5795,12 @@ var SubscriptionPayments = class {
     if (!info.enabled || !info.payTo) {
       throw new Error("x402 is not enabled on the Gateway (X402_ENABLED / X402_PAY_TO missing)");
     }
-    const plan = await subscriptionManager.getPlan(input.planId);
     const priceWei = BigInt(info.priceWei || "0");
-    const amount = plan.price > priceWei ? plan.price : priceWei;
+    const amount = input.priceWei !== void 0 ? input.priceWei > priceWei ? input.priceWei : priceWei : (async () => {
+      const plan = await subscriptionManager.getPlan(input.planId);
+      return plan.price > priceWei ? plan.price : priceWei;
+    })();
+    const resolvedAmount = typeof amount === "bigint" ? amount : await amount;
     let account = walletClient.account?.address;
     if (!account) {
       const [addr] = await walletClient.getAddresses();
@@ -5806,7 +5809,7 @@ var SubscriptionPayments = class {
     if (!account) throw new Error("Wallet not connected for x402 payment");
     const hash2 = await walletClient.sendTransaction({
       to: info.payTo,
-      value: amount,
+      value: resolvedAmount,
       chain: void 0,
       account
     });
