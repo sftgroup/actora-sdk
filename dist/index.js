@@ -2493,6 +2493,7 @@ __export(index_exports, {
   AgentXErrorCode: () => AgentXErrorCode,
   BillingClient: () => BillingClient,
   CONFIG_VERSION: () => CONFIG_VERSION,
+  CentralAgentClient: () => CentralAgentClient,
   ConfigurationClient: () => ConfigurationClient,
   ConfigurationRegistry: () => ConfigurationRegistry,
   ContextCompactor: () => ContextCompactor,
@@ -7593,6 +7594,49 @@ var ConversationClient = class {
     return body;
   }
 };
+
+// src/central/central-client.ts
+var CentralAgentClient = class {
+  constructor(opts) {
+    this.opts = opts;
+  }
+  opts;
+  get base() {
+    return this.opts.baseUrl.replace(/\/$/, "");
+  }
+  /**
+   * 查询中心化 Agent 列表（公开）。固定 source='central'，
+   * 与链上 Agent 天然隔离；page/pageSize 分页（网关默认 pageSize=50，上限 100）。
+   */
+  async list(filters = {}) {
+    const params = new URLSearchParams({ source: "central" });
+    if (filters.activeOnly !== void 0) params.set("activeOnly", String(filters.activeOnly));
+    if (filters.category) params.set("category", filters.category);
+    if (filters.page !== void 0) params.set("page", String(filters.page));
+    if (filters.pageSize !== void 0) params.set("pageSize", String(filters.pageSize));
+    return request(this.base, `/api/v1/agents?${params.toString()}`, void 0, this.opts.accessToken);
+  }
+  /**
+   * 查询单个中心化 Agent 详情（公开），含订阅计划（subscriptionPlans，
+   * 与链上同一结构，可直接喂给 SubscriptionPayments.pay({ planId, priceWei, period })）。
+   */
+  async get(agentId) {
+    return request(this.base, `/api/v1/agents/${agentId}`, void 0, this.opts.accessToken);
+  }
+  /**
+   * 订阅状态检查（公开）：resolveAccess 链下优先——中心化 Agent（负 ID）无链上
+   * 代币，访问记录在 fiat_subscriptions（x402 通道），由网关判定是否放行。
+   */
+  async checkSubscription(subscriber, agentId) {
+    const params = new URLSearchParams({ subscriber, agentId: String(agentId) });
+    return request(this.base, `/api/v1/chain/check-subscription?${params.toString()}`, void 0, this.opts.accessToken);
+  }
+  /** 我的中心化订阅列表（公开，按钱包地址查询链下 fiat_subscriptions）。 */
+  async mySubscriptions(subscriber) {
+    const params = new URLSearchParams({ subscriber });
+    return request(this.base, `/api/v1/fiat/subscriptions?${params.toString()}`, void 0, this.opts.accessToken);
+  }
+};
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   A2AClient,
@@ -7610,6 +7654,7 @@ var ConversationClient = class {
   AgentXErrorCode,
   BillingClient,
   CONFIG_VERSION,
+  CentralAgentClient,
   ConfigurationClient,
   ConfigurationRegistry,
   ContextCompactor,

@@ -447,4 +447,98 @@ declare const REPUTATION_VERSION = "0.1.0";
 
 declare const CONFIG_VERSION = "0.1.0";
 
-export { A2AClient, A2A_VERSION, AgentReputation, AgentReview, AgentWalletConfig, type AgentWalletConfigOptions, type AgentWalletInfo, type AgentWalletStatus, AgentX402, type AgentX402Config, type AgentXChainEvent, type AgentXEventType, type AuthorizePaymentSessionInput, type AuthorizePaymentSessionResult, type BalanceResult, BillingClient, type BillingClientConfig, type BindAgentWalletInput, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, type EventListenerOptions, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, type ReputationConfig, ReputationRegistry, SUBSCRIPTION_VERSION, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type X402Info, subscribeToEvents };
+/** 中心化 Agent 的订阅计划（与链上 subscriptionPlans 同一响应结构，订阅流程无感）。 */
+interface CentralPlan {
+    planId: number;
+    /** wei，十进制字符串（避免 JS 精度丢失）。 */
+    price: string;
+    /** 订阅周期：day | week | month | year。 */
+    period: string;
+    payToken: 'native';
+    isActive: boolean;
+    trialDays: number;
+    creator: string;
+}
+/** 中心化 Agent 摘要（列表 / 详情响应）。 */
+interface CentralAgentSummary {
+    id: number;
+    owner: string;
+    name: string;
+    description: string;
+    tags: string[];
+    capabilities: string[];
+    skills: string[];
+    category: string;
+    isActive: boolean;
+    source: 'central';
+    agentCreatedAt?: string;
+    syncedAt?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+    subscriptionPlans?: CentralPlan[];
+}
+/** 钱包的链下订阅记录（fiat_subscriptions，provider='x402'）。 */
+interface CentralSubscription {
+    id: number;
+    agentId: number;
+    planId: number | null;
+    provider: string;
+    providerSubId: string | null;
+    status: string;
+    currency: string | null;
+    amountCents: number | null;
+    period: string | null;
+    startsAt: string | null;
+    expiresAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+interface CentralAgentClientOptions {
+    /** AgentX Gateway 基础 URL，例如 https://agentx.0xainet.top。 */
+    baseUrl: string;
+    /** 可选 JWT（已注册用户）——当前公开端点用不到，为扩展保留。 */
+    accessToken?: string;
+}
+interface CentralAgentListFilters {
+    activeOnly?: boolean;
+    category?: string;
+    page?: number;
+    pageSize?: number;
+}
+/** 中心化 Agent 公开只读客户端：查询 / 订阅状态 / 我的订阅。 */
+declare class CentralAgentClient {
+    private opts;
+    constructor(opts: CentralAgentClientOptions);
+    private get base();
+    /**
+     * 查询中心化 Agent 列表（公开）。固定 source='central'，
+     * 与链上 Agent 天然隔离；page/pageSize 分页（网关默认 pageSize=50，上限 100）。
+     */
+    list(filters?: CentralAgentListFilters): Promise<{
+        agents: CentralAgentSummary[];
+        total: number;
+        page: number;
+        pageSize: number;
+    }>;
+    /**
+     * 查询单个中心化 Agent 详情（公开），含订阅计划（subscriptionPlans，
+     * 与链上同一结构，可直接喂给 SubscriptionPayments.pay({ planId, priceWei, period })）。
+     */
+    get(agentId: number): Promise<CentralAgentSummary>;
+    /**
+     * 订阅状态检查（公开）：resolveAccess 链下优先——中心化 Agent（负 ID）无链上
+     * 代币，访问记录在 fiat_subscriptions（x402 通道），由网关判定是否放行。
+     */
+    checkSubscription(subscriber: string, agentId: number): Promise<{
+        chain: string;
+        subscriber: string;
+        agentId: number;
+        active: boolean;
+    }>;
+    /** 我的中心化订阅列表（公开，按钱包地址查询链下 fiat_subscriptions）。 */
+    mySubscriptions(subscriber: string): Promise<{
+        subscriptions: CentralSubscription[];
+    }>;
+}
+
+export { A2AClient, A2A_VERSION, AgentReputation, AgentReview, AgentWalletConfig, type AgentWalletConfigOptions, type AgentWalletInfo, type AgentWalletStatus, AgentX402, type AgentX402Config, type AgentXChainEvent, type AgentXEventType, type AuthorizePaymentSessionInput, type AuthorizePaymentSessionResult, type BalanceResult, BillingClient, type BillingClientConfig, type BindAgentWalletInput, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, CentralAgentClient, type CentralAgentClientOptions, type CentralAgentListFilters, type CentralAgentSummary, type CentralPlan, type CentralSubscription, type EventListenerOptions, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, type ReputationConfig, ReputationRegistry, SUBSCRIPTION_VERSION, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type X402Info, subscribeToEvents };
