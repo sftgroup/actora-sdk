@@ -1,5 +1,44 @@
 # @agentxv2/sdk Upgrade Guide
 
+## v0.11.10 → v0.11.11（2026-09-05，建议升级）
+
+> 中心化 Agent（C-6，链下市场）只读客户端 `CentralAgentClient`：查询 / 订阅状态 / 我的订阅全部封装，第三方集成方（如 AItrader）无需手拼网关 URL。**无 API 破坏**，纯附加。
+
+### 变更点
+
+- **新增 `CentralAgentClient`**（根导出，公开只读，构造 `{ baseUrl }`）：
+  - `list({ activeOnly?, category?, page?, pageSize? })` → 中心化 Agent 列表（固定 `source='central'`，与链上正 ID 天然隔离；负 ID 表示中心化 Agent）
+  - `get(agentId)` → 单个详情，含 `subscriptionPlans`（`central_plans`，与链上同一响应结构，可直接喂 `SubscriptionPayments.pay`）
+  - `checkSubscription(subscriber, agentId)` → 订阅状态（`resolveAccess` 链下优先，与 App 内订阅守卫同一判定）
+  - `mySubscriptions(subscriber)` → 我的链下订阅（`fiat_subscriptions` / x402 通道）
+- **配套 `@agentxv2/mcp@0.1.3`**：新增 `agentx_central_agent_list` / `agentx_central_subscription_check` 两个读工具（工具总数 38→40），`McpClient` 新增 `centralAgents()` / `centralSubscriptionCheck()`。
+- 发布中心化 Agent 仍需 JWT / 租户 Key 直调 `POST /api/v1/agents/central`（不在 SDK 客户端内封装，见下方示例）。
+
+### 迁移动作
+
+- `npm install @agentxv2/sdk@0.11.11`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- 需要读取/管理中心化 Agent 的集成方按 [README · CentralAgentClient 用法](README.md) 使用新客户端；现有链上用法零改动。
+
+---
+
+## v0.11.9 → v0.11.10（2026-09-05，建议升级）
+
+> `SubscriptionPayments.pay` 新增可选 `priceWei`：中心化 Agent（负 ID）计划价格在链下（`central_plans`），x402 自动代付无需读链上合约价格即可按作者定价扣费。**无 API 破坏**，纯附加。
+
+### 变更点
+
+- **`PaySubscriptionInput` 新增可选 `priceWei: bigint`**：
+  - 与 `period` 一起传入即可为中心化 Agent 支付周期订阅（day/week/month/year）；
+  - 不传时行为不变（链上计划价格自动读取）。
+- **`SubscriptionPeriod` 已支持 day/week/month/year**（中心化计划沿用同一周期集合）。
+
+### 迁移动作
+
+- `npm install @agentxv2/sdk@0.11.10`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- 无代码改动要求；中心化 Agent 订阅调用方传 `priceWei` + `period` 即可。
+
+---
+
 ## v0.11.8 → v0.11.9（2026-08-28，建议升级）
 
 > `AgentWalletConfig` 支持租户作用域鉴权（SK-1 下放）：`apiKey` 模式用租户 API Key 管理**自己名下 agent** 的 MPC 钱包，无需平台 ADMIN_KEY。**无 API 破坏**，纯附加。
