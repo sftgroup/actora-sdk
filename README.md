@@ -770,13 +770,14 @@ if (priceWei && BigInt(balanceWei) < BigInt(priceWei)) {
 - Auth: same as `ConversationClient` — `X-Api-Key` (tenant key) or Bearer JWT. `401` on missing/invalid auth; `403` on a suspended account.
 - **Legacy partner tenants keyed by a logical name** (e.g. `partner-xxx`) hold no on-ledger balance — the pay-per-call ledger is keyed by the **end user's `0x` wallet** that signs the delegation. For these callers the default (tenant) query returns `"0"`; always pre-check with `getBalance({ endUserId })` (the wallet the delegation will charge).
 
-### CentralAgentClient (v0.11.11) — 中心化 Agent（C-6，链下市场）
+### CentralAgentClient (v0.11.12) — 中心化 Agent（C-6，链下市场）
 
-Since **0.11.10** the SDK can pay for **centralized-agent** subscriptions — `SubscriptionPayments.pay({ method: 'x402', agentId, planId, priceWei, period })` uses the off-chain `central_plans` price (negative agentIds live in the Gateway DB, not on-chain). Since **0.11.11** the read side is wrapped in `CentralAgentClient` so third-party integrators (e.g. AItrader) don't need to hand-roll the Gateway HTTP calls:
+Since **0.11.10** the SDK can pay for **centralized-agent** subscriptions — `SubscriptionPayments.pay({ method: 'x402', agentId, planId, priceWei, period })` uses the off-chain `central_plans` price (negative agentIds live in the Gateway DB, not on-chain). Since **0.11.11** the read side is wrapped in `CentralAgentClient`; since **0.11.12** the authenticated **publish/manage** side too (tenant `apiKey` or user JWT `accessToken`):
 
 ```ts
 import { CentralAgentClient } from '@agentxv2/sdk'
 
+// 公开只读（无需鉴权）
 const central = new CentralAgentClient({ baseUrl: 'https://agentx.0xainet.top' })
 
 // 查询中心化 Agent 列表（固定 source='central'，公开）
@@ -794,6 +795,19 @@ const { subscriptions } = await central.mySubscriptions('0xabc…')
 ```
 
 ```ts
+// 发布 / 管理（v0.11.12，需 apiKey（租户）或 accessToken（注册用户））
+const owner = new CentralAgentClient({ baseUrl, apiKey: 'agentx_sk_…' }) // 或 accessToken: 'jwt…'
+
+const { agent } = await owner.create({ name: '量化助手', description: '…', category: 'finance', capabilities: ['chat', 'trading'] })
+const { agents: mine } = await owner.listMine()               // 我的中心化 Agent（含计划）
+await owner.update(agent.id, { description: '新描述', isActive: true })
+await owner.activate(agent.id)                                // 上架
+await owner.createPlan(agent.id, { priceWei: '1000000000000000000', period: 'month' })
+await owner.deactivatePlan(agent.id, planId)                  // 停用计划
+await owner.deactivate(agent.id)                              // 下架（订阅访问随之失效）
+```
+
+```ts
 // 中心化 Agent 周期订阅 —— 同一付费通道，priceWei 覆盖链下计划价格
 const payments = new SubscriptionPayments({
   gatewayUrl: 'https://agentx.0xainet.top',
@@ -805,7 +819,7 @@ const result = await payments.pay({
 })
 ```
 
-- 所有读端点公开（无需鉴权）；发布（`POST /api/v1/agents/central`）需 JWT 或租户 Key，由调用方自持直调网关。
+- 所有读端点公开（无需鉴权）；**发布/管理**（v0.11.12）需 `apiKey`（owner=`partner-<slug>`，适合平台为市场建 Agent）或 `accessToken`（owner=注册用户钱包）。
 - 订阅付费走与链上 Agent 相同的 x402 通道，支付写入 `fiat_subscriptions` 后 `resolveAccess` 无感放行。
 
 ### A2A Delegated Tasks & Session Key Auto-pay (v0.11.8)

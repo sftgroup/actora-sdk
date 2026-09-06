@@ -77,4 +77,76 @@ describe('CentralAgentClient', () => {
     fetchMock.mockResolvedValue(jsonResponse({ error: 'Agent not found' }, 404))
     await expect(makeClient().get(12345)).rejects.toThrow('Agent not found')
   })
+
+  // ── 鉴权管理（accessToken / apiKey） ────────────────────────────────────
+
+  const bodyOf = (call: unknown[]) => JSON.parse((call as [string, RequestInit])[1]?.body as string)
+
+  it('create() sends POST with tenant X-Api-Key header', async () => {
+    const client = new CentralAgentClient({ baseUrl: 'https://gw.example.com/', apiKey: 'agentx_sk_test' })
+    fetchMock.mockResolvedValue(jsonResponse({ agent: { id: -4, name: 'Quant Bot', source: 'central' } }, 201))
+    await client.create({ name: 'Quant Bot', description: 'x', category: 'finance', capabilities: ['chat'], skills: ['analysis'], tags: ['quant'] })
+    const { url, method, headers } = firstCall(fetchMock.mock.calls[0]!)
+    expect(url).toBe('https://gw.example.com/api/v1/agents/central')
+    expect(method).toBe('POST')
+    expect(headers['X-Api-Key']).toBe('agentx_sk_test')
+    expect(headers['Authorization']).toBeUndefined()
+    expect(bodyOf(fetchMock.mock.calls[0]!)).toEqual({ name: 'Quant Bot', description: 'x', category: 'finance', capabilities: ['chat'], skills: ['analysis'], tags: ['quant'] })
+  })
+
+  it('create() sends Bearer accessToken when configured (registered user)', async () => {
+    const client = new CentralAgentClient({ baseUrl: 'https://gw.example.com/', accessToken: 'jwt-abc' })
+    fetchMock.mockResolvedValue(jsonResponse({ agent: { id: -4, source: 'central' } }, 201))
+    await client.create({ name: 'My Agent' })
+    const { headers } = firstCall(fetchMock.mock.calls[0]!)
+    expect(headers['Authorization']).toBe('Bearer jwt-abc')
+  })
+
+  it('listMine() GETs /central/mine with auth header', async () => {
+    const client = new CentralAgentClient({ baseUrl: 'https://gw.example.com/', apiKey: 'agentx_sk_test' })
+    fetchMock.mockResolvedValue(jsonResponse({ agents: [{ id: -4, subscriptionPlans: [] }] }))
+    const res = await client.listMine()
+    const { url, method, headers } = firstCall(fetchMock.mock.calls[0]!)
+    expect(url).toBe('https://gw.example.com/api/v1/agents/central/mine')
+    expect(method).toBe('GET')
+    expect(headers['X-Api-Key']).toBe('agentx_sk_test')
+    expect(res.agents[0]?.id).toBe(-4)
+  })
+
+  it('update() PATCHes only the provided fields', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ agent: { id: -4, name: 'Renamed' } }))
+    await makeClient().update(-4, { name: 'Renamed', isActive: true })
+    const { url, method } = firstCall(fetchMock.mock.calls[0]!)
+    expect(url).toBe('https://gw.example.com/api/v1/agents/central/-4')
+    expect(method).toBe('PATCH')
+    expect(bodyOf(fetchMock.mock.calls[0]!)).toEqual({ name: 'Renamed', isActive: true })
+  })
+
+  it('deactivate() / activate() toggle is_active via DELETE and PATCH', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true }))
+    await makeClient().deactivate(-4)
+    expect(firstCall(fetchMock.mock.calls[0]!).method).toBe('DELETE')
+    expect(firstCall(fetchMock.mock.calls[0]!).url).toBe('https://gw.example.com/api/v1/agents/central/-4')
+
+    fetchMock.mockResolvedValue(jsonResponse({ agent: { id: -4, isActive: true } }))
+    await makeClient().activate(-4)
+    expect(firstCall(fetchMock.mock.calls[1]!).method).toBe('PATCH')
+    expect(bodyOf(fetchMock.mock.calls[1]!)).toEqual({ isActive: true })
+  })
+
+  it('createPlan() / deactivatePlan() manage central_plans', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ plan: { id: 9, agentId: -4, priceWei: '1000000000000000000', period: 'month', active: true } }, 201))
+    const res = await makeClient().createPlan(-4, { priceWei: '1000000000000000000', period: 'month' })
+    let call = firstCall(fetchMock.mock.calls[0]!)
+    expect(call.url).toBe('https://gw.example.com/api/v1/agents/central/-4/plans')
+    expect(call.method).toBe('POST')
+    expect(bodyOf(fetchMock.mock.calls[0]!)).toEqual({ priceWei: '1000000000000000000', period: 'month' })
+    expect(res.plan.period).toBe('month')
+
+    fetchMock.mockResolvedValue(jsonResponse({ success: true }))
+    await makeClient().deactivatePlan(-4, 9)
+    call = firstCall(fetchMock.mock.calls[1]!)
+    expect(call.url).toBe('https://gw.example.com/api/v1/agents/central/-4/plans/9')
+    expect(call.method).toBe('DELETE')
+  })
 })

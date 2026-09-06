@@ -8,4 +8,8 @@ export type {
   CentralSubscription,
   CentralAgentClientOptions,
   CentralAgentListFilters,
+  CreateCentralAgentInput,
+  UpdateCentralAgentInput,
+  CreateCentralPlanInput,
+  CentralPlanRow,
 } from './central-client'

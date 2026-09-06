@@ -1,5 +1,27 @@
 # @agentxv2/sdk Upgrade Guide
 
+## v0.11.11 → v0.11.12（2026-09-05，可选升级）
+
+> `CentralAgentClient` 新增**鉴权发布/管理**方法：租户 `apiKey`（owner=`partner-<slug>`，平台为市场建 Agent）或注册用户 `accessToken`（owner=用户钱包）。**无 API 破坏**，纯附加。
+
+### 变更点
+
+- **`CentralAgentClientOptions` 新增可选 `apiKey`**（`X-Api-Key` 头；`accessToken` 继续走 `Authorization: Bearer`）。
+- **`CentralAgentClient` 新增 6 个管理方法**（均需 apiKey 或 accessToken）：
+  - `create({ name, description?, tags?, capabilities?, skills?, category? })` → `POST /api/v1/agents/central`（默认附一个月度计划）
+  - `listMine()` → `GET /api/v1/agents/central/mine`（含订阅计划）
+  - `update(agentId, { name?, description?, tags?, capabilities?, skills?, category?, isActive? })` → `PATCH`（仅更新提供字段）
+  - `activate(agentId)` / `deactivate(agentId)` → 上架 / 下架（软删除，订阅访问随之失效）
+  - `createPlan(agentId, { priceWei, period? })` / `deactivatePlan(agentId, planId)` → 增停订阅计划
+- **新增类型**：`CreateCentralAgentInput`、`UpdateCentralAgentInput`、`CreateCentralPlanInput`、`CentralPlanRow`。
+
+### 迁移动作
+
+- `npm install @agentxv2/sdk@0.11.12`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- 需要程序化发布/管理中心化 Agent 的集成方使用新方法（示例见 [README · CentralAgentClient 用法](README.md)）；仅读与订阅的现有用法零改动。
+
+---
+
 ## v0.11.10 → v0.11.11（2026-09-05，建议升级）
 
 > 中心化 Agent（C-6，链下市场）只读客户端 `CentralAgentClient`：查询 / 订阅状态 / 我的订阅全部封装，第三方集成方（如 AItrader）无需手拼网关 URL。**无 API 破坏**，纯附加。

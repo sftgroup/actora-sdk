@@ -64,8 +64,10 @@ export interface CentralSubscription {
 export interface CentralAgentClientOptions {
   /** AgentX Gateway 基础 URL，例如 https://agentx.0xainet.top。 */
   baseUrl: string
-  /** 可选 JWT（已注册用户）——当前公开端点用不到，为扩展保留。 */
+  /** 可选：注册用户 JWT（Authorization: Bearer）——发布/管理中心化 Agent 时使用。 */
   accessToken?: string
+  /** 可选：租户 API Key（X-Api-Key）——发布/管理中心化 Agent 时使用（owner=partner-<slug>）。 */
+  apiKey?: string
 }
 
 export interface CentralAgentListFilters {
@@ -75,13 +77,52 @@ export interface CentralAgentListFilters {
   pageSize?: number
 }
 
-/** 中心化 Agent 公开只读客户端：查询 / 订阅状态 / 我的订阅。 */
+/** 发布中心化 Agent 的输入（POST /api/v1/agents/central）。 */
+export interface CreateCentralAgentInput {
+  name: string
+  description?: string
+  tags?: string[]
+  capabilities?: string[]
+  skills?: string[]
+  category?: string
+}
+
+/** 更新中心化 Agent 的输入（PATCH 语义：仅更新提供的字段）。 */
+export type UpdateCentralAgentInput = Partial<CreateCentralAgentInput> & { isActive?: boolean }
+
+/** 添加中心化订阅计划（POST /api/v1/agents/central/:id/plans）。 */
+export interface CreateCentralPlanInput {
+  /** wei 十进制字符串（正数）。 */
+  priceWei: string
+  /** 周期：day | week | month | year（默认 month）。 */
+  period?: string
+}
+
+/** 网关返回的计划行（central_plans）。 */
+export interface CentralPlanRow {
+  id: number
+  agentId: number
+  priceWei: string
+  period: string
+  active: boolean
+}
+
+/** 中心化 Agent 客户端：公开只读（查询/订阅状态/我的订阅）+ 鉴权管理（发布/更新/下架/计划）。 */
 export class CentralAgentClient {
   constructor(private opts: CentralAgentClientOptions) {}
 
   private get base(): string {
     return this.opts.baseUrl.replace(/\/$/, '')
   }
+
+  /** 鉴权头：X-Api-Key（租户 Key）；JWT 由 request 助手按 accessToken 追加 Bearer。 */
+  private authHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (this.opts.apiKey) headers['X-Api-Key'] = this.opts.apiKey
+    return headers
+  }
+
+  // ── 公开只读 ─────────────────────────────────────────────────────────────
 
   /**
    * 查询中心化 Agent 列表（公开）。固定 source='central'，
@@ -117,5 +158,66 @@ export class CentralAgentClient {
   async mySubscriptions(subscriber: string): Promise<{ subscriptions: CentralSubscription[] }> {
     const params = new URLSearchParams({ subscriber })
     return request(this.base, `/api/v1/fiat/subscriptions?${params.toString()}`, undefined, this.opts.accessToken)
+  }
+
+  // ── 鉴权管理（需 accessToken 或 apiKey）────────────────────────────────
+
+  /**
+   * 发布中心化 Agent（POST /api/v1/agents/central）。owner = 鉴权主体：
+   * JWT → 注册用户钱包；租户 Key → partner-<slug>（平台自身名下，适合「平台为市场建 Agent」）。
+   * 默认附带一个月度计划（作者可在管理页调整/停用）。
+   */
+  async create(input: CreateCentralAgentInput): Promise<{ agent: CentralAgentSummary }> {
+    return request(
+      this.base,
+      '/api/v1/agents/central',
+      { method: 'POST', headers: this.authHeaders(), body: JSON.stringify(input) },
+      this.opts.accessToken
+    )
+  }
+
+  /** 我的中心化 Agent 列表（GET /api/v1/agents/central/mine，含订阅计划）。 */
+  async listMine(): Promise<{ agents: CentralAgentSummary[] }> {
+    return request(this.base, '/api/v1/agents/central/mine', { headers: this.authHeaders() }, this.opts.accessToken)
+  }
+
+  /** 更新中心化 Agent（PATCH 语义：仅更新提供的字段）。 */
+  async update(agentId: number, input: UpdateCentralAgentInput): Promise<{ agent: CentralAgentSummary }> {
+    return request(
+      this.base,
+      `/api/v1/agents/central/${agentId}`,
+      { method: 'PATCH', headers: this.authHeaders(), body: JSON.stringify(input) },
+      this.opts.accessToken
+    )
+  }
+
+  /** 下架中心化 Agent（软删除 is_active=false，订阅访问随之失效）。 */
+  async deactivate(agentId: number): Promise<{ success: boolean }> {
+    return request(this.base, `/api/v1/agents/central/${agentId}`, { method: 'DELETE', headers: this.authHeaders() }, this.opts.accessToken)
+  }
+
+  /** 上架中心化 Agent（重新启用）。 */
+  async activate(agentId: number): Promise<{ agent: CentralAgentSummary }> {
+    return this.update(agentId, { isActive: true })
+  }
+
+  /** 添加订阅计划（priceWei 为 wei 十进制字符串）。 */
+  async createPlan(agentId: number, input: CreateCentralPlanInput): Promise<{ plan: CentralPlanRow }> {
+    return request(
+      this.base,
+      `/api/v1/agents/central/${agentId}/plans`,
+      { method: 'POST', headers: this.authHeaders(), body: JSON.stringify(input) },
+      this.opts.accessToken
+    )
+  }
+
+  /** 停用订阅计划（订阅访问随之失效）。 */
+  async deactivatePlan(agentId: number, planId: number): Promise<{ success: boolean }> {
+    return request(
+      this.base,
+      `/api/v1/agents/central/${agentId}/plans/${planId}`,
+      { method: 'DELETE', headers: this.authHeaders() },
+      this.opts.accessToken
+    )
   }
 }

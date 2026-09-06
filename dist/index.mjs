@@ -7510,6 +7510,13 @@ var CentralAgentClient = class {
   get base() {
     return this.opts.baseUrl.replace(/\/$/, "");
   }
+  /** 鉴权头：X-Api-Key（租户 Key）；JWT 由 request 助手按 accessToken 追加 Bearer。 */
+  authHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    if (this.opts.apiKey) headers["X-Api-Key"] = this.opts.apiKey;
+    return headers;
+  }
+  // ── 公开只读 ─────────────────────────────────────────────────────────────
   /**
    * 查询中心化 Agent 列表（公开）。固定 source='central'，
    * 与链上 Agent 天然隔离；page/pageSize 分页（网关默认 pageSize=50，上限 100）。
@@ -7541,6 +7548,59 @@ var CentralAgentClient = class {
   async mySubscriptions(subscriber) {
     const params = new URLSearchParams({ subscriber });
     return request(this.base, `/api/v1/fiat/subscriptions?${params.toString()}`, void 0, this.opts.accessToken);
+  }
+  // ── 鉴权管理（需 accessToken 或 apiKey）────────────────────────────────
+  /**
+   * 发布中心化 Agent（POST /api/v1/agents/central）。owner = 鉴权主体：
+   * JWT → 注册用户钱包；租户 Key → partner-<slug>（平台自身名下，适合「平台为市场建 Agent」）。
+   * 默认附带一个月度计划（作者可在管理页调整/停用）。
+   */
+  async create(input) {
+    return request(
+      this.base,
+      "/api/v1/agents/central",
+      { method: "POST", headers: this.authHeaders(), body: JSON.stringify(input) },
+      this.opts.accessToken
+    );
+  }
+  /** 我的中心化 Agent 列表（GET /api/v1/agents/central/mine，含订阅计划）。 */
+  async listMine() {
+    return request(this.base, "/api/v1/agents/central/mine", { headers: this.authHeaders() }, this.opts.accessToken);
+  }
+  /** 更新中心化 Agent（PATCH 语义：仅更新提供的字段）。 */
+  async update(agentId, input) {
+    return request(
+      this.base,
+      `/api/v1/agents/central/${agentId}`,
+      { method: "PATCH", headers: this.authHeaders(), body: JSON.stringify(input) },
+      this.opts.accessToken
+    );
+  }
+  /** 下架中心化 Agent（软删除 is_active=false，订阅访问随之失效）。 */
+  async deactivate(agentId) {
+    return request(this.base, `/api/v1/agents/central/${agentId}`, { method: "DELETE", headers: this.authHeaders() }, this.opts.accessToken);
+  }
+  /** 上架中心化 Agent（重新启用）。 */
+  async activate(agentId) {
+    return this.update(agentId, { isActive: true });
+  }
+  /** 添加订阅计划（priceWei 为 wei 十进制字符串）。 */
+  async createPlan(agentId, input) {
+    return request(
+      this.base,
+      `/api/v1/agents/central/${agentId}/plans`,
+      { method: "POST", headers: this.authHeaders(), body: JSON.stringify(input) },
+      this.opts.accessToken
+    );
+  }
+  /** 停用订阅计划（订阅访问随之失效）。 */
+  async deactivatePlan(agentId, planId) {
+    return request(
+      this.base,
+      `/api/v1/agents/central/${agentId}/plans/${planId}`,
+      { method: "DELETE", headers: this.authHeaders() },
+      this.opts.accessToken
+    );
   }
 };
 export {
