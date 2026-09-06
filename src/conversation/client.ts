@@ -1,19 +1,19 @@
 // ---------------------------------------------------------------------------
-// AgentX SDK — ConversationClient (remote conversation service client)
+// Actora SDK — ConversationClient (remote conversation service client)
 // ---------------------------------------------------------------------------
 // Wraps the hosted Conversation Service via the Gateway:
 //   POST /api/v1/agent/runs  (SSE stream)
 //
 // Auth (either one is required):
-//   - Tenant API Key:  X-Api-Key: agentx_xxx  (issued after registration)
+//   - Tenant API Key:  X-Api-Key: actora_xxx  (issued after registration)
 //   - Gateway JWT:     Authorization: Bearer <accessToken>  (wallet-signed login)
 // Isolation: X-End-User-Id (per end-user memory isolation within a tenant)
 // ---------------------------------------------------------------------------
 
 export interface ConversationClientConfig {
-  /** Gateway base URL, e.g. https://agentx.0xainet.top */
+  /** Gateway base URL, e.g. https://actora.codes */
   gatewayUrl: string
-  /** Tenant API Key (agentx_...) issued after registration (alternative to accessToken) */
+  /** Tenant API Key (actora_...) issued after registration (alternative to accessToken) */
   apiKey?: string
   /** Gateway JWT access token from wallet-signed login (alternative to apiKey) */
   accessToken?: string
@@ -44,7 +44,7 @@ export interface ConversationSkillDef {
 }
 
 export interface ConversationChatParams {
-  /** AgentX agent id (omit when using inline prompt/skills mode) */
+  /** Actora agent id (omit when using inline prompt/skills mode) */
   agentId?: number
   message: string
   /** Full conversation history — caller is responsible for per-end-user isolation */
@@ -92,7 +92,7 @@ export interface ConversationSSEEvent {
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
   iterations?: number
   /** Billing source of the LLM that produced this run (emitted on `done`).
-   *  'byok' → caller's own key (not metered); 'platform' → AgentX key (metered
+   *  'byok' → caller's own key (not metered); 'platform' → Actora key (metered
    *  against the tenant's plan quota). Observability only — metering is server-side. */
   llmSource?: 'byok' | 'platform'
 }
@@ -133,7 +133,7 @@ export interface ConversationTask {
 
 export interface ConversationCreateTaskParams {
   sessionId: string
-  /** AgentX agent id (omit when using inline prompt/skills mode) */
+  /** Actora agent id (omit when using inline prompt/skills mode) */
   agentId?: number
   message: string
   enableMemory?: boolean

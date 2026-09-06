@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentxv2/sdk — CentralAgentClient (C-6 中心化 Agent 市场 · 2026-09-05)
+// @actora/sdk — CentralAgentClient (C-6 中心化 Agent 市场 · 2026-09-05)
 // ---------------------------------------------------------------------------
 // 中心化 Agent（agents.source='central'，负 ID）不发布在链上：
 //   - 订阅计划存于网关 DB（central_plans），付费复用同一 x402 通道
@@ -62,7 +62,7 @@ export interface CentralSubscription {
 }
 
 export interface CentralAgentClientOptions {
-  /** AgentX Gateway 基础 URL，例如 https://agentx.0xainet.top。 */
+  /** Actora Gateway 基础 URL，例如 https://actora.codes。 */
   baseUrl: string
   /** 可选：注册用户 JWT（Authorization: Bearer）——发布/管理中心化 Agent 时使用。 */
   accessToken?: string

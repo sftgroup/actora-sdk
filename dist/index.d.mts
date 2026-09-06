@@ -1,11 +1,11 @@
-import { M as McpConnection, a as AgentReview, b as AgentReputation } from './types-DJHPGJSX.mjs';
-export { c as A2AAgentCard, d as A2ASkillExecution, e as A2ATask, f as A2ATaskStatus, g as AGENT_CATEGORIES, h as AgentCategory, A as AgentPayload, i as AgentPricing, j as AgentPrivatePayload, k as AgentPublicPayload, l as AgentSearchQuery, m as AgentSearchResult, n as AgentSubscription, o as AgentXConfig, p as AgentXContracts, q as AgentXError, r as AgentXErrorCode, E as EncryptedPayload, J as JSONSchema, s as JSONSchemaProperty, t as McpTransport, O as OnChainAgentMetadata, P as PackResult, u as PricingType, R as RegisteredAgent, S as SkillDef, v as SkillExecutionMode, w as SkillExecutionRemote, x as SubscriptionRequired, y as SubscriptionStatus, U as UnpackResult } from './types-DJHPGJSX.mjs';
+import { M as McpConnection, a as AgentReview, b as AgentReputation } from './types-mZ3W6woU.mjs';
+export { c as A2AAgentCard, d as A2ASkillExecution, e as A2ATask, f as A2ATaskStatus, g as AGENT_CATEGORIES, h as ActoraConfig, i as ActoraContracts, j as ActoraError, k as ActoraErrorCode, l as AgentCategory, A as AgentPayload, m as AgentPricing, n as AgentPrivatePayload, o as AgentPublicPayload, p as AgentSearchQuery, q as AgentSearchResult, r as AgentSubscription, E as EncryptedPayload, J as JSONSchema, s as JSONSchemaProperty, t as McpTransport, O as OnChainAgentMetadata, P as PackResult, u as PricingType, R as RegisteredAgent, S as SkillDef, v as SkillExecutionMode, w as SkillExecutionRemote, x as SubscriptionRequired, y as SubscriptionStatus, U as UnpackResult } from './types-mZ3W6woU.mjs';
 export { PublishAgentConfig, PublishAgentResult, aesDecrypt, aesEncrypt, decryptPayload, decryptWithKey, eciesDecrypt, eciesEncrypt, encryptPayload, encryptWithKey, generateAesKey, generateKeyPair, getPublicKey, packAgentForPublish, publishAgent, randomBytes, unpackAgent } from './core/index.mjs';
 import { Hash, Address, PublicClient, WalletClient } from 'viem';
-export { a as A2ASkillResult, A as AgentRunContext, b as AgentRunner, c as AgentRunnerConfig, I as IPFSFetcher, d as IPFSFetcherConfig, O as OnChainReader, R as RunnableSkill, W as WalletSigner, e as defaultIPFSFetcher } from './agent-runner-BvolNHhF.mjs';
-import { S as SubscriptionManager } from './index-9M0t3spQ.mjs';
-export { A as A2AConfig, a as A2ADaemon, b as A2ADaemonConfig, c as A2AProtocol, d as A2ATaskResult, e as AgentLoop, f as AgentRegistry, g as AgentRegistryConfig, h as AgentSummary, i as AgentSummaryMetadata, C as ContextCompactor, j as CreatePlanParams, k as CreatePlanResult, F as FactExtractor, G as GetAllAgentsOptions, L as LoopTraceEmitter, P as PlanDetail, l as PlatformToolContext, m as PlatformToolDef, n as SUBSCRIPTION_PERIODS, o as StructuredAgentMetadata, p as SubscribeResult, q as SubscriptionConfig, r as SubscriptionDetail, s as SubscriptionPeriod, T as ToolExecutor, Z as ZERO_ADDRESS, t as buildPlatformTools, u as buildSystemPrompt, v as buildTools, w as cidFromURI, x as executePlatformTool, y as getAllPlatformToolNames, z as guardSubscription, B as parseTokenURIJSON, D as wrapPlatformToolsAsSkills } from './index-9M0t3spQ.mjs';
-export { A as AgentLoopConfig, a as AgentLoopResult, C as ChatRequest, b as ChatStreamEvent, L as LLMMessage, c as LLMProvider, d as LLMToolCall, e as LoopRunContext, O as OpenAIToolDef, T as ToolCallRecord, f as ToolCallResult, g as ToolCallStart } from './types-CZnZX8ej.mjs';
+export { a as A2ASkillResult, A as AgentRunContext, b as AgentRunner, c as AgentRunnerConfig, I as IPFSFetcher, d as IPFSFetcherConfig, O as OnChainReader, R as RunnableSkill, W as WalletSigner, e as defaultIPFSFetcher } from './agent-runner-BZ_IxFbK.mjs';
+import { S as SubscriptionManager } from './index-Bimi4fxd.mjs';
+export { A as A2AConfig, a as A2ADaemon, b as A2ADaemonConfig, c as A2AProtocol, d as A2ATaskResult, e as AgentLoop, f as AgentRegistry, g as AgentRegistryConfig, h as AgentSummary, i as AgentSummaryMetadata, C as ContextCompactor, j as CreatePlanParams, k as CreatePlanResult, F as FactExtractor, G as GetAllAgentsOptions, L as LoopTraceEmitter, P as PlanDetail, l as PlatformToolContext, m as PlatformToolDef, n as SUBSCRIPTION_PERIODS, o as StructuredAgentMetadata, p as SubscribeResult, q as SubscriptionConfig, r as SubscriptionDetail, s as SubscriptionPeriod, T as ToolExecutor, Z as ZERO_ADDRESS, t as buildPlatformTools, u as buildSystemPrompt, v as buildTools, w as cidFromURI, x as executePlatformTool, y as getAllPlatformToolNames, z as guardSubscription, B as parseTokenURIJSON, D as wrapPlatformToolsAsSkills } from './index-Bimi4fxd.mjs';
+export { A as AgentLoopConfig, a as AgentLoopResult, C as ChatRequest, b as ChatStreamEvent, L as LLMMessage, c as LLMProvider, d as LLMToolCall, e as LoopRunContext, O as OpenAIToolDef, T as ToolCallRecord, f as ToolCallResult, g as ToolCallStart } from './types-B9Qz41zo.mjs';
 export { GatewayProvider, GatewayProviderConfig, OpenAIProvider, OpenAIProviderConfig, ProviderFactoryConfig, createLLMProvider } from './llm/index.mjs';
 export { EndpointRecord, MultiEndpointClient, MultiEndpointConfig } from './endpoint/index.mjs';
 export { ConfigEntry, ConfigurationClient, ConfigurationConfig } from './configuration/index.mjs';
@@ -20,9 +20,9 @@ export { C as ChainConfig, a as ConfigRegistryOpts, b as ConfigurationRegistry, 
 export { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 import 'events';
 
-type AgentXEventType = 'Transfer' | 'AgentRegistered' | 'PlanCreated' | 'Subscribed';
-interface AgentXChainEvent {
-    type: AgentXEventType;
+type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'PlanCreated' | 'Subscribed';
+interface ActoraChainEvent {
+    type: ActoraEventType;
     args: Record<string, unknown>;
     txHash: Hash;
 }
@@ -31,15 +31,15 @@ interface EventListenerOptions {
     identityRegistryAddress?: Address;
     /** SubscriptionManager address (emits PlanCreated / Subscribed). */
     subscriptionManagerAddress?: Address;
-    events: AgentXEventType[];
-    onEvent: (event: AgentXChainEvent) => void;
+    events: ActoraEventType[];
+    onEvent: (event: ActoraChainEvent) => void;
     /** Start listening from this block (default: latest). */
     fromBlock?: number;
     /** Polling interval in ms (default: 4000). */
     pollingInterval?: number;
 }
 /**
- * Subscribe to AgentX contract events and receive a normalized callback.
+ * Subscribe to Actora contract events and receive a normalized callback.
  *
  * @returns A function that unsubscribes from all watched events.
  */
@@ -47,14 +47,14 @@ declare function subscribeToEvents(publicClient: PublicClient, options: EventLis
 
 declare const REGISTRY_VERSION = "0.1.0";
 
-interface AgentX402Config {
+interface Actora402Config {
     subscriptionManagerAddress: Address;
     publicClient: PublicClient;
     walletClient: WalletClient;
 }
-declare class AgentX402 {
+declare class Actora402 {
     private config;
-    constructor(config: AgentX402Config);
+    constructor(config: Actora402Config);
     /**
      * Require active subscription — or throw with auto-pay info.
      *
@@ -62,7 +62,7 @@ declare class AgentX402 {
      *   await x402.requireSubscription(agentId, address, { planIds: [1,2,3] })
      *
      * On success, returns silently.
-     * On failure, throws AgentXError with paymentInfo populated
+     * On failure, throws ActoraError with paymentInfo populated
      * so the caller can auto-pay via wallet/X402.
      */
     requireSubscription(agentId: number, address: Address, opts?: {
@@ -85,7 +85,7 @@ type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402';
 type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year';
 type ChainKey = 'oxachain' | 'sepolia';
 interface SubscriptionPaymentsConfig {
-    /** AgentX Gateway base URL (required for fiat / x402 rails). */
+    /** Actora Gateway base URL (required for fiat / x402 rails). */
     gatewayUrl?: string;
     /** Optional gateway bearer token. */
     accessToken?: string;
@@ -170,7 +170,7 @@ declare class SubscriptionPayments {
 
 type TenantPlanPaymentMethod = 'chain' | 'fiat' | 'x402';
 interface TenantPlanPaymentsConfig {
-    /** AgentX Gateway base URL. */
+    /** Actora Gateway base URL. */
     gatewayUrl: string;
     /** Optional gateway bearer token (B-end wallet JWT). */
     accessToken?: string;
@@ -258,9 +258,9 @@ declare class PeriodClient {
 }
 
 interface BillingClientConfig {
-    /** Gateway base URL, e.g. https://agentx.0xainet.top */
+    /** Gateway base URL, e.g. https://actora.codes */
     gatewayUrl: string;
-    /** Tenant API Key (agentx_...) issued after registration (alternative to accessToken) */
+    /** Tenant API Key (actora_...) issued after registration (alternative to accessToken) */
     apiKey?: string;
     /** Gateway JWT access token from wallet-signed login (alternative to apiKey) */
     accessToken?: string;
@@ -285,7 +285,7 @@ interface BalanceResult {
 /**
  * Balance query client for B-end integrations.
  * @example
- * const billing = new BillingClient({ gatewayUrl, apiKey: 'agentx_xxx' })
+ * const billing = new BillingClient({ gatewayUrl, apiKey: 'actora_xxx' })
  * const { balanceWei, priceWei } = await billing.getBalance()
  * if (balanceWei && priceWei && BigInt(balanceWei) < BigInt(priceWei)) {
  *   // show top-up prompt: send native token to billing.payTo
@@ -309,11 +309,11 @@ declare class BillingClient {
 
 /** AgentWalletConfig 客户端配置。 */
 interface AgentWalletConfigOptions {
-    /** Gateway 地址（如 https://agentx.0xainet.top）。 */
+    /** Gateway 地址（如 https://actora.codes）。 */
     baseUrl: string;
     /** Gateway ADMIN_KEY（admin 路由鉴权，平台全量）。与 apiKey 二选一。 */
     adminKey?: string;
-    /** 租户 API Key（agentx_...，租户作用域，仅限自有 agent）。与 adminKey 二选一。 */
+    /** 租户 API Key（actora_...，租户作用域，仅限自有 agent）。与 adminKey 二选一。 */
     apiKey?: string;
 }
 interface AgentWalletInfo {
@@ -494,7 +494,7 @@ interface CentralSubscription {
     updatedAt: string;
 }
 interface CentralAgentClientOptions {
-    /** AgentX Gateway 基础 URL，例如 https://agentx.0xainet.top。 */
+    /** Actora Gateway 基础 URL，例如 https://actora.codes。 */
     baseUrl: string;
     /** 可选：注册用户 JWT（Authorization: Bearer）——发布/管理中心化 Agent 时使用。 */
     accessToken?: string;
@@ -605,4 +605,4 @@ declare class CentralAgentClient {
     }>;
 }
 
-export { A2AClient, A2A_VERSION, AgentReputation, AgentReview, AgentWalletConfig, type AgentWalletConfigOptions, type AgentWalletInfo, type AgentWalletStatus, AgentX402, type AgentX402Config, type AgentXChainEvent, type AgentXEventType, type AuthorizePaymentSessionInput, type AuthorizePaymentSessionResult, type BalanceResult, BillingClient, type BillingClientConfig, type BindAgentWalletInput, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, CentralAgentClient, type CentralAgentClientOptions, type CentralAgentListFilters, type CentralAgentSummary, type CentralPlan, type CentralPlanRow, type CentralSubscription, type CreateCentralAgentInput, type CreateCentralPlanInput, type EventListenerOptions, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, type ReputationConfig, ReputationRegistry, SUBSCRIPTION_VERSION, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type UpdateCentralAgentInput, type X402Info, subscribeToEvents };
+export { A2AClient, A2A_VERSION, Actora402, type Actora402Config, type ActoraChainEvent, type ActoraEventType, AgentReputation, AgentReview, AgentWalletConfig, type AgentWalletConfigOptions, type AgentWalletInfo, type AgentWalletStatus, type AuthorizePaymentSessionInput, type AuthorizePaymentSessionResult, type BalanceResult, BillingClient, type BillingClientConfig, type BindAgentWalletInput, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, CentralAgentClient, type CentralAgentClientOptions, type CentralAgentListFilters, type CentralAgentSummary, type CentralPlan, type CentralPlanRow, type CentralSubscription, type CreateCentralAgentInput, type CreateCentralPlanInput, type EventListenerOptions, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, type ReputationConfig, ReputationRegistry, SUBSCRIPTION_VERSION, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type UpdateCentralAgentInput, type X402Info, subscribeToEvents };

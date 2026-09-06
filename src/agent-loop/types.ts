@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — AgentLoop Type Definitions
+// @actora/sdk — AgentLoop Type Definitions
 // ---------------------------------------------------------------------------
 // Core types for the ReAct-style agent loop engine.
 // The loop enables LLMs to autonomously: Think → Call Tools → Observe → Repeat

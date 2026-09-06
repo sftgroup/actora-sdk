@@ -20,7 +20,7 @@ describe('BillingClient', () => {
   })
 
   const makeClient = (extra: Record<string, unknown> = {}) =>
-    new BillingClient({ gatewayUrl: 'https://gw.example.com', apiKey: 'agentx_test', ...extra })
+    new BillingClient({ gatewayUrl: 'https://gw.example.com', apiKey: 'actora_test', ...extra })
 
   const firstCall = (call: unknown[]) => {
     const [url, init] = call as [string, RequestInit]
@@ -35,7 +35,7 @@ describe('BillingClient', () => {
     const { url, method, headers } = firstCall(fetchMock.mock.calls[0]!)
     expect(url).toBe('https://gw.example.com/api/v1/billing/balance')
     expect(method).toBe('GET')
-    expect(headers['X-Api-Key']).toBe('agentx_test')
+    expect(headers['X-Api-Key']).toBe('actora_test')
   })
 
   it('uses Bearer token in accessToken mode', async () => {

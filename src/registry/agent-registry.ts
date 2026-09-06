@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Agent Registry
+// @actora/sdk — Agent Registry
 // ---------------------------------------------------------------------------
 // Wraps IdentityRegistry contract interactions (on-chain agent CRUD).
 //

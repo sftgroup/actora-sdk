@@ -1,9 +1,9 @@
-// @agentx/sdk — Browser Control Skill
+// @actora/sdk — Browser Control Skill
 // Text-based DOM manipulation for browser-side agent execution.
 // No external dependencies — uses native browser APIs only.
 //
 // Usage:
-//   import { executeBrowserAction, extractAccessibleDOM, sleep } from '@agentxv2/sdk/skills'
+//   import { executeBrowserAction, extractAccessibleDOM, sleep } from '@actora/sdk/skills'
 //   const result = executeBrowserAction({ type: 'click', selector: '#submit' })
 //   await sleep(300)  // optional pacing between actions
 

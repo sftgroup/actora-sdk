@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Platform Tools
+// @actora/sdk — Platform Tools
 // ---------------------------------------------------------------------------
-// Exposes ALL AgentX platform capabilities as LLM-callable OpenAI function tools.
+// Exposes ALL Actora platform capabilities as LLM-callable OpenAI function tools.
 //
 //   const tools = buildPlatformTools({ agentRunner, a2a, subscriptionManager, ... })
 //   // → [{ type: "function", function: { name, description, parameters } }]
@@ -101,8 +101,8 @@ const identityRegistryTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_identity_register',
-      description: 'Register a new AI Agent on the AgentX blockchain. Required before any agent can be published, subscribed to, or used.',
+      name: 'actora_identity_register',
+      description: 'Register a new AI Agent on the Actora blockchain. Required before any agent can be published, subscribed to, or used.',
       parameters: object({
         tokenURI: str('IPFS URI of the agent public metadata (ipfs://...)'),
         encryptedPayloadCid: str('IPFS CID of the encrypted agent payload'),
@@ -114,7 +114,7 @@ const identityRegistryTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_identity_get',
+      name: 'actora_identity_get',
       description: 'Get detailed information about a registered Agent by its ID. Returns owner, metadata URI, active status, and on-chain metadata attributes.',
       parameters: object({
         agentId: integer('The numeric agent ID to query'),
@@ -124,7 +124,7 @@ const identityRegistryTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_identity_list',
+      name: 'actora_identity_list',
       description: 'List all Agent IDs owned by a specific wallet address.',
       parameters: object({
         ownerAddress: str('Ethereum wallet address to query'),
@@ -134,7 +134,7 @@ const identityRegistryTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_identity_exists',
+      name: 'actora_identity_exists',
       description: 'Check if a specific Agent ID exists on the blockchain.',
       parameters: object({
         agentId: integer('The agent ID to check'),
@@ -144,7 +144,7 @@ const identityRegistryTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_identity_total_count',
+      name: 'actora_identity_total_count',
       description: 'Get the total number of agents registered in the IdentityRegistry.',
       parameters: object({}),
     },
@@ -157,7 +157,7 @@ const subscriptionTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_subscription_plans',
+      name: 'actora_subscription_plans',
       description: 'Get plan details for a specific subscription plan by its ID. Returns price, period, creator, pay token, trial days, and active status.',
       parameters: object({
         planId: integer('The plan ID to fetch'),
@@ -167,7 +167,7 @@ const subscriptionTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_subscription_check',
+      name: 'actora_subscription_check',
       description: 'Check if a wallet address has an active subscription for a specific agent.',
       parameters: object({
         subscriberAddress: str('Wallet address to check'),
@@ -178,7 +178,7 @@ const subscriptionTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_subscription_detail',
+      name: 'actora_subscription_detail',
       description: 'Get full subscription details including trial info, payment token, amount paid, escrow status.',
       parameters: object({
         subscriptionId: integer('The subscription ID'),
@@ -188,7 +188,7 @@ const subscriptionTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_subscription_my_list',
+      name: 'actora_subscription_my_list',
       description: 'List all subscription IDs belonging to the current user.',
       parameters: object({}),
     },
@@ -196,7 +196,7 @@ const subscriptionTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_subscription_subscribe',
+      name: 'actora_subscription_subscribe',
       description: 'Subscribe to a plan. For ETH plans this will send ETH. For ERC20 plans, the token must already be approved. This is a blockchain transaction — the user must approve it in their wallet.',
       parameters: object({
         planId: integer('The plan ID to subscribe to'),
@@ -207,7 +207,7 @@ const subscriptionTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_subscription_cancel',
+      name: 'actora_subscription_cancel',
       description: 'Cancel an existing subscription. If within trial period, funds may be refunded.',
       parameters: object({
         subscriptionId: integer('The subscription ID to cancel'),
@@ -217,7 +217,7 @@ const subscriptionTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_subscription_release',
+      name: 'actora_subscription_release',
       description: 'Release escrowed subscription funds to the agent creator (after trial window). Only callable by the subscriber.',
       parameters: object({
         subscriptionId: integer('The subscription ID'),
@@ -227,7 +227,7 @@ const subscriptionTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_subscription_fee',
+      name: 'actora_subscription_fee',
       description: 'Get the current platform fee in basis points (e.g. 250 = 2.5%).',
       parameters: object({}),
     },
@@ -240,8 +240,8 @@ const a2aTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_a2a_create_task',
-      description: 'Create an on-chain Agent-to-Agent task. This delegates work to another AgentX agent. The target agent will see this as a pending task they can complete.',
+      name: 'actora_a2a_create_task',
+      description: 'Create an on-chain Agent-to-Agent task. This delegates work to another Actora agent. The target agent will see this as a pending task they can complete.',
       parameters: object({
         targetAgentId: integer('The Agent ID to delegate work to'),
         taskType: str('Type of task, e.g. "audit", "analyze", "generate", "review"'),
@@ -252,7 +252,7 @@ const a2aTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_a2a_get_task',
+      name: 'actora_a2a_get_task',
       description: 'Get full details of an A2A task by its ID — status, input, output, creator, timestamps.',
       parameters: object({
         taskId: integer('The A2A task ID'),
@@ -262,7 +262,7 @@ const a2aTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_a2a_complete_task',
+      name: 'actora_a2a_complete_task',
       description: 'Mark an A2A task as completed and submit the output data on-chain.',
       parameters: object({
         taskId: integer('The task ID to complete'),
@@ -273,7 +273,7 @@ const a2aTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_a2a_my_tasks',
+      name: 'actora_a2a_my_tasks',
       description: 'Get all A2A task IDs assigned to or created by the current user.',
       parameters: object({}),
     },
@@ -281,7 +281,7 @@ const a2aTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_a2a_agent_card',
+      name: 'actora_a2a_agent_card',
       description: 'Get an agent\'s A2A card — name, capabilities, supported task types, protocol info.',
       parameters: object({
         agentId: integer('The agent ID'),
@@ -296,7 +296,7 @@ const reputationTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_reputation_rate',
+      name: 'actora_reputation_rate',
       description: 'Rate an agent (1-5) and leave a comment on-chain.',
       parameters: object({
         agentId: integer('The agent ID to rate'),
@@ -308,7 +308,7 @@ const reputationTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_reputation_get',
+      name: 'actora_reputation_get',
       description: 'Get the average rating and total number of ratings for an agent.',
       parameters: object({
         agentId: integer('The agent ID'),
@@ -318,7 +318,7 @@ const reputationTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_reputation_reviews',
+      name: 'actora_reputation_reviews',
       description: 'Get all reviews for an agent (reviewer address, rating, comment, timestamp).',
       parameters: object({
         agentId: integer('The agent ID'),
@@ -333,7 +333,7 @@ const configurationTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_config_get',
+      name: 'actora_config_get',
       description: 'Read a single configuration value for an agent by key.',
       parameters: object({
         agentId: integer('The agent ID'),
@@ -344,7 +344,7 @@ const configurationTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_config_list',
+      name: 'actora_config_list',
       description: 'List all configuration entries for an agent.',
       parameters: object({
         agentId: integer('The agent ID'),
@@ -354,7 +354,7 @@ const configurationTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_config_set',
+      name: 'actora_config_set',
       description: 'Set or update a configuration value for an agent on-chain. Only the agent owner can write.',
       parameters: object({
         agentId: integer('The agent ID'),
@@ -372,7 +372,7 @@ const endpointTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_endpoint_list',
+      name: 'actora_endpoint_list',
       description: 'Get all registered endpoints for an agent (MCP URLs, API endpoints, etc.).',
       parameters: object({
         agentId: integer('The agent ID'),
@@ -382,7 +382,7 @@ const endpointTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_endpoint_active',
+      name: 'actora_endpoint_active',
       description: 'Get only active endpoints for an agent. Useful for finding available MCP or API servers.',
       parameters: object({
         agentId: integer('The agent ID'),
@@ -392,7 +392,7 @@ const endpointTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_endpoint_best_mcp',
+      name: 'actora_endpoint_best_mcp',
       description: 'Find the best available MCP endpoint URL for an agent. Automatically picks the healthiest active endpoint.',
       parameters: object({
         agentId: integer('The agent ID'),
@@ -407,8 +407,8 @@ const gatewayTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_gateway_chat',
-      description: 'Call an LLM through the AgentX Gateway using platform quota or BYOK key. Supports OpenAI models via SSE streaming.',
+      name: 'actora_gateway_chat',
+      description: 'Call an LLM through the Actora Gateway using platform quota or BYOK key. Supports OpenAI models via SSE streaming.',
       parameters: object({
         model: str('LLM model name, e.g. "gpt-4o", "gpt-4o-mini"'),
         messages: array(
@@ -428,7 +428,7 @@ const gatewayTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_gateway_tenant_me',
+      name: 'actora_gateway_tenant_me',
       description: 'Get the current tenant (user) profile: plan info, API keys, today\'s usage quota.',
       parameters: object({}),
     },
@@ -436,7 +436,7 @@ const gatewayTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_gateway_tenant_usage',
+      name: 'actora_gateway_tenant_usage',
       description: 'Get usage history for the current tenant: token consumption, tool calls by day.',
       parameters: object({
         days: integer('Number of days of history (default 30)'),
@@ -446,7 +446,7 @@ const gatewayTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_gateway_tenant_keys',
+      name: 'actora_gateway_tenant_keys',
       description: 'List all BYOK API keys registered for the current tenant.',
       parameters: object({}),
     },
@@ -454,7 +454,7 @@ const gatewayTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_gateway_models',
+      name: 'actora_gateway_models',
       description: 'List available LLM models: both platform-provided and tenant-owned models.',
       parameters: object({}),
     },
@@ -467,7 +467,7 @@ const ipfsTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_ipfs_upload',
+      name: 'actora_ipfs_upload',
       description: 'Upload JSON data to IPFS via Pinata (requires Pinata JWT configured). Returns the IPFS CID and gateway URL.',
       parameters: object({
         data: str('The JSON data to upload, as a JSON string'),
@@ -478,7 +478,7 @@ const ipfsTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_ipfs_upload_encrypted',
+      name: 'actora_ipfs_upload_encrypted',
       description: 'Encrypt and upload an Agent payload to IPFS. Used in the Agent publish flow. Generates AES key, encrypts the payload, and uploads to IPFS in one step.',
       parameters: object({
         prompt: str('The private system prompt to encrypt and upload'),
@@ -491,7 +491,7 @@ const ipfsTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'agentx_ipfs_get_url',
+      name: 'actora_ipfs_get_url',
       description: 'Build a public IPFS gateway URL from a CID.',
       parameters: object({
         cid: str('The IPFS CID (Content Identifier)'),

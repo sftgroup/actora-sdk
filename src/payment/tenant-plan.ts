@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — TenantPlanPayments: platform subscription-tier purchases (R19.3)
+// @actora/sdk — TenantPlanPayments: platform subscription-tier purchases (R19.3)
 // ---------------------------------------------------------------------------
 // R19.3 (D11): buying a *platform* subscription tier (the `plans` table on the
 // Gateway — quota_daily / rate limits) reuses the same @0xinfrax/payments
@@ -18,7 +18,7 @@ import type { ChainKey } from './payments'
 export type TenantPlanPaymentMethod = 'chain' | 'fiat' | 'x402'
 
 export interface TenantPlanPaymentsConfig {
-  /** AgentX Gateway base URL. */
+  /** Actora Gateway base URL. */
   gatewayUrl: string
   /** Optional gateway bearer token (B-end wallet JWT). */
   accessToken?: string

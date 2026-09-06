@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — useAgentRunner React Hook
+// @actora/sdk — useAgentRunner React Hook
 // ---------------------------------------------------------------------------
 // Wraps AgentRunner.useAgent() for React + wagmi integration.
 //

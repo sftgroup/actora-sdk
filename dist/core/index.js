@@ -21,8 +21,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var core_exports = {};
 __export(core_exports, {
   AGENT_CATEGORIES: () => AGENT_CATEGORIES,
-  AgentXError: () => AgentXError,
-  AgentXErrorCode: () => AgentXErrorCode,
+  ActoraError: () => ActoraError,
+  ActoraErrorCode: () => ActoraErrorCode,
   aesDecrypt: () => aesDecrypt,
   aesEncrypt: () => aesEncrypt,
   bytesToHex: () => import_utils.bytesToHex,
@@ -72,25 +72,25 @@ var AGENT_CATEGORIES = [
   "other"
   // 其他 / 未分类
 ];
-var AgentXErrorCode = /* @__PURE__ */ ((AgentXErrorCode2) => {
-  AgentXErrorCode2["NOT_SUBSCRIBED"] = "NOT_SUBSCRIBED";
-  AgentXErrorCode2["SUBSCRIPTION_EXPIRED"] = "SUBSCRIPTION_EXPIRED";
-  AgentXErrorCode2["DECRYPTION_FAILED"] = "DECRYPTION_FAILED";
-  AgentXErrorCode2["IPFS_FETCH_FAILED"] = "IPFS_FETCH_FAILED";
-  AgentXErrorCode2["AGENT_NOT_FOUND"] = "AGENT_NOT_FOUND";
-  AgentXErrorCode2["INVALID_SCHEMA"] = "INVALID_SCHEMA";
-  AgentXErrorCode2["TX_FAILED"] = "TX_FAILED";
-  AgentXErrorCode2["WALLET_NOT_CONNECTED"] = "WALLET_NOT_CONNECTED";
-  return AgentXErrorCode2;
-})(AgentXErrorCode || {});
-var AgentXError = class extends Error {
+var ActoraErrorCode = /* @__PURE__ */ ((ActoraErrorCode2) => {
+  ActoraErrorCode2["NOT_SUBSCRIBED"] = "NOT_SUBSCRIBED";
+  ActoraErrorCode2["SUBSCRIPTION_EXPIRED"] = "SUBSCRIPTION_EXPIRED";
+  ActoraErrorCode2["DECRYPTION_FAILED"] = "DECRYPTION_FAILED";
+  ActoraErrorCode2["IPFS_FETCH_FAILED"] = "IPFS_FETCH_FAILED";
+  ActoraErrorCode2["AGENT_NOT_FOUND"] = "AGENT_NOT_FOUND";
+  ActoraErrorCode2["INVALID_SCHEMA"] = "INVALID_SCHEMA";
+  ActoraErrorCode2["TX_FAILED"] = "TX_FAILED";
+  ActoraErrorCode2["WALLET_NOT_CONNECTED"] = "WALLET_NOT_CONNECTED";
+  return ActoraErrorCode2;
+})(ActoraErrorCode || {});
+var ActoraError = class extends Error {
   code;
   /** If NOT_SUBSCRIBED, carry enough info for wallet/X402 auto-payment */
   paymentInfo;
   constructor(code, message) {
     super(message);
     this.code = code;
-    this.name = "AgentXError";
+    this.name = "ActoraError";
   }
 };
 
@@ -357,8 +357,8 @@ function getPublicKey(privateKey) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   AGENT_CATEGORIES,
-  AgentXError,
-  AgentXErrorCode,
+  ActoraError,
+  ActoraErrorCode,
   aesDecrypt,
   aesEncrypt,
   bytesToHex,

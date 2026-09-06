@@ -2497,25 +2497,25 @@ var AGENT_CATEGORIES = [
   "other"
   // 其他 / 未分类
 ];
-var AgentXErrorCode = /* @__PURE__ */ ((AgentXErrorCode2) => {
-  AgentXErrorCode2["NOT_SUBSCRIBED"] = "NOT_SUBSCRIBED";
-  AgentXErrorCode2["SUBSCRIPTION_EXPIRED"] = "SUBSCRIPTION_EXPIRED";
-  AgentXErrorCode2["DECRYPTION_FAILED"] = "DECRYPTION_FAILED";
-  AgentXErrorCode2["IPFS_FETCH_FAILED"] = "IPFS_FETCH_FAILED";
-  AgentXErrorCode2["AGENT_NOT_FOUND"] = "AGENT_NOT_FOUND";
-  AgentXErrorCode2["INVALID_SCHEMA"] = "INVALID_SCHEMA";
-  AgentXErrorCode2["TX_FAILED"] = "TX_FAILED";
-  AgentXErrorCode2["WALLET_NOT_CONNECTED"] = "WALLET_NOT_CONNECTED";
-  return AgentXErrorCode2;
-})(AgentXErrorCode || {});
-var AgentXError = class extends Error {
+var ActoraErrorCode = /* @__PURE__ */ ((ActoraErrorCode2) => {
+  ActoraErrorCode2["NOT_SUBSCRIBED"] = "NOT_SUBSCRIBED";
+  ActoraErrorCode2["SUBSCRIPTION_EXPIRED"] = "SUBSCRIPTION_EXPIRED";
+  ActoraErrorCode2["DECRYPTION_FAILED"] = "DECRYPTION_FAILED";
+  ActoraErrorCode2["IPFS_FETCH_FAILED"] = "IPFS_FETCH_FAILED";
+  ActoraErrorCode2["AGENT_NOT_FOUND"] = "AGENT_NOT_FOUND";
+  ActoraErrorCode2["INVALID_SCHEMA"] = "INVALID_SCHEMA";
+  ActoraErrorCode2["TX_FAILED"] = "TX_FAILED";
+  ActoraErrorCode2["WALLET_NOT_CONNECTED"] = "WALLET_NOT_CONNECTED";
+  return ActoraErrorCode2;
+})(ActoraErrorCode || {});
+var ActoraError = class extends Error {
   code;
   /** If NOT_SUBSCRIBED, carry enough info for wallet/X402 auto-payment */
   paymentInfo;
   constructor(code, message) {
     super(message);
     this.code = code;
-    this.name = "AgentXError";
+    this.name = "ActoraError";
   }
 };
 
@@ -2839,7 +2839,7 @@ var AgentRunner = class {
     const address = await this.wallet.getAddress();
     const isActive = await this.reader.hasActiveSubscription(address, agentId);
     if (!isActive) {
-      const err = new AgentXError(
+      const err = new ActoraError(
         "NOT_SUBSCRIBED" /* NOT_SUBSCRIBED */,
         `No active subscription for Agent #${agentId}. Check error.paymentInfo for auto-subscribe via wallet/X402.`
       );
@@ -2852,7 +2852,7 @@ var AgentRunner = class {
     const encryptedPayloadCid = attrs.encryptedPayloadCid;
     const eciesEncryptedKey = attrs.eciesEncryptedKey;
     if (!encryptedPayloadCid || !eciesEncryptedKey) {
-      throw new AgentXError(
+      throw new ActoraError(
         "AGENT_NOT_FOUND" /* AGENT_NOT_FOUND */,
         `Agent #${agentId} metadata incomplete \u2014 missing encryptedPayloadCid or eciesEncryptedKey`
       );
@@ -2861,7 +2861,7 @@ var AgentRunner = class {
     try {
       encryptedPayload = await this.ipfs.fetchEncryptedPayload(encryptedPayloadCid);
     } catch (e) {
-      throw new AgentXError(
+      throw new ActoraError(
         "IPFS_FETCH_FAILED" /* IPFS_FETCH_FAILED */,
         `Failed to fetch encrypted payload for agent #${agentId}: ${e}`
       );
@@ -2871,7 +2871,7 @@ var AgentRunner = class {
       const privKey = await this._getPrivateKey();
       privatePayload = unpackAgent(encryptedPayload, eciesEncryptedKey, privKey);
     } catch (e) {
-      throw new AgentXError(
+      throw new ActoraError(
         "DECRYPTION_FAILED" /* DECRYPTION_FAILED */,
         `Failed to decrypt agent #${agentId}: ${e}`
       );
@@ -2922,14 +2922,14 @@ var AgentRunner = class {
           return this._executeA2ASkill(skill, input);
         };
       } else {
-        throw new AgentXError(
+        throw new ActoraError(
           "INVALID_SCHEMA" /* INVALID_SCHEMA */,
           `Unknown execution type "${skill.execution.type}" for skill "${skill.name}"`
         );
       }
     } else {
       executeFn = async () => {
-        throw new AgentXError(
+        throw new ActoraError(
           "INVALID_SCHEMA" /* INVALID_SCHEMA */,
           `Open skill "${skill.name}" has no local executor. Implement execute() or switch to execution.type = "mcp" or "a2a".`
         );
@@ -2950,7 +2950,7 @@ var AgentRunner = class {
   async _executeMCPTool(endpoint, toolName, params) {
     const address = await this.wallet.getAddress();
     const timestamp = Math.floor(Date.now() / 1e3);
-    const message = `agentx:mcp:${toolName}:${timestamp}`;
+    const message = `actora:mcp:${toolName}:${timestamp}`;
     const signature = await this.wallet.signMessage(message);
     const res = await fetch(endpoint, {
       method: "POST",
@@ -2971,12 +2971,12 @@ var AgentRunner = class {
     if (!res.ok) {
       const text = await res.text();
       if (res.status === 403) {
-        throw new AgentXError(
+        throw new ActoraError(
           "SUBSCRIPTION_EXPIRED" /* SUBSCRIPTION_EXPIRED */,
           `MCP server rejected request: subscription may have expired. ${text}`
         );
       }
-      throw new AgentXError(
+      throw new ActoraError(
         "TX_FAILED" /* TX_FAILED */,
         `MCP tool "${toolName}" failed (HTTP ${res.status}): ${text}`
       );
@@ -2993,7 +2993,7 @@ var AgentRunner = class {
     return data;
   }
   /**
-   * Execute an A2A skill — delegate to another AgentX Agent.
+   * Execute an A2A skill — delegate to another Actora Agent.
    *
    * Standard Interface:
    *   Input:  { task, ...taskSpecificParams }
@@ -3006,7 +3006,7 @@ var AgentRunner = class {
   async _executeA2ASkill(skill, input) {
     const exec = skill.execution;
     if (!exec || exec.type !== "a2a") {
-      throw new AgentXError(
+      throw new ActoraError(
         "INVALID_SCHEMA" /* INVALID_SCHEMA */,
         `Skill "${skill.name}" is not an A2A delegation skill`
       );
@@ -3016,7 +3016,7 @@ var AgentRunner = class {
     try {
       subContext = await this.useAgent(targetAgentId);
     } catch (e) {
-      throw new AgentXError(
+      throw new ActoraError(
         "AGENT_NOT_FOUND" /* AGENT_NOT_FOUND */,
         `A2A delegation failed: cannot load Agent #${targetAgentId}. ${e}`
       );
@@ -3045,7 +3045,7 @@ var AgentRunner = class {
   }
   async _getPrivateKey() {
     if (this.wallet.getPrivateKey) return this.wallet.getPrivateKey();
-    throw new AgentXError(
+    throw new ActoraError(
       "WALLET_NOT_CONNECTED" /* WALLET_NOT_CONNECTED */,
       "Wallet must support getPrivateKey() for ECIES decryption."
     );
@@ -3569,8 +3569,8 @@ var identityRegistryTools = [
   {
     type: "function",
     function: {
-      name: "agentx_identity_register",
-      description: "Register a new AI Agent on the AgentX blockchain. Required before any agent can be published, subscribed to, or used.",
+      name: "actora_identity_register",
+      description: "Register a new AI Agent on the Actora blockchain. Required before any agent can be published, subscribed to, or used.",
       parameters: object({
         tokenURI: str("IPFS URI of the agent public metadata (ipfs://...)"),
         encryptedPayloadCid: str("IPFS CID of the encrypted agent payload"),
@@ -3582,7 +3582,7 @@ var identityRegistryTools = [
   {
     type: "function",
     function: {
-      name: "agentx_identity_get",
+      name: "actora_identity_get",
       description: "Get detailed information about a registered Agent by its ID. Returns owner, metadata URI, active status, and on-chain metadata attributes.",
       parameters: object({
         agentId: integer("The numeric agent ID to query")
@@ -3592,7 +3592,7 @@ var identityRegistryTools = [
   {
     type: "function",
     function: {
-      name: "agentx_identity_list",
+      name: "actora_identity_list",
       description: "List all Agent IDs owned by a specific wallet address.",
       parameters: object({
         ownerAddress: str("Ethereum wallet address to query")
@@ -3602,7 +3602,7 @@ var identityRegistryTools = [
   {
     type: "function",
     function: {
-      name: "agentx_identity_exists",
+      name: "actora_identity_exists",
       description: "Check if a specific Agent ID exists on the blockchain.",
       parameters: object({
         agentId: integer("The agent ID to check")
@@ -3612,7 +3612,7 @@ var identityRegistryTools = [
   {
     type: "function",
     function: {
-      name: "agentx_identity_total_count",
+      name: "actora_identity_total_count",
       description: "Get the total number of agents registered in the IdentityRegistry.",
       parameters: object({})
     }
@@ -3622,7 +3622,7 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "agentx_subscription_plans",
+      name: "actora_subscription_plans",
       description: "Get plan details for a specific subscription plan by its ID. Returns price, period, creator, pay token, trial days, and active status.",
       parameters: object({
         planId: integer("The plan ID to fetch")
@@ -3632,7 +3632,7 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "agentx_subscription_check",
+      name: "actora_subscription_check",
       description: "Check if a wallet address has an active subscription for a specific agent.",
       parameters: object({
         subscriberAddress: str("Wallet address to check"),
@@ -3643,7 +3643,7 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "agentx_subscription_detail",
+      name: "actora_subscription_detail",
       description: "Get full subscription details including trial info, payment token, amount paid, escrow status.",
       parameters: object({
         subscriptionId: integer("The subscription ID")
@@ -3653,7 +3653,7 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "agentx_subscription_my_list",
+      name: "actora_subscription_my_list",
       description: "List all subscription IDs belonging to the current user.",
       parameters: object({})
     }
@@ -3661,7 +3661,7 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "agentx_subscription_subscribe",
+      name: "actora_subscription_subscribe",
       description: "Subscribe to a plan. For ETH plans this will send ETH. For ERC20 plans, the token must already be approved. This is a blockchain transaction \u2014 the user must approve it in their wallet.",
       parameters: object({
         planId: integer("The plan ID to subscribe to"),
@@ -3672,7 +3672,7 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "agentx_subscription_cancel",
+      name: "actora_subscription_cancel",
       description: "Cancel an existing subscription. If within trial period, funds may be refunded.",
       parameters: object({
         subscriptionId: integer("The subscription ID to cancel")
@@ -3682,7 +3682,7 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "agentx_subscription_release",
+      name: "actora_subscription_release",
       description: "Release escrowed subscription funds to the agent creator (after trial window). Only callable by the subscriber.",
       parameters: object({
         subscriptionId: integer("The subscription ID")
@@ -3692,7 +3692,7 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "agentx_subscription_fee",
+      name: "actora_subscription_fee",
       description: "Get the current platform fee in basis points (e.g. 250 = 2.5%).",
       parameters: object({})
     }
@@ -3702,8 +3702,8 @@ var a2aTools = [
   {
     type: "function",
     function: {
-      name: "agentx_a2a_create_task",
-      description: "Create an on-chain Agent-to-Agent task. This delegates work to another AgentX agent. The target agent will see this as a pending task they can complete.",
+      name: "actora_a2a_create_task",
+      description: "Create an on-chain Agent-to-Agent task. This delegates work to another Actora agent. The target agent will see this as a pending task they can complete.",
       parameters: object({
         targetAgentId: integer("The Agent ID to delegate work to"),
         taskType: str('Type of task, e.g. "audit", "analyze", "generate", "review"'),
@@ -3714,7 +3714,7 @@ var a2aTools = [
   {
     type: "function",
     function: {
-      name: "agentx_a2a_get_task",
+      name: "actora_a2a_get_task",
       description: "Get full details of an A2A task by its ID \u2014 status, input, output, creator, timestamps.",
       parameters: object({
         taskId: integer("The A2A task ID")
@@ -3724,7 +3724,7 @@ var a2aTools = [
   {
     type: "function",
     function: {
-      name: "agentx_a2a_complete_task",
+      name: "actora_a2a_complete_task",
       description: "Mark an A2A task as completed and submit the output data on-chain.",
       parameters: object({
         taskId: integer("The task ID to complete"),
@@ -3735,7 +3735,7 @@ var a2aTools = [
   {
     type: "function",
     function: {
-      name: "agentx_a2a_my_tasks",
+      name: "actora_a2a_my_tasks",
       description: "Get all A2A task IDs assigned to or created by the current user.",
       parameters: object({})
     }
@@ -3743,7 +3743,7 @@ var a2aTools = [
   {
     type: "function",
     function: {
-      name: "agentx_a2a_agent_card",
+      name: "actora_a2a_agent_card",
       description: "Get an agent's A2A card \u2014 name, capabilities, supported task types, protocol info.",
       parameters: object({
         agentId: integer("The agent ID")
@@ -3755,7 +3755,7 @@ var reputationTools = [
   {
     type: "function",
     function: {
-      name: "agentx_reputation_rate",
+      name: "actora_reputation_rate",
       description: "Rate an agent (1-5) and leave a comment on-chain.",
       parameters: object({
         agentId: integer("The agent ID to rate"),
@@ -3767,7 +3767,7 @@ var reputationTools = [
   {
     type: "function",
     function: {
-      name: "agentx_reputation_get",
+      name: "actora_reputation_get",
       description: "Get the average rating and total number of ratings for an agent.",
       parameters: object({
         agentId: integer("The agent ID")
@@ -3777,7 +3777,7 @@ var reputationTools = [
   {
     type: "function",
     function: {
-      name: "agentx_reputation_reviews",
+      name: "actora_reputation_reviews",
       description: "Get all reviews for an agent (reviewer address, rating, comment, timestamp).",
       parameters: object({
         agentId: integer("The agent ID")
@@ -3789,7 +3789,7 @@ var configurationTools = [
   {
     type: "function",
     function: {
-      name: "agentx_config_get",
+      name: "actora_config_get",
       description: "Read a single configuration value for an agent by key.",
       parameters: object({
         agentId: integer("The agent ID"),
@@ -3800,7 +3800,7 @@ var configurationTools = [
   {
     type: "function",
     function: {
-      name: "agentx_config_list",
+      name: "actora_config_list",
       description: "List all configuration entries for an agent.",
       parameters: object({
         agentId: integer("The agent ID")
@@ -3810,7 +3810,7 @@ var configurationTools = [
   {
     type: "function",
     function: {
-      name: "agentx_config_set",
+      name: "actora_config_set",
       description: "Set or update a configuration value for an agent on-chain. Only the agent owner can write.",
       parameters: object({
         agentId: integer("The agent ID"),
@@ -3825,7 +3825,7 @@ var endpointTools = [
   {
     type: "function",
     function: {
-      name: "agentx_endpoint_list",
+      name: "actora_endpoint_list",
       description: "Get all registered endpoints for an agent (MCP URLs, API endpoints, etc.).",
       parameters: object({
         agentId: integer("The agent ID")
@@ -3835,7 +3835,7 @@ var endpointTools = [
   {
     type: "function",
     function: {
-      name: "agentx_endpoint_active",
+      name: "actora_endpoint_active",
       description: "Get only active endpoints for an agent. Useful for finding available MCP or API servers.",
       parameters: object({
         agentId: integer("The agent ID")
@@ -3845,7 +3845,7 @@ var endpointTools = [
   {
     type: "function",
     function: {
-      name: "agentx_endpoint_best_mcp",
+      name: "actora_endpoint_best_mcp",
       description: "Find the best available MCP endpoint URL for an agent. Automatically picks the healthiest active endpoint.",
       parameters: object({
         agentId: integer("The agent ID")
@@ -3857,8 +3857,8 @@ var gatewayTools = [
   {
     type: "function",
     function: {
-      name: "agentx_gateway_chat",
-      description: "Call an LLM through the AgentX Gateway using platform quota or BYOK key. Supports OpenAI models via SSE streaming.",
+      name: "actora_gateway_chat",
+      description: "Call an LLM through the Actora Gateway using platform quota or BYOK key. Supports OpenAI models via SSE streaming.",
       parameters: object({
         model: str('LLM model name, e.g. "gpt-4o", "gpt-4o-mini"'),
         messages: array(
@@ -3878,7 +3878,7 @@ var gatewayTools = [
   {
     type: "function",
     function: {
-      name: "agentx_gateway_tenant_me",
+      name: "actora_gateway_tenant_me",
       description: "Get the current tenant (user) profile: plan info, API keys, today's usage quota.",
       parameters: object({})
     }
@@ -3886,7 +3886,7 @@ var gatewayTools = [
   {
     type: "function",
     function: {
-      name: "agentx_gateway_tenant_usage",
+      name: "actora_gateway_tenant_usage",
       description: "Get usage history for the current tenant: token consumption, tool calls by day.",
       parameters: object({
         days: integer("Number of days of history (default 30)")
@@ -3896,7 +3896,7 @@ var gatewayTools = [
   {
     type: "function",
     function: {
-      name: "agentx_gateway_tenant_keys",
+      name: "actora_gateway_tenant_keys",
       description: "List all BYOK API keys registered for the current tenant.",
       parameters: object({})
     }
@@ -3904,7 +3904,7 @@ var gatewayTools = [
   {
     type: "function",
     function: {
-      name: "agentx_gateway_models",
+      name: "actora_gateway_models",
       description: "List available LLM models: both platform-provided and tenant-owned models.",
       parameters: object({})
     }
@@ -3914,7 +3914,7 @@ var ipfsTools = [
   {
     type: "function",
     function: {
-      name: "agentx_ipfs_upload",
+      name: "actora_ipfs_upload",
       description: "Upload JSON data to IPFS via Pinata (requires Pinata JWT configured). Returns the IPFS CID and gateway URL.",
       parameters: object({
         data: str("The JSON data to upload, as a JSON string"),
@@ -3925,7 +3925,7 @@ var ipfsTools = [
   {
     type: "function",
     function: {
-      name: "agentx_ipfs_upload_encrypted",
+      name: "actora_ipfs_upload_encrypted",
       description: "Encrypt and upload an Agent payload to IPFS. Used in the Agent publish flow. Generates AES key, encrypts the payload, and uploads to IPFS in one step.",
       parameters: object({
         prompt: str("The private system prompt to encrypt and upload"),
@@ -3938,7 +3938,7 @@ var ipfsTools = [
   {
     type: "function",
     function: {
-      name: "agentx_ipfs_get_url",
+      name: "actora_ipfs_get_url",
       description: "Build a public IPFS gateway URL from a CID.",
       parameters: object({
         cid: str("The IPFS CID (Content Identifier)"),
@@ -3989,7 +3989,7 @@ async function executePlatformTool(toolName, args, ctx) {
   try {
     switch (toolName) {
       // ── Identity ──────────────────────────────────
-      case "agentx_identity_register": {
+      case "actora_identity_register": {
         const { tokenURI, encryptedPayloadCid, eciesEncryptedKey, aesKeyHex } = args;
         const metadata = [
           { key: "encryptedPayloadCid", value: encryptedPayloadCid },
@@ -3998,73 +3998,73 @@ async function executePlatformTool(toolName, args, ctx) {
         if (aesKeyHex) metadata.push({ key: "aesKeyHex", value: aesKeyHex });
         return ctx.agentRegistry.register(tokenURI, metadata);
       }
-      case "agentx_identity_get":
+      case "actora_identity_get":
         return {
           tokenURI: await ctx.agentRegistry.tokenURI(args.agentId),
           attributes: await ctx.agentRegistry.getAttributes(args.agentId),
           exists: await ctx.agentRegistry.agentExists(args.agentId)
         };
-      case "agentx_identity_list":
+      case "actora_identity_list":
         return ctx.agentRegistry.getAgentsByOwner(args.ownerAddress ?? ctx.userAddress);
-      case "agentx_identity_exists":
+      case "actora_identity_exists":
         return ctx.agentRegistry.agentExists(args.agentId);
-      case "agentx_identity_total_count":
+      case "actora_identity_total_count":
         return { totalAgents: await ctx.agentRegistry.getCurrentAgentId() };
       // ── Subscription ──────────────────────────────
-      case "agentx_subscription_plans":
+      case "actora_subscription_plans":
         return ctx.subscriptionManager.getPlan(args.planId);
-      case "agentx_subscription_check":
+      case "actora_subscription_check":
         return ctx.subscriptionManager.hasActiveSubscription(
           args.subscriberAddress ?? ctx.userAddress,
           args.agentId
         );
-      case "agentx_subscription_detail":
+      case "actora_subscription_detail":
         return ctx.subscriptionManager.getSubscriptionDetail(args.subscriptionId);
-      case "agentx_subscription_my_list":
+      case "actora_subscription_my_list":
         return ctx.subscriptionManager.getUserSubscriptions(ctx.userAddress);
-      case "agentx_subscription_subscribe": {
+      case "actora_subscription_subscribe": {
         const valueWei = args.valueWei ? BigInt(args.valueWei) : void 0;
         return ctx.subscriptionManager.subscribe(args.planId, { valueWei });
       }
-      case "agentx_subscription_cancel":
+      case "actora_subscription_cancel":
         return ctx.subscriptionManager.cancel(args.subscriptionId);
-      case "agentx_subscription_release":
+      case "actora_subscription_release":
         return ctx.subscriptionManager.releaseFunds(args.subscriptionId);
-      case "agentx_subscription_fee":
+      case "actora_subscription_fee":
         return { platformFeeBps: await ctx.subscriptionManager.getPlatformFeeBps() };
       // ── A2A ───────────────────────────────────────
-      case "agentx_a2a_create_task":
+      case "actora_a2a_create_task":
         return ctx.a2a.createTask(
           args.targetAgentId,
           args.taskType,
           typeof args.inputData === "string" ? JSON.parse(args.inputData) : args.inputData
         );
-      case "agentx_a2a_get_task":
+      case "actora_a2a_get_task":
         return ctx.a2a.getTask(args.taskId);
-      case "agentx_a2a_complete_task":
+      case "actora_a2a_complete_task":
         return ctx.a2a.completeTask(args.taskId, args.outputData);
-      case "agentx_a2a_my_tasks":
+      case "actora_a2a_my_tasks":
         return ctx.a2a.getUserTasks(ctx.userAddress);
-      case "agentx_a2a_agent_card":
+      case "actora_a2a_agent_card":
         return ctx.a2a.getAgentCard(args.agentId);
       // ── Reputation ─────────────────────────────────
-      case "agentx_reputation_rate":
+      case "actora_reputation_rate":
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
         return ctx.reputationRegistry.rateAgent(args.agentId, args.rating, args.comment ?? "");
-      case "agentx_reputation_get":
+      case "actora_reputation_get":
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
         return ctx.reputationRegistry.getRating(args.agentId);
-      case "agentx_reputation_reviews":
+      case "actora_reputation_reviews":
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
         return ctx.reputationRegistry.getReviews(args.agentId);
       // ── Configuration ──────────────────────────────
-      case "agentx_config_get":
+      case "actora_config_get":
         if (!ctx.configurationRegistry) throw new Error("ConfigurationRegistry not configured");
         return ctx.configurationRegistry.getConfig(args.agentId, args.configKey);
-      case "agentx_config_list":
+      case "actora_config_list":
         if (!ctx.configurationRegistry) throw new Error("ConfigurationRegistry not configured");
         return ctx.configurationRegistry.getAgentConfigs(args.agentId);
-      case "agentx_config_set":
+      case "actora_config_set":
         if (!ctx.configurationRegistry) throw new Error("ConfigurationRegistry not configured");
         return ctx.configurationRegistry.setConfig(
           args.agentId,
@@ -4073,17 +4073,17 @@ async function executePlatformTool(toolName, args, ctx) {
           args.dataType ?? "string"
         );
       // ── MultiEndpoint ──────────────────────────────
-      case "agentx_endpoint_list":
+      case "actora_endpoint_list":
         if (!ctx.multiEndpointRegistry) throw new Error("MultiEndpointRegistry not configured");
         return ctx.multiEndpointRegistry.getAgentEndpoints(args.agentId);
-      case "agentx_endpoint_active":
+      case "actora_endpoint_active":
         if (!ctx.multiEndpointRegistry) throw new Error("MultiEndpointRegistry not configured");
         return ctx.multiEndpointRegistry.getActiveAgentEndpoints(args.agentId);
-      case "agentx_endpoint_best_mcp":
+      case "actora_endpoint_best_mcp":
         if (!ctx.multiEndpointRegistry) throw new Error("MultiEndpointRegistry not configured");
         return { mcpUrl: await ctx.multiEndpointRegistry.getBestMCPUrl(args.agentId) };
       // ── Gateway ────────────────────────────────────
-      case "agentx_gateway_chat": {
+      case "actora_gateway_chat": {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error("Gateway not configured");
         const body = {
           model: args.model ?? "gpt-4o",
@@ -4104,28 +4104,28 @@ async function executePlatformTool(toolName, args, ctx) {
         });
         return res.json();
       }
-      case "agentx_gateway_tenant_me": {
+      case "actora_gateway_tenant_me": {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error("Gateway not configured");
         const res = await fetch(`${ctx.gatewayUrl}/api/v1/tenant/me`, {
           headers: { "Authorization": `Bearer ${ctx.gatewayToken}` }
         });
         return res.json();
       }
-      case "agentx_gateway_tenant_usage": {
+      case "actora_gateway_tenant_usage": {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error("Gateway not configured");
         const res = await fetch(`${ctx.gatewayUrl}/api/v1/tenant/usage?days=${args.days ?? 30}`, {
           headers: { "Authorization": `Bearer ${ctx.gatewayToken}` }
         });
         return res.json();
       }
-      case "agentx_gateway_tenant_keys": {
+      case "actora_gateway_tenant_keys": {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error("Gateway not configured");
         const res = await fetch(`${ctx.gatewayUrl}/api/v1/tenant/keys`, {
           headers: { "Authorization": `Bearer ${ctx.gatewayToken}` }
         });
         return res.json();
       }
-      case "agentx_gateway_models": {
+      case "actora_gateway_models": {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error("Gateway not configured");
         const res = await fetch(`${ctx.gatewayUrl}/api/v1/models`, {
           headers: { "Authorization": `Bearer ${ctx.gatewayToken}` }
@@ -4133,13 +4133,13 @@ async function executePlatformTool(toolName, args, ctx) {
         return res.json();
       }
       // ── IPFS ───────────────────────────────────────
-      case "agentx_ipfs_upload": {
+      case "actora_ipfs_upload": {
         if (!ctx.ipfsUploader) throw new Error("IPFSUploader not configured");
         const data = typeof args.data === "string" ? JSON.parse(args.data) : args.data;
         const result = await ctx.ipfsUploader.uploadJSON(data, { name: args.name });
         return { cid: result.cid, url: result.url };
       }
-      case "agentx_ipfs_upload_encrypted": {
+      case "actora_ipfs_upload_encrypted": {
         if (!ctx.ipfsUploader) throw new Error("IPFSUploader not configured");
         const { generateAesKey: generateAesKey2, encryptPayload: encryptPayload2 } = await Promise.resolve().then(() => (init_crypto(), crypto_exports));
         const privatePayload = {
@@ -4152,7 +4152,7 @@ async function executePlatformTool(toolName, args, ctx) {
         const result = await ctx.ipfsUploader.uploadEncryptedPayload(encrypted, args.agentName);
         return { cid: result.cid, url: result.url, aesKeyHex: key };
       }
-      case "agentx_ipfs_get_url": {
+      case "actora_ipfs_get_url": {
         const gateway = args.gateway ?? "https://ipfs.io";
         return { url: `${gateway}/ipfs/${args.cid}` };
       }
@@ -5490,7 +5490,7 @@ var hasActiveSubAbi = {
   stateMutability: "view",
   type: "function"
 };
-var AgentX402 = class {
+var Actora402 = class {
   constructor(config) {
     this.config = config;
   }
@@ -5502,7 +5502,7 @@ var AgentX402 = class {
    *   await x402.requireSubscription(agentId, address, { planIds: [1,2,3] })
    *
    * On success, returns silently.
-   * On failure, throws AgentXError with paymentInfo populated
+   * On failure, throws ActoraError with paymentInfo populated
    * so the caller can auto-pay via wallet/X402.
    */
   async requireSubscription(agentId, address, opts) {
@@ -5539,7 +5539,7 @@ var AgentX402 = class {
         }
       }
     }
-    const err = new AgentXError(
+    const err = new ActoraError(
       "NOT_SUBSCRIBED" /* NOT_SUBSCRIBED */,
       `No active subscription for Agent #${agentId}. Use error.paymentInfo for auto-subscribe via X402/wallet.`
     );
@@ -5651,7 +5651,7 @@ var SubscriptionPayments = class {
       // on-chain plan price when omitted (FIAT_TOKEN_USD_PRICE on the Gateway).
       amountCents: input.amountCents,
       pricing: { planId: input.planId },
-      // AgentX business context rides in metadata (the unified endpoint reads
+      // Actora business context rides in metadata (the unified endpoint reads
       // it back out — the generic module never interprets it).
       metadata: { agentId: input.agentId, planId: input.planId },
       successUrl: input.successUrl,
@@ -6873,7 +6873,7 @@ var IPFSUploader = class _IPFSUploader {
     this.gatewayUrl = config.gatewayUrl ?? "https://ipfs.io";
     this.timeoutMs = config.timeoutMs ?? 3e4;
     this.pinataGroupId = config.pinataGroupId ?? null;
-    this.namePrefix = config.namePrefix ?? "agentx-";
+    this.namePrefix = config.namePrefix ?? "actora-";
   }
   isConfigured() {
     if (this.customEndpoint) return true;
@@ -6918,7 +6918,7 @@ var IPFSUploader = class _IPFSUploader {
     formData.append("pinataMetadata", metadata);
     return this._doFetch(endpoint, formData);
   }
-  // ── Encrypted Payload Upload (AgentX specific) ────────────────────────
+  // ── Encrypted Payload Upload (Actora specific) ────────────────────────
   /**
    * Upload an encrypted agent payload to IPFS.
    * This is the primary method used by Agent Studio publish flow.
@@ -7610,13 +7610,13 @@ export {
   A2A_STATUS,
   A2A_VERSION,
   AGENT_CATEGORIES,
+  Actora402,
+  ActoraError,
+  ActoraErrorCode,
   AgentLoop,
   AgentRegistry,
   AgentRunner,
   AgentWalletConfig,
-  AgentX402,
-  AgentXError,
-  AgentXErrorCode,
   BillingClient,
   CONFIG_VERSION,
   CentralAgentClient,

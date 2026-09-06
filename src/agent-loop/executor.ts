@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Tool Executor
+// @actora/sdk — Tool Executor
 // ---------------------------------------------------------------------------
 // Dispatches LLM tool calls to the correct RunnableSkill and executes.
 // Supports parallel execution of multiple tools in a single iteration.

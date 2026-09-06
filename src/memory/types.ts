@@ -1,4 +1,4 @@
-// @agentx/sdk — Memory Module
+// @actora/sdk — Memory Module
 // Session memory provider interface for AgentLoop integration
 
 export interface MemoryProvider {

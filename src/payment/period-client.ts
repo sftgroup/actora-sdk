@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// @agentxv2/sdk — PeriodClient (period rail, module-backed since R17.6)
+// @actora/sdk — PeriodClient (period rail, module-backed since R17.6)
 // ---------------------------------------------------------------------------
-// @0xinfrax/payments@0.1.2 removed the period-authorization rail; AgentX
+// @0xinfrax/payments@0.1.2 removed the period-authorization rail; Actora
 // self-hosted it (R17.5) while keeping the client contract identical. Since
 // 0.1.3 the rail lives in the generic engine again and the gateway delegates
 // to it (module PgAuthorizationStore seam), but the public client contract is

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Agent Runner
+// @actora/sdk — Agent Runner
 // ---------------------------------------------------------------------------
 // The unified entry point for "using" an Agent.
 //
@@ -21,7 +21,7 @@ import type {
   EncryptedPayload, SkillDef,
   PackResult, SubscriptionRequired,
 } from '../core/types'
-import { AgentXError, AgentXErrorCode } from '../core/types'
+import { ActoraError, ActoraErrorCode } from '../core/types'
 
 // ── Injected Dependencies (viem / wagmi integration) ───────────────────────
 
@@ -155,12 +155,12 @@ export class AgentRunner {
     const address = await this.wallet.getAddress()
     const isActive = await this.reader.hasActiveSubscription(address, agentId)
     if (!isActive) {
-      const err = new AgentXError(
-        AgentXErrorCode.NOT_SUBSCRIBED,
+      const err = new ActoraError(
+        ActoraErrorCode.NOT_SUBSCRIBED,
         `No active subscription for Agent #${agentId}. ` +
         `Check error.paymentInfo for auto-subscribe via wallet/X402.`,
       )
-      ;(err as AgentXError & { paymentInfo: SubscriptionRequired }).paymentInfo = {
+      ;(err as ActoraError & { paymentInfo: SubscriptionRequired }).paymentInfo = {
         agentId,
       }
       throw err
@@ -172,8 +172,8 @@ export class AgentRunner {
     const eciesEncryptedKey = attrs.eciesEncryptedKey
 
     if (!encryptedPayloadCid || !eciesEncryptedKey) {
-      throw new AgentXError(
-        AgentXErrorCode.AGENT_NOT_FOUND,
+      throw new ActoraError(
+        ActoraErrorCode.AGENT_NOT_FOUND,
         `Agent #${agentId} metadata incomplete — missing encryptedPayloadCid or eciesEncryptedKey`
       )
     }
@@ -183,8 +183,8 @@ export class AgentRunner {
     try {
       encryptedPayload = await this.ipfs.fetchEncryptedPayload(encryptedPayloadCid)
     } catch (e) {
-      throw new AgentXError(
-        AgentXErrorCode.IPFS_FETCH_FAILED,
+      throw new ActoraError(
+        ActoraErrorCode.IPFS_FETCH_FAILED,
         `Failed to fetch encrypted payload for agent #${agentId}: ${e}`
       )
     }
@@ -195,8 +195,8 @@ export class AgentRunner {
       const privKey = await this._getPrivateKey()
       privatePayload = unpackAgent(encryptedPayload, eciesEncryptedKey, privKey)
     } catch (e) {
-      throw new AgentXError(
-        AgentXErrorCode.DECRYPTION_FAILED,
+      throw new ActoraError(
+        ActoraErrorCode.DECRYPTION_FAILED,
         `Failed to decrypt agent #${agentId}: ${e}`
       )
     }
@@ -254,15 +254,15 @@ export class AgentRunner {
           return this._executeA2ASkill(skill, input)
         }
       } else {
-        throw new AgentXError(
-          AgentXErrorCode.INVALID_SCHEMA,
+        throw new ActoraError(
+          ActoraErrorCode.INVALID_SCHEMA,
           `Unknown execution type "${(skill.execution as Record<string,string>).type}" for skill "${skill.name}"`
         )
       }
     } else {
       executeFn = async () => {
-        throw new AgentXError(
-          AgentXErrorCode.INVALID_SCHEMA,
+        throw new ActoraError(
+          ActoraErrorCode.INVALID_SCHEMA,
           `Open skill "${skill.name}" has no local executor. ` +
           `Implement execute() or switch to execution.type = "mcp" or "a2a".`
         )
@@ -290,7 +290,7 @@ export class AgentRunner {
     const address = await this.wallet.getAddress()
 
     const timestamp = Math.floor(Date.now() / 1000)
-    const message = `agentx:mcp:${toolName}:${timestamp}`
+    const message = `actora:mcp:${toolName}:${timestamp}`
     const signature = await this.wallet.signMessage(message)
 
     const res = await fetch(endpoint, {
@@ -313,13 +313,13 @@ export class AgentRunner {
     if (!res.ok) {
       const text = await res.text()
       if (res.status === 403) {
-        throw new AgentXError(
-          AgentXErrorCode.SUBSCRIPTION_EXPIRED,
+        throw new ActoraError(
+          ActoraErrorCode.SUBSCRIPTION_EXPIRED,
           `MCP server rejected request: subscription may have expired. ${text}`
         )
       }
-      throw new AgentXError(
-        AgentXErrorCode.TX_FAILED,
+      throw new ActoraError(
+        ActoraErrorCode.TX_FAILED,
         `MCP tool "${toolName}" failed (HTTP ${res.status}): ${text}`
       )
     }
@@ -337,7 +337,7 @@ export class AgentRunner {
   }
 
   /**
-   * Execute an A2A skill — delegate to another AgentX Agent.
+   * Execute an A2A skill — delegate to another Actora Agent.
    *
    * Standard Interface:
    *   Input:  { task, ...taskSpecificParams }
@@ -353,8 +353,8 @@ export class AgentRunner {
   ): Promise<A2ASkillResult> {
     const exec = skill.execution as import('../core/types').A2ASkillExecution
     if (!exec || exec.type !== 'a2a') {
-      throw new AgentXError(
-        AgentXErrorCode.INVALID_SCHEMA,
+      throw new ActoraError(
+        ActoraErrorCode.INVALID_SCHEMA,
         `Skill "${skill.name}" is not an A2A delegation skill`
       )
     }
@@ -366,8 +366,8 @@ export class AgentRunner {
     try {
       subContext = await this.useAgent(targetAgentId)
     } catch (e) {
-      throw new AgentXError(
-        AgentXErrorCode.AGENT_NOT_FOUND,
+      throw new ActoraError(
+        ActoraErrorCode.AGENT_NOT_FOUND,
         `A2A delegation failed: cannot load Agent #${targetAgentId}. ${e}`
       )
     }
@@ -401,8 +401,8 @@ export class AgentRunner {
 
   private async _getPrivateKey(): Promise<string> {
     if (this.wallet.getPrivateKey) return this.wallet.getPrivateKey()
-    throw new AgentXError(
-      AgentXErrorCode.WALLET_NOT_CONNECTED,
+    throw new ActoraError(
+      ActoraErrorCode.WALLET_NOT_CONNECTED,
       'Wallet must support getPrivateKey() for ECIES decryption.'
     )
   }

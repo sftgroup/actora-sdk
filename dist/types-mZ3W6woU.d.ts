@@ -37,7 +37,7 @@ interface SkillDef {
      * - { type: "mcp", toolName: "..." }: Source lives on the publisher's
      *     MCP server.  Subscriber only gets Schema + remote execution endpoint.
      *     MCP server verifies on-chain subscription on every call.
-     * - { type: "a2a", targetAgentId: 42 }: Delegates to another AgentX Agent.
+     * - { type: "a2a", targetAgentId: 42 }: Delegates to another Actora Agent.
      *     The caller's AgentRunner loads + decrypts the target Agent, injects
      *     its prompt into the LLM context, and exposes its skills as callable
      *     tools.  This is the core Agent Composition primitive.
@@ -54,7 +54,7 @@ interface SkillExecutionRemote {
     endpoint?: string;
 }
 /**
- * A2A Skill Execution — delegate to another AgentX Agent.
+ * A2A Skill Execution — delegate to another Actora Agent.
  *
  * Example: A "trading" Agent has a skill:
  *   execution: { type: "a2a", targetAgentId: 42 }
@@ -232,20 +232,20 @@ interface AgentReview {
     comment: string;
     timestamp: number;
 }
-interface AgentXConfig {
+interface ActoraConfig {
     /** Chain ID (e.g. 11155111 for Sepolia) */
     chainId: number;
     /** RPC endpoint override (uses viem's default if omitted) */
     rpcUrl?: string;
     /** Contract addresses for the current chain */
-    contracts: AgentXContracts;
+    contracts: ActoraContracts;
     /** IPFS gateway URLs (ordered by priority) */
     ipfsGateways: string[];
     /** Default IPFS pinning service */
     pinningService?: 'pinata';
     pinataJwt?: string;
 }
-interface AgentXContracts {
+interface ActoraContracts {
     identityRegistry: `0x${string}`;
     subscriptionManager: `0x${string}`;
     a2aProtocolRegistry: `0x${string}`;
@@ -270,7 +270,7 @@ interface UnpackResult {
     /** CID of the public metadata */
     publicCid: string;
 }
-declare enum AgentXErrorCode {
+declare enum ActoraErrorCode {
     NOT_SUBSCRIBED = "NOT_SUBSCRIBED",
     SUBSCRIPTION_EXPIRED = "SUBSCRIPTION_EXPIRED",
     DECRYPTION_FAILED = "DECRYPTION_FAILED",
@@ -280,11 +280,11 @@ declare enum AgentXErrorCode {
     TX_FAILED = "TX_FAILED",
     WALLET_NOT_CONNECTED = "WALLET_NOT_CONNECTED"
 }
-declare class AgentXError extends Error {
-    code: AgentXErrorCode;
+declare class ActoraError extends Error {
+    code: ActoraErrorCode;
     /** If NOT_SUBSCRIBED, carry enough info for wallet/X402 auto-payment */
     paymentInfo?: SubscriptionRequired;
-    constructor(code: AgentXErrorCode, message: string);
+    constructor(code: ActoraErrorCode, message: string);
 }
 /**
  * Structured info for wallet/X402 auto-subscription.
@@ -303,4 +303,4 @@ interface SubscriptionRequired {
     }[];
 }
 
-export { type AgentPayload as A, type EncryptedPayload as E, type JSONSchema as J, type McpConnection as M, type OnChainAgentMetadata as O, type PackResult as P, type RegisteredAgent as R, type SkillDef as S, type UnpackResult as U, type AgentReview as a, type AgentReputation as b, type A2AAgentCard as c, type A2ASkillExecution as d, type A2ATask as e, type A2ATaskStatus as f, AGENT_CATEGORIES as g, type AgentCategory as h, type AgentPricing as i, type AgentPrivatePayload as j, type AgentPublicPayload as k, type AgentSearchQuery as l, type AgentSearchResult as m, type AgentSubscription as n, type AgentXConfig as o, type AgentXContracts as p, AgentXError as q, AgentXErrorCode as r, type JSONSchemaProperty as s, type McpTransport as t, type PricingType as u, type SkillExecutionMode as v, type SkillExecutionRemote as w, type SubscriptionRequired as x, type SubscriptionStatus as y };
+export { type AgentPayload as A, type EncryptedPayload as E, type JSONSchema as J, type McpConnection as M, type OnChainAgentMetadata as O, type PackResult as P, type RegisteredAgent as R, type SkillDef as S, type UnpackResult as U, type AgentReview as a, type AgentReputation as b, type A2AAgentCard as c, type A2ASkillExecution as d, type A2ATask as e, type A2ATaskStatus as f, AGENT_CATEGORIES as g, type ActoraConfig as h, type ActoraContracts as i, ActoraError as j, ActoraErrorCode as k, type AgentCategory as l, type AgentPricing as m, type AgentPrivatePayload as n, type AgentPublicPayload as o, type AgentSearchQuery as p, type AgentSearchResult as q, type AgentSubscription as r, type JSONSchemaProperty as s, type McpTransport as t, type PricingType as u, type SkillExecutionMode as v, type SkillExecutionRemote as w, type SubscriptionRequired as x, type SubscriptionStatus as y };

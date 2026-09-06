@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
-// agentx-protocol — Main Entry
+// actora-protocol — Main Entry
 // ---------------------------------------------------------------------------
-// AgentX: Decentralized AI Agent Platform SDK
+// Actora: Decentralized AI Agent Platform SDK
 //
 //   Agent = Prompt + Skills[] + MCP
 //
 // Quick start:
-//   import { AgentRunner } from 'agentx-protocol'
+//   import { AgentRunner } from 'actora-protocol'
 //
 //   const runner = new AgentRunner({ reader, wallet })
 //   const ctx = await runner.useAgent(42)
@@ -14,11 +14,11 @@
 //   // ctx.skills → inject as LLM tools
 //
 // Modules:
-//   agentx-protocol/core         — Types, AES-256-GCM + ECIES crypto
-//   agentx-protocol/registry     — Agent registration & discovery
-//   agentx-protocol/subscription  — Subscription purchase + AgentX402 gate
-//   agentx-protocol/a2a          — Agent-to-Agent protocol
-//   agentx-protocol/react        — React hooks (useAgent, etc.)
+//   actora-protocol/core         — Types, AES-256-GCM + ECIES crypto
+//   actora-protocol/registry     — Agent registration & discovery
+//   actora-protocol/subscription  — Subscription purchase + Actora402 gate
+//   actora-protocol/a2a          — Agent-to-Agent protocol
+//   actora-protocol/react        — React hooks (useAgent, etc.)
 // ---------------------------------------------------------------------------
 
 export * from './core'

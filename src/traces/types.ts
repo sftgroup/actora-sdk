@@ -1,4 +1,4 @@
-// @agentx/sdk — Traces Module
+// @actora/sdk — Traces Module
 // Structured trace events for agent observability
 
 export interface TraceEvent {

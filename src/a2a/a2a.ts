@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — A2A Protocol
+// @actora/sdk — A2A Protocol
 // ---------------------------------------------------------------------------
 // Wraps A2AProtocolRegistry: Agent Cards, Skills, and Tasks.
 // viem PublicClient / WalletClient based.

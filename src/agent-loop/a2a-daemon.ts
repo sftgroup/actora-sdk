@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — A2A Task Daemon
+// @actora/sdk — A2A Task Daemon
 // ---------------------------------------------------------------------------
 // Runs alongside AgentLoop to automatically process incoming A2A tasks.
 //
@@ -17,7 +17,7 @@
 //   const daemon = new A2ADaemon({
 //     agentId: 53,
 //     a2a: a2aProtocol,
-//     gatewayUrl: 'https://agentx.0xainet.top',
+//     gatewayUrl: 'https://actora.codes',
 //     pollIntervalMs: 15000,
 //   })
 //   daemon.start()

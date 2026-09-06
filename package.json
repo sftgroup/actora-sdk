@@ -1,7 +1,7 @@
 {
-  "name": "@agentxv2/sdk",
+  "name": "@actora/sdk",
   "version": "0.11.12",
-  "description": "AgentX — Decentralized AI Agent SDK with ReAct AgentLoop + Multi-Tenant LLM Providers",
+  "description": "Actora — Decentralized AI Agent SDK with ReAct AgentLoop + Multi-Tenant LLM Providers",
   "main": "dist/index.js",
   "types": "dist/index.d.mts",
   "module": "dist/index.mjs",
@@ -78,7 +78,7 @@
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
-    "agentx",
+    "actora",
     "ai-agent",
     "web3",
     "ecies",

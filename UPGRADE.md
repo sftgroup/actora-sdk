@@ -1,4 +1,4 @@
-# @agentxv2/sdk Upgrade Guide
+# @actora/sdk Upgrade Guide
 
 ## v0.11.11 → v0.11.12（2026-09-05，可选升级）
 
@@ -17,7 +17,7 @@
 
 ### 迁移动作
 
-- `npm install @agentxv2/sdk@0.11.12`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- `npm install @actora/sdk@0.11.12`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
 - 需要程序化发布/管理中心化 Agent 的集成方使用新方法（示例见 [README · CentralAgentClient 用法](README.md)）；仅读与订阅的现有用法零改动。
 
 ---
@@ -33,12 +33,12 @@
   - `get(agentId)` → 单个详情，含 `subscriptionPlans`（`central_plans`，与链上同一响应结构，可直接喂 `SubscriptionPayments.pay`）
   - `checkSubscription(subscriber, agentId)` → 订阅状态（`resolveAccess` 链下优先，与 App 内订阅守卫同一判定）
   - `mySubscriptions(subscriber)` → 我的链下订阅（`fiat_subscriptions` / x402 通道）
-- **配套 `@agentxv2/mcp@0.1.3`**：新增 `agentx_central_agent_list` / `agentx_central_subscription_check` 两个读工具（工具总数 38→40），`McpClient` 新增 `centralAgents()` / `centralSubscriptionCheck()`。
+- **配套 `@actora/mcp@0.1.3`**：新增 `actora_central_agent_list` / `actora_central_subscription_check` 两个读工具（工具总数 38→40），`McpClient` 新增 `centralAgents()` / `centralSubscriptionCheck()`。
 - 发布中心化 Agent 仍需 JWT / 租户 Key 直调 `POST /api/v1/agents/central`（不在 SDK 客户端内封装，见下方示例）。
 
 ### 迁移动作
 
-- `npm install @agentxv2/sdk@0.11.11`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- `npm install @actora/sdk@0.11.11`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
 - 需要读取/管理中心化 Agent 的集成方按 [README · CentralAgentClient 用法](README.md) 使用新客户端；现有链上用法零改动。
 
 ---
@@ -56,7 +56,7 @@
 
 ### 迁移动作
 
-- `npm install @agentxv2/sdk@0.11.10`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- `npm install @actora/sdk@0.11.10`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
 - 无代码改动要求；中心化 Agent 订阅调用方传 `priceWei` + `period` 即可。
 
 ---
@@ -75,7 +75,7 @@
 
 ### 迁移动作
 
-- `npm install @agentxv2/sdk@0.11.9`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- `npm install @actora/sdk@0.11.9`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
 - 现有 `adminKey` 用法无需改动；租户自管 MPC 钱包改为传 `apiKey` 即可。
 
 ---
@@ -94,7 +94,7 @@
 
 ### 迁移动作
 
-- `npm install @agentxv2/sdk@0.11.8`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- `npm install @actora/sdk@0.11.8`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
 - 无代码改动要求；需要 A2A Session Key 自动扣费（端用户授权代付）的调用方使用新增方法。
 
 ---
@@ -114,7 +114,7 @@
 
 ### 迁移动作
 
-- `npm install @agentxv2/sdk@0.11.7`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- `npm install @actora/sdk@0.11.7`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
 - 无代码改动要求；需要 agent 自主钱包（A2A 服务端代付）管理的调用方使用新增 `AgentWalletConfig`。
 
 ---
@@ -135,7 +135,7 @@
 
 ### 迁移动作
 
-- `npm install @agentxv2/sdk@0.11.6`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- `npm install @actora/sdk@0.11.6`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
 - 无代码改动要求；需要余额预检的调用方使用新增 `BillingClient`（用法见 README「BillingClient」节）。
 
 ---
@@ -154,7 +154,7 @@
 
 ### 迁移动作
 
-- `npm install @agentxv2/sdk@0.11.5`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- `npm install @actora/sdk@0.11.5`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
 - 无代码改动要求；需要购买平台套餐的调用方使用新增的 `TenantPlanPayments`（用法见 README「TenantPlanPayments」节）。
 
 ---
@@ -167,11 +167,11 @@
 
 - **0.11.1 的 ESM 构建存在崩溃**：其 `dist/index.mjs` 从 `@0xinfrax/payments` 导入 `A2AClient`，而该导出在引擎 0.1.2 起已移除 → 使用 ESM 构建的调用方启动即报 `Named export 'A2AClient' not found`。
 - **0.11.2 修复**：`A2AClient` 改为 SDK 本地实现（签名一致），ESM/CJS 均不再依赖该导出。
-- **0.11.3（本次发布）**：引擎升至 `0.1.3`（模块内置恢复 a2a/period rails，AgentX Gateway 已迁移为模块委托），`PAYMENT_VERSION` 对齐 `0.1.3`；`A2AClient` 继续本地实现。
+- **0.11.3（本次发布）**：引擎升至 `0.1.3`（模块内置恢复 a2a/period rails，Actora Gateway 已迁移为模块委托），`PAYMENT_VERSION` 对齐 `0.1.3`；`A2AClient` 继续本地实现。
 
 ### 迁移动作
 
-- 锁精确版本者：`npm install @agentxv2/sdk@0.11.3`。
+- 锁精确版本者：`npm install @actora/sdk@0.11.3`。
 - 使用 `^0.10.1` / `^0.11.x` 范围者：`npm install` 即可自动吸收。
 - 若曾以 ESM 方式使用 0.11.1，请务必升到 ≥0.11.2（0.11.3 含修复）。
 - `PAYMENT_VERSION` 常量由 `0.1.1` → `0.1.3`，仅当调用方断言该版本号时需要同步。
@@ -190,7 +190,7 @@
 
 ### 迁移动作
 
-- `npm install @agentxv2/sdk@0.11.4`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
+- `npm install @actora/sdk@0.11.4`（或 `^0.11.x` 范围者 `npm install` 自动吸收）。
 - 无代码改动要求；如使用 TS 且需要读取 done 事件的 `llmSource`，类型已就绪。
 
 ---
@@ -199,9 +199,9 @@
 
 > 无需升级 SDK（npm 未发布新版本）。本说明只澄清**服务端行为**与**调用方最佳实践**，SDK API 完全不变。
 
-### 一个 `agentx_` key 即可，不需要两把 key
+### 一个 `actora_` key 即可，不需要两把 key
 
-- **现状（2026-08-08 起）**：Gateway 对「会话 / 并行任务」的能力判定已统一为 **P9 能力位**（`effective = tenant.allow_parallel_tasks ?? plan.features.parallel_tasks ?? true`），对 B 端集成 key（`X-Api-Key: agentx_...`）与注册用户 JWT（`Authorization: Bearer`）**一视同仁**。
+- **现状（2026-08-08 起）**：Gateway 对「会话 / 并行任务」的能力判定已统一为 **P9 能力位**（`effective = tenant.allow_parallel_tasks ?? plan.features.parallel_tasks ?? true`），对 B 端集成 key（`X-Api-Key: actora_...`）与注册用户 JWT（`Authorization: Bearer`）**一视同仁**。
 - B 端集成 key 不再只限于对话（chat）——创建会话（`createSession`）、提交并行任务（`createTask`）、查询 / 列表 / 取消任务与注册用户**完全等价**（受同一套餐 / 租户能力位约束）。
 - 不再存在 `403 PARTNER_TASKS_DISABLED`；能力位为 false 时统一返回 `403 { code: "PARALLEL_TASKS_DISABLED" }`，此时回退单轮 `chat()`。
 - 仅两种场景仍需「用户身份」（设计如此，非限制遗漏）：**MCP 通道**的对话 / 任务工具（仅接受注册用户 `access_token`）与 **A2A 上链 / 发布 / 订阅**（用户自己钱包签名、自己付 gas）。
@@ -230,16 +230,16 @@ B 端（partner 租户）请求带 `X-End-User-Id: 0x<钱包地址>`（或 body 
 
 两者在「会话 / 并行任务」能力判定上一致（统一 P9 能力位），其余维度差异如下：
 
-| 维度 | B 端集成 key（`X-Api-Key: agentx_...`，kind=partner） | 用户 JWT（`Authorization: Bearer`，kind=user） |
+| 维度 | B 端集成 key（`X-Api-Key: actora_...`，kind=partner） | 用户 JWT（`Authorization: Bearer`，kind=user） |
 |---|---|---|
 | 会话 / 并行任务（sessions/tasks） | ✅ 可用，受 P9 能力位约束（`403 PARALLEL_TASKS_DISABLED`） | ✅ 同左 |
 | 授权主体（谁须「拥有 / 订阅」agent） | partner 租户自身；或 `X-End-User-Id: 0x<钱包>` 转发到端用户钱包 | 用户自己的钱包 |
 | 任务 LLM Key | 不强制（2026-08-11 起）：可带 BYOK（`X-Llm-Api-Key` header / `llmApiKey` / `tenantKeyId`）；不带则走平台兜底 key，平台按 token 计费 | 不强制；未传时走平台兜底 key |
-| 平台 MCP 对话 / 任务工具（`agentx_gateway_*`） | ❌ 不可用（R14 拒绝 `agentx_` key） | ✅ 可用（`access_token` 必填） |
+| 平台 MCP 对话 / 任务工具（`actora_gateway_*`） | ❌ 不可用（R14 拒绝 `actora_` key） | ✅ 可用（`access_token` 必填） |
 | A2A 上链 / 发布 / 订阅 | ❌ 需用户钱包签名（平台不持私钥） | ✅ 用户钱包签名，用户自付 gas |
 | 订阅状态查询（`GET /api/v1/chain/check-subscription`） | ✅ 可查任意钱包地址 | ✅ 同左 |
 
-> 一句话总结：**`agentx_` key 覆盖 REST 全部对话 + 并行任务（BYOK 可选，不带则平台按 token 计费），JWT 额外覆盖 MCP 对话/任务与链上操作**；调用方按自身场景选择，无需两把 key 并存。
+> 一句话总结：**`actora_` key 覆盖 REST 全部对话 + 并行任务（BYOK 可选，不带则平台按 token 计费），JWT 额外覆盖 MCP 对话/任务与链上操作**；调用方按自身场景选择，无需两把 key 并存。
 
 ### SDK 0.10.1 — per-request `endUserId`（已发布 npm，2026-08-08）
 
@@ -266,7 +266,7 @@ const t = await client.createTask({ sessionId: session.id, agentId: 42, message:
 
 纯元数据 patch，无行为变化：
 
-- `exports` 新增 `"./package.json": "./package.json"`——此前 `require('@agentxv2/sdk/package.json')` 报 `ERR_PACKAGE_PATH_NOT_EXPORTED`（exports 模式下未列出的子路径全部禁止），现在可直接读取版本：`require('@agentxv2/sdk/package.json').version`
+- `exports` 新增 `"./package.json": "./package.json"`——此前 `require('@actora/sdk/package.json')` 报 `ERR_PACKAGE_PATH_NOT_EXPORTED`（exports 模式下未列出的子路径全部禁止），现在可直接读取版本：`require('@actora/sdk/package.json').version`
 - 对调用方无影响（正常 API 子路径不变）；仅为工具链 / 运维提供版本读取能力
 
 ---
@@ -279,7 +279,7 @@ const t = await client.createTask({ sessionId: session.id, agentId: 42, message:
 
 | Feature | Description |
 |---------|-------------|
-| **Complete release baseline** | Same code as 0.9.6, but published as a minor release to signal the stable, feature-complete SDK baseline. Integrators should pin `@agentxv2/sdk@0.10.0`. |
+| **Complete release baseline** | Same code as 0.9.6, but published as a minor release to signal the stable, feature-complete SDK baseline. Integrators should pin `@actora/sdk@0.10.0`. |
 | **Typed `onchain_approval_required` event** | `ConversationSSEEvent.type` now includes `'onchain_approval_required'`, carrying `approval?: OnChainApprovalRequest { targetAgentId, taskType, inputData }`. Raised when the agent requests an **auditable on-chain A2A delegation** — the **user's own wallet** must submit `createTask` (the user pays the gas and becomes the on-chain client). The platform never pays gas and holds no signing key (`A2A_WORKER_PRIVATE_KEY` removed from the Gateway). |
 | **User-wallet-signed on-chain rail** | v0.10.0 gas model: on-chain rail costs are never paid by the platform. When the user explicitly requests audit / settlement, the Conversation Service emits `onchain_approval_required`, the frontend opens a wallet modal, and the user's wallet signs `createTask`. Sub-tasks spawned by the a2a-worker run **off-chain inline** (local negative pseudo taskIds). |
 | **No breaking changes** | Everything is additive. 0.9.x consumers can upgrade in place. |
@@ -287,7 +287,7 @@ const t = await client.createTask({ sessionId: session.id, agentId: 42, message:
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.10.0   # or: npm install @agentxv2/sdk (latest = 0.10.0)
+npm install @actora/sdk@0.10.0   # or: npm install @actora/sdk (latest = 0.10.0)
 ```
 
 > The Gateway + Conversation Service must run the matching server release for the user-wallet-signed on-chain orchestration rail (2026-08-08).
@@ -306,12 +306,12 @@ npm install @agentxv2/sdk@0.10.0   # or: npm install @agentxv2/sdk (latest = 0.1
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.9.5   # or: npm install @agentxv2/sdk (latest = 0.9.5)
+npm install @actora/sdk@0.9.5   # or: npm install @actora/sdk (latest = 0.9.5)
 ```
 
 ### Related: server-side orchestration layering
 
-No SDK API change, but the Conversation Service now defaults multi-agent orchestration to the **off-chain rail** (`agentx_delegate`, synchronous, zero cost) and only uses the **on-chain rail** (A2A task with `taskId` audit trail) when the user explicitly requests audit / settlement. See the SDK README → *Multi-Agent Orchestration Layering*.
+No SDK API change, but the Conversation Service now defaults multi-agent orchestration to the **off-chain rail** (`actora_delegate`, synchronous, zero cost) and only uses the **on-chain rail** (A2A task with `taskId` audit trail) when the user explicitly requests audit / settlement. See the SDK README → *Multi-Agent Orchestration Layering*.
 
 ---
 
@@ -321,22 +321,22 @@ No SDK API change, but the Conversation Service now defaults multi-agent orchest
 
 | Feature | Description |
 |---------|-------------|
-| **Agent application categories** | `AgentPayload` gains an optional `category` field typed as `AgentCategory` (one of `AGENT_CATEGORIES` — 13 enums: `operations` / `customer-service` / `sales` / `personal-assistant` / `coding` / `server-monitoring` / `airdrop` / `quant-trading` / `data-analysis` / `content` / `security` / `finance` / `other`). `publishAgent` writes it into the public metadata + on-chain attrs; `getAllAgents()` / `getAgentMetadata()` resolve `category` (tokenURI JSON first, on-chain attrs fallback). The AgentX Studio UI now requires it; Marketplace filters by it. |
-| **Payments engine 0.2.2** | `@agentxv2/payments` `^0.2.0` now resolves to **0.2.2** (ownership metadata: `author` / `repository` / `homepage` on the npm package — no code / API change). |
+| **Agent application categories** | `AgentPayload` gains an optional `category` field typed as `AgentCategory` (one of `AGENT_CATEGORIES` — 13 enums: `operations` / `customer-service` / `sales` / `personal-assistant` / `coding` / `server-monitoring` / `airdrop` / `quant-trading` / `data-analysis` / `content` / `security` / `finance` / `other`). `publishAgent` writes it into the public metadata + on-chain attrs; `getAllAgents()` / `getAgentMetadata()` resolve `category` (tokenURI JSON first, on-chain attrs fallback). The Actora Studio UI now requires it; Marketplace filters by it. |
+| **Payments engine 0.2.2** | `@0xinfrax/payments` `^0.2.0` now resolves to **0.2.2** (ownership metadata: `author` / `repository` / `homepage` on the npm package — no code / API change). |
 | **No breaking changes** | Everything is additive. |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.9.4   # or: npm install @agentxv2/sdk (latest = 0.9.4)
+npm install @actora/sdk@0.9.4   # or: npm install @actora/sdk (latest = 0.9.4)
 ```
 
-The Gateway + Conversation Service must run the matching server release for `category` filtering and the off-chain orchestration tools (`agentx_list_agents` / `agentx_delegate`).
+The Gateway + Conversation Service must run the matching server release for `category` filtering and the off-chain orchestration tools (`actora_list_agents` / `actora_delegate`).
 
 ### Publish with a category
 
 ```ts
-import { publishAgent, AGENT_CATEGORIES } from '@agentxv2/sdk'
+import { publishAgent, AGENT_CATEGORIES } from '@actora/sdk'
 
 const result = await publishAgent({
   agent: {
@@ -352,7 +352,7 @@ const result = await publishAgent({
 
 ### Related: server-side orchestration layering
 
-No SDK API change, but the Conversation Service now defaults multi-agent orchestration to the **off-chain rail** (`agentx_delegate`, synchronous, zero cost) and only uses the **on-chain rail** (A2A task with `taskId` audit trail) when the user explicitly requests audit / settlement. See the SDK README → *Multi-Agent Orchestration Layering*.
+No SDK API change, but the Conversation Service now defaults multi-agent orchestration to the **off-chain rail** (`actora_delegate`, synchronous, zero cost) and only uses the **on-chain rail** (A2A task with `taskId` audit trail) when the user explicitly requests audit / settlement. See the SDK README → *Multi-Agent Orchestration Layering*.
 
 ## v0.9.2 → v0.9.3
 
@@ -360,14 +360,14 @@ No SDK API change, but the Conversation Service now defaults multi-agent orchest
 
 | Feature | Description |
 |---------|-------------|
-| **Generic engine 0.2.0** | `@agentxv2/payments` upgraded to `^0.2.0` — adds **MPP payment channels**, **stablecoin rails (EIP-3009 / Permit2)**, **period authorizations** (one-time N-period pre-authorization, no re-signing) and **a2a-pay** (two-phase paymentId). |
+| **Generic engine 0.2.0** | `@0xinfrax/payments` upgraded to `^0.2.0` — adds **MPP payment channels**, **stablecoin rails (EIP-3009 / Permit2)**, **period authorizations** (one-time N-period pre-authorization, no re-signing) and **a2a-pay** (two-phase paymentId). |
 | **New protocol clients re-exported** | `MPPClient` (open/voucher/topUp/settle/close), `A2AClient` (create/settle), `PeriodClient` (charge/authorization), plus `X402Client` / `PaymentsClient`, are now exported from the SDK root for integrators who drive those rails directly. |
 | **No breaking changes** | `SubscriptionPayments` API is unchanged (chain / fiat / x402 / hasAccess / fetchX402Info). The new exports are additive. |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.9.3   # or: npm install @agentxv2/sdk (latest = 0.9.3)
+npm install @actora/sdk@0.9.3   # or: npm install @actora/sdk (latest = 0.9.3)
 ```
 
 The Gateway you point at must run the matching payments release (MPP/period/a2a endpoints under `/api/v1/payments/mpp/*`, `/api/v1/payments/a2a/*`, `/api/v1/payments/period/*`).
@@ -375,7 +375,7 @@ The Gateway you point at must run the matching payments release (MPP/period/a2a 
 ### Drive the new rails
 
 ```ts
-import { SubscriptionPayments, MPPClient, A2AClient, PeriodClient } from '@agentxv2/sdk'
+import { SubscriptionPayments, MPPClient, A2AClient, PeriodClient } from '@actora/sdk'
 
 const base = { baseUrl: 'https://gw.example.com' }
 const mpp = new MPPClient(base)          // payment channels
@@ -385,7 +385,7 @@ const period = new PeriodClient(base)    // period authorizations
 
 ### Engine 0.2.1 — browser / bundler compatibility
 
-`@agentxv2/payments` `^0.2.0` resolves to **0.2.1** (a patch release). It removes every Node built-in module usage (`node:crypto` / `Buffer`) in favour of the **Web Crypto API** (`crypto.randomUUID` / `getRandomValues` / `crypto.subtle` HMAC / pure-base64 helpers) — the engine is now safe to bundle with webpack / Next.js. Previously, the SDK root re-export pulled `node:crypto` into the browser module graph and failed with `UnhandledSchemeError: Reading from "node:crypto" is not handled by plugins`.
+`@0xinfrax/payments` `^0.2.0` resolves to **0.2.1** (a patch release). It removes every Node built-in module usage (`node:crypto` / `Buffer`) in favour of the **Web Crypto API** (`crypto.randomUUID` / `getRandomValues` / `crypto.subtle` HMAC / pure-base64 helpers) — the engine is now safe to bundle with webpack / Next.js. Previously, the SDK root re-export pulled `node:crypto` into the browser module graph and failed with `UnhandledSchemeError: Reading from "node:crypto" is not handled by plugins`.
 
 - **No SDK API change** — `SubscriptionPayments` and the re-exported protocol clients are unaffected.
 - **One 0.2.x internal change**: `StripeAdapter.verifyWebhookSignature()` is now `async` (Web Crypto `subtle` is asynchronous). Direct `StripeAdapter` consumers need `await`; the Gateway's `handleWebhook` already does.
@@ -397,14 +397,14 @@ const period = new PeriodClient(base)    // period authorizations
 
 | Feature | Description |
 |---------|-------------|
-| **Unified payments endpoint** | `SubscriptionPayments` now talks to the Gateway's unified endpoint `/api/v1/payments` for the **fiat** rail (checkout with auto-pricing), the **x402** rail (native-token period subscription) and the **access** check (`hasAccess()`). Under the hood it uses `PaymentsClient` from the new generic engine [`@agentxv2/payments`](https://www.npmjs.com/package/@agentxv2/payments) (`^0.1.0`, installed automatically as a dependency). |
+| **Unified payments endpoint** | `SubscriptionPayments` now talks to the Gateway's unified endpoint `/api/v1/payments` for the **fiat** rail (checkout with auto-pricing), the **x402** rail (native-token period subscription) and the **access** check (`hasAccess()`). Under the hood it uses `PaymentsClient` from the new generic engine [`@0xinfrax/payments`](https://www.npmjs.com/package/@0xinfrax/payments) (`^0.1.0`, installed automatically as a dependency). |
 | **One transport for every rail** | fiat / x402 / access all hit `/api/v1/payments/*`; `chain` still subscribes directly on the `SubscriptionManager` contract (no Gateway needed). `fetchX402Info()` now reads the unified `/api/v1/payments/info` rails-discovery payload. |
-| **Decoupled payment engine** | `@agentxv2/payments` is a zero-AgentX-dependency module (chain / Stripe / x402 adapters, PaymentError codes, intent lifecycle, event queue) — the same engine the Gateway itself embeds. |
+| **Decoupled payment engine** | `@0xinfrax/payments` is a zero-Actora-dependency module (chain / Stripe / x402 adapters, PaymentError codes, intent lifecycle, event queue) — the same engine the Gateway itself embeds. |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.9.2   # or simply: npm install @agentxv2/sdk (latest = 0.9.2)
+npm install @actora/sdk@0.9.2   # or simply: npm install @actora/sdk (latest = 0.9.2)
 ```
 
 The Gateway you point at must expose the unified endpoint (`/api/v1/payments`) — upgrade your Gateway to the matching release. The old `/api/v1/fiat/*`, `/api/v1/x402/*` and `/api/v1/chain/check-subscription` endpoints remain for backward compatibility.
@@ -412,7 +412,7 @@ The Gateway you point at must expose the unified endpoint (`/api/v1/payments`) �
 ### Use Multi-Rail Payments (unchanged API)
 
 ```ts
-import { SubscriptionManager, SubscriptionPayments } from '@agentxv2/sdk'
+import { SubscriptionManager, SubscriptionPayments } from '@actora/sdk'
 
 const sm = new SubscriptionManager({ contractAddress, publicClient, walletClient })
 const payments = new SubscriptionPayments({
@@ -454,13 +454,13 @@ None — `pay()`, `hasAccess()`, `fetchX402Info()` and all result types are unch
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.9.0
+npm install @actora/sdk@0.9.0
 ```
 
 ### Use the extended skills
 
 ```ts
-import { executeBrowserAction, extractAccessibleDOM, sleep } from '@agentxv2/sdk/skills'
+import { executeBrowserAction, extractAccessibleDOM, sleep } from '@actora/sdk/skills'
 
 executeBrowserAction({ type: 'hover', description: 'settings menu' })
 executeBrowserAction({ type: 'select', selector: '#chain', value: 'oxachain' })
@@ -477,20 +477,20 @@ No breaking changes — all additions are new action types / fields; existing ca
 
 | Feature | Description |
 |---------|-------------|
-| **Multi-rail subscription payments** | New `SubscriptionPayments` class — a single entry point for subscribing across all AgentX payment rails: `chain` (on-chain SubscriptionManager, native/ERC20 escrow), `fiat` (Stripe card checkout via the Gateway — no wallet needed), `x402` (native-token period payment verified by the Gateway). `pay({ method, planId, agentId, subscriber, ... })` dispatches to the right rail; `hasAccess()` runs the unified chain-OR-fiat/x402 access check; `fetchX402Info()` discovers the x402 price/pay-to wallet. |
+| **Multi-rail subscription payments** | New `SubscriptionPayments` class — a single entry point for subscribing across all Actora payment rails: `chain` (on-chain SubscriptionManager, native/ERC20 escrow), `fiat` (Stripe card checkout via the Gateway — no wallet needed), `x402` (native-token period payment verified by the Gateway). `pay({ method, planId, agentId, subscriber, ... })` dispatches to the right rail; `hasAccess()` runs the unified chain-OR-fiat/x402 access check; `fetchX402Info()` discovers the x402 price/pay-to wallet. |
 | **Fiat checkout without hardcoded amounts** | `_payFiat()` no longer requires `amountCents` — the Gateway derives the USD amount from the on-chain plan price (`/api/v1/fiat/checkout` with `planId`, priced via `FIAT_TOKEN_USD_PRICE`). Explicit `amountCents` still wins when supplied (backward compatible). |
 | **x402 auto-funding** | When no `txHash` is supplied, `pay({ method: 'x402', ... })` automatically sends the native-token payment from a configured `walletClient` (max of plan price / protocol price), then registers the subscription via the Gateway. |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.8.11   # or simply: npm install @agentxv2/sdk (latest = 0.8.11)
+npm install @actora/sdk@0.8.11   # or simply: npm install @actora/sdk (latest = 0.8.11)
 ```
 
 ### Use Multi-Rail Payments
 
 ```ts
-import { SubscriptionManager, SubscriptionPayments } from '@agentxv2/sdk'
+import { SubscriptionManager, SubscriptionPayments } from '@actora/sdk'
 
 const sm = new SubscriptionManager({ contractAddress, publicClient, walletClient })
 const payments = new SubscriptionPayments({
@@ -525,20 +525,20 @@ None — all additions are new exports; `amountCents` became optional (it was pr
 | Feature | Description |
 |---------|-------------|
 | **Master-key crypto helpers** | `encryptWithKey()` / `decryptWithKey()` — AES-256-GCM with wire format `base64(IV[12] ‖ authTag[16] ‖ ciphertext)`, byte-for-byte compatible with the Gateway's legacy at-rest key encryption (`gateway/src/lib/crypto.ts`). Use them to read/write tenant key material stored encrypted with the Gateway master key. New code should prefer `aesEncrypt`/`aesDecrypt` unless data in this layout must be read. |
-| **`parseTokenURIJSON` exported** | `import { parseTokenURIJSON } from '@agentxv2/sdk'` — the fault-tolerant tokenURI parser is now public (previously internal to the Gateway indexer / SDK `AgentRegistry`). |
+| **`parseTokenURIJSON` exported** | `import { parseTokenURIJSON } from '@actora/sdk'` — the fault-tolerant tokenURI parser is now public (previously internal to the Gateway indexer / SDK `AgentRegistry`). |
 | **`createTask()` raw-string input** | `A2AProtocol.createTask(agentId, taskType, input)` now accepts `input: string \| Record<string, unknown>`. Pass pre-serialized JSON or plain text directly; objects are still JSON-stringified. Fully backward compatible. |
 | **Subscription status mapping fix** | `SubscriptionManager.getSubscription()` now maps the on-chain enum (`0=Inactive, 1=Active, 2=Expired, 3=Cancelled`) to the typed `AgentSubscription['status']` correctly. The previous positional array `['active','expired','cancelled','pending']` mislabeled `Inactive` as `active`, `Active` as `expired`, `Expired` as `cancelled`, and `Cancelled` as `pending` — a wrong status on essentially every subscription. Now `pending` / `active` / `expired` / `cancelled` match the contract. |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.8.10   # or simply: npm install @agentxv2/sdk (latest = 0.8.10)
+npm install @actora/sdk@0.8.10   # or simply: npm install @actora/sdk (latest = 0.8.10)
 ```
 
 ### Use Master-Key Crypto
 
 ```ts
-import { encryptWithKey, decryptWithKey } from '@agentxv2/sdk'
+import { encryptWithKey, decryptWithKey } from '@actora/sdk'
 
 const ciphertext = encryptWithKey(plaintext, masterKeyHex)   // base64(IV ‖ tag ‖ ciphertext)
 const plain = decryptWithKey(ciphertext, masterKeyHex)
@@ -557,7 +557,7 @@ Docs sync only — README Installation now points at **v0.8.8** ("just install t
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.8.9   # or simply: npm install @agentxv2/sdk (latest = 0.8.9)
+npm install @actora/sdk@0.8.9   # or simply: npm install @actora/sdk (latest = 0.8.9)
 ```
 
 No breaking changes.
@@ -571,7 +571,7 @@ Docs sync only — README updated to v0.8.7 (sessions & parallel tasks section +
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.8.8
+npm install @actora/sdk@0.8.8
 ```
 
 No breaking changes.
@@ -588,13 +588,13 @@ No breaking changes.
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.8.7
+npm install @actora/sdk@0.8.7
 ```
 
 ### Use Parallel Tasks
 
 ```ts
-import { ConversationClient, ConversationTaskError } from '@agentxv2/sdk/conversation'
+import { ConversationClient, ConversationTaskError } from '@actora/sdk/conversation'
 
 const client = new ConversationClient({ gatewayUrl: 'https://...', accessToken })
 
@@ -635,24 +635,24 @@ None — all additions are new methods.
 | **0.8.6** | **Stored BYOK (`tenantKeyId`)** | `ConversationChatParams` gains `tenantKeyId` — use a tenant-owned API key already saved & AES-encrypted on the Gateway (managed via Settings → Own LLM Keys, backed by `/tenant/keys`). The Gateway resolves the key server-side and injects it as `X-Llm-Api-Key` (priority over request-level headers) — the plaintext key never leaves the server. Complements the stateless `llmApiKey` override (request-level, highest priority). |
 | **0.8.5** | Docs sync | Re-published with updated README (same code as 0.8.4). |
 | **0.8.4** | Gateway JWT auth + abort + tool_result error | `ConversationClient` supports Gateway JWT auth (`accessToken` → `Authorization: Bearer`, alternative to `apiKey`) and external abort (`stream(params, { signal })`); `tool_result` event gains optional `error` field. |
-| **0.8.3** | Install fix | `wagmi` promoted from optional to required peer dependency — directly usable via `npm install @agentxv2/sdk@0.8.3` (no manual `wagmi` install). |
+| **0.8.3** | Install fix | `wagmi` promoted from optional to required peer dependency — directly usable via `npm install @actora/sdk@0.8.3` (no manual `wagmi` install). |
 | **0.8.2** | Write-op signing fix | `createPlan()` / `subscribe()` / `releaseFunds()` / `cancel()` resolve the full viem `walletClient.account` instead of a bare address string — local/private-key signers now work (`eth_sendRawTransaction`). |
 | **0.8.1** | Fault-tolerant tokenURI | `parseTokenURIJSON()` aligned with Gateway indexer: base64 trailing garbage cleanup, unterminated JSON repair, regex fallback, explicit `ipfs://` handling. |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.8.6
+npm install @actora/sdk@0.8.6
 ```
 
 ### Use Stored BYOK (v0.8.6)
 
 ```ts
-import { ConversationClient } from '@agentxv2/sdk/conversation'
+import { ConversationClient } from '@actora/sdk/conversation'
 
 const client = new ConversationClient({
   gatewayUrl: 'https://gateway.example.com',
-  apiKey: 'agentx_...',
+  apiKey: 'actora_...',
 })
 
 // Use a tenant-owned key already saved in Settings → Own LLM Keys
@@ -679,8 +679,8 @@ for await (const event of client.stream(
 1. tenantKeyId (stored tenant-owned key, server-side) — priority over request headers
 2. X-Llm-Api-Key + X-Llm-Endpoint + X-Llm-Model (request-level, stateless BYOK — highest priority)
 3. tenant_llm_configs (tenant-persisted key, encrypted storage)
-4. OPENAI_API_KEY env (AgentX official key)
-5. AgentX Gateway fallback
+4. OPENAI_API_KEY env (Actora official key)
+5. Actora Gateway fallback
 ```
 
 ### Breaking Changes
@@ -698,13 +698,13 @@ None. 0.8.1 → 0.8.6 are purely additive — existing calls behave as before.
 | **IdentityRegistry batch query** | `getAllAgents(options)` — batch pull with `fromId`/`toId`/`activeOnly`/`capabilities` filters; `totalAgents()` reads the contract directly (no more binary search); `getAgentMetadata(agentId)` returns structured `{ name, description, encryptedPayloadCid, eciesEncryptedKey, publicPayloadCid, capabilities, skills, isActive }`. |
 | **SubscriptionManager writes** | `createPlan()` now returns `planId` parsed from the `PlanCreated` event; `subscribe()` returns `subscriptionId/expiresAt/subscriber` parsed from the `Subscribed` event (previously always `0`). |
 | **Typed period enum** | `createPlan({ period })` now only accepts `'day' | 'week' | 'month' | 'year'` (runtime-validated). These are the only values the contract maps to real durations — passing `'monthly'` / `'quarterly'` / `'yearly'` silently created a 30-day plan on-chain. |
-| **subscribeToEvents()** | `import { subscribeToEvents } from '@agentxv2/sdk'` — viem-based event stream (`Transfer` / `AgentRegistered` / `PlanCreated` / `Subscribed`), returns an `unwatch()` function. Drop sync latency from 2-min polling to < 15s. |
+| **subscribeToEvents()** | `import { subscribeToEvents } from '@actora/sdk'` — viem-based event stream (`Transfer` / `AgentRegistered` / `PlanCreated` / `Subscribed`), returns an `unwatch()` function. Drop sync latency from 2-min polling to < 15s. |
 | **createPlanAndSubscribe()** | One-shot `createPlan` + `subscribe` helper. |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.8.0
+npm install @actora/sdk@0.8.0
 ```
 
 ### Breaking Changes
@@ -716,7 +716,7 @@ npm install @agentxv2/sdk@0.8.0
 ### Example
 
 ```ts
-import { AgentRegistry, SubscriptionManager } from '@agentxv2/sdk'
+import { AgentRegistry, SubscriptionManager } from '@actora/sdk'
 
 const registry = new AgentRegistry({ contractAddress, publicClient, walletClient })
 const total = await registry.totalAgents()
@@ -743,7 +743,7 @@ console.log(sub.subscriptionId, sub.expiresAt)
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.7.5
+npm install @actora/sdk@0.7.5
 ```
 
 No breaking changes — explicit `ctx.model` still takes precedence; only the fallback behavior changed.
@@ -761,7 +761,7 @@ No breaking changes — explicit `ctx.model` still takes precedence; only the fa
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.7.4
+npm install @actora/sdk@0.7.4
 ```
 
 ### Example
@@ -769,7 +769,7 @@ npm install @agentxv2/sdk@0.7.4
 ```ts
 const client = new ConversationClient({
   gatewayUrl: 'https://gateway.example.com',
-  apiKey: 'agentx_...',
+  apiKey: 'actora_...',
   llmApiKey: 'sk-deepseek-...',
   llmEndpoint: 'https://api.deepseek.com/v1',
   llmModel: 'deepseek-v4-pro',          // NEW
@@ -788,12 +788,12 @@ No breaking changes — existing calls behave as before.
 
 | Feature | Description |
 |---------|-------------|
-| **Stateless BYOK (key + endpoint)** | `ConversationClient` adds `llmEndpoint` — forwarded as `X-Llm-Endpoint` alongside `X-Llm-Api-Key`. Callers now supply their own LLM key **and** endpoint (e.g. DeepSeek `https://api.deepseek.com/v1`) per request, with zero AgentX-side configuration or key storage. |
+| **Stateless BYOK (key + endpoint)** | `ConversationClient` adds `llmEndpoint` — forwarded as `X-Llm-Endpoint` alongside `X-Llm-Api-Key`. Callers now supply their own LLM key **and** endpoint (e.g. DeepSeek `https://api.deepseek.com/v1`) per request, with zero Actora-side configuration or key storage. |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.7.3
+npm install @actora/sdk@0.7.3
 ```
 
 ### Use Your Own LLM Key + Endpoint (DeepSeek example)
@@ -801,7 +801,7 @@ npm install @agentxv2/sdk@0.7.3
 ```ts
 const client = new ConversationClient({
   gatewayUrl: 'https://gateway.example.com',
-  apiKey: 'agentx_...',
+  apiKey: 'actora_...',
   llmApiKey: 'sk-deepseek-...',
   llmEndpoint: 'https://api.deepseek.com/v1',   // NEW
 })
@@ -824,7 +824,7 @@ No breaking changes — existing calls behave as before.
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.7.2
+npm install @actora/sdk@0.7.2
 ```
 
 ### Handle Clarification
@@ -849,23 +849,23 @@ No breaking changes — existing calls behave as before.
 
 | Feature | Description |
 |---------|-------------|
-| **ConversationClient** | `@agentxv2/sdk/conversation` — remote Conversation Service client. SSE streaming via Gateway `POST /api/v1/agent/runs`; auto-sends `X-Api-Key`, `X-End-User-Id` (end-user memory isolation), `X-Llm-Api-Key` (BYOK). |
+| **ConversationClient** | `@actora/sdk/conversation` — remote Conversation Service client. SSE streaming via Gateway `POST /api/v1/agent/runs`; auto-sends `X-Api-Key`, `X-End-User-Id` (end-user memory isolation), `X-Llm-Api-Key` (BYOK). |
 | **Direct MCP Skill Execution** | Gateway Agent-as-MCP `tools/call` executes the agent's skill directly (`execution.type`: `mcp` / `http`) instead of a second LLM pass. |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.7.0
+npm install @actora/sdk@0.7.0
 ```
 
 ### 1. Use ConversationClient
 
 ```ts
-import { ConversationClient } from '@agentxv2/sdk/conversation'
+import { ConversationClient } from '@actora/sdk/conversation'
 
 const client = new ConversationClient({
   gatewayUrl: 'https://gateway.example.com',
-  apiKey: 'agentx_...',
+  apiKey: 'actora_...',
   endUserId: 'user-123',   // optional: per-end-user memory isolation
 })
 const result = await client.chat({ agentId: 42, message: 'Hello' })
@@ -886,16 +886,16 @@ None. v0.7.0 is purely additive (new `conversation` module + Gateway-side behavi
 | **AgentLoop Memory** | Cross-session memory with `memory: { enabled: true }` config. Stores/recalls facts via MemoryProvider interface. |
 | **Context Engineering** | Token budget management via `contextBudget` config. Auto-summarizes old conversation turns when exceeded. |
 | **Observability** | TraceEmitter interface — structured trace events for tool_call, tool_result, session_complete. Noop fallback when disabled. |
-| **Browser Control Skill** | `@agentxv2/sdk/skills` — `executeBrowserAction()`, `extractAccessibleDOM()` for browser-based agent actions. |
-| **New Sub-path Exports** | `@agentxv2/sdk/memory`, `@agentxv2/sdk/traces`, `@agentxv2/sdk/skills` |
-| **Conversation Service** | New independent microservice (`@agentxv2/conversation`) for AgentLoop execution with pgvector memory |
+| **Browser Control Skill** | `@actora/sdk/skills` — `executeBrowserAction()`, `extractAccessibleDOM()` for browser-based agent actions. |
+| **New Sub-path Exports** | `@actora/sdk/memory`, `@actora/sdk/traces`, `@actora/sdk/skills` |
+| **Conversation Service** | New independent microservice (`@actora/conversation`) for AgentLoop execution with pgvector memory |
 | **Skills Marketplace** | Gateway endpoints for skill CRUD (public GET, JWT POST, admin review) |
-| **Agent-as-MCP** | JSON-RPC 2.0 endpoint `POST /mcp/agent/:id` exports any AgentX agent as an MCP server |
+| **Agent-as-MCP** | JSON-RPC 2.0 endpoint `POST /mcp/agent/:id` exports any Actora agent as an MCP server |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.6.9
+npm install @actora/sdk@0.6.9
 ```
 
 ### 1. Enable Memory in AgentLoop
@@ -915,7 +915,7 @@ const loop = new AgentLoop({
 ### 2. Enable Trace Observability
 
 ```ts
-import { HttpTraceEmitter } from '@agentxv2/sdk/traces'
+import { HttpTraceEmitter } from '@actora/sdk/traces'
 
 const loop = new AgentLoop({
   ctx,
@@ -965,7 +965,7 @@ None. All v0.6.8 APIs remain fully compatible.
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.6.8
+npm install @actora/sdk@0.6.8
 ```
 
 ### Breaking Changes
@@ -991,13 +991,13 @@ The platform-tools module was previously split into `platform-tools/definitions.
 |---------|-------------|
 | **IPFSUploader** | Upload to IPFS via Pinata REST API or custom endpoint. Supports JSON, files, and encrypted payload upload. |
 | **publishAgent()** | One-shot pipeline: encrypt agent private payload → upload to IPFS → return CIDs ready for on-chain minting. |
-| **IPFS Platform Tools** | AgentLoop tools: `agentx_ipfs_upload`, `agentx_ipfs_upload_encrypted`, `agentx_ipfs_get_url` |
-| **Sub-path Export** | `@agentxv2/sdk/ipfs` — tree-shakeable IPFSUploader import |
+| **IPFS Platform Tools** | AgentLoop tools: `actora_ipfs_upload`, `actora_ipfs_upload_encrypted`, `actora_ipfs_get_url` |
+| **Sub-path Export** | `@actora/sdk/ipfs` — tree-shakeable IPFSUploader import |
 
 ### Upgrade Steps
 
 ```bash
-npm install @agentxv2/sdk@0.6.4
+npm install @actora/sdk@0.6.4
 ```
 
 ### 1. Replace manual IPFS upload with publishAgent()
@@ -1005,7 +1005,7 @@ npm install @agentxv2/sdk@0.6.4
 **Before (v0.6.3):**
 
 ```ts
-import { generateAesKey, encryptPayload, packAgentForPublish } from '@agentxv2/sdk'
+import { generateAesKey, encryptPayload, packAgentForPublish } from '@actora/sdk'
 
 const aesKey = generateAesKey()
 const encrypted = encryptPayload(privatePayload, aesKey)
@@ -1017,7 +1017,7 @@ const packResult = packAgentForPublish(agentPayload, publicKey, aesKey)
 **After (v0.6.4):**
 
 ```ts
-import { IPFSUploader, publishAgent } from '@agentxv2/sdk'
+import { IPFSUploader, publishAgent } from '@actora/sdk'
 
 const uploader = new IPFSUploader({ pinataJwt: 'eyJ...' })
 
@@ -1028,7 +1028,7 @@ const result = await publishAgent({ agent, publicKey, uploader })
 ### 2. Use IPFSUploader directly
 
 ```ts
-import { IPFSUploader } from '@agentxv2/sdk/ipfs'
+import { IPFSUploader } from '@actora/sdk/ipfs'
 
 const uploader = new IPFSUploader({
   pinataJwt: 'eyJ...',           // required for Pinata
@@ -1049,9 +1049,9 @@ The following tools are now available in AgentLoop:
 
 | Tool Name | Description |
 |-----------|-------------|
-| `agentx_ipfs_upload` | Upload JSON data to IPFS |
-| `agentx_ipfs_upload_encrypted` | Encrypt and upload agent payload |
-| `agentx_ipfs_get_url` | Build public gateway URL from CID |
+| `actora_ipfs_upload` | Upload JSON data to IPFS |
+| `actora_ipfs_upload_encrypted` | Encrypt and upload agent payload |
+| `actora_ipfs_get_url` | Build public gateway URL from CID |
 
 ### Breaking Changes
 

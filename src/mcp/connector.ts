@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — MCP Connector
+// @actora/sdk — MCP Connector
 // ---------------------------------------------------------------------------
 // Minimal MCP (Model Context Protocol) client for HTTP/SSE transports.
 // Used by AgentRunner for Closed Skill remote execution.

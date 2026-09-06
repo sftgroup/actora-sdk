@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AgentX SDK — BillingClient (B-end balance query)
+// Actora SDK — BillingClient (B-end balance query)
 // ---------------------------------------------------------------------------
 // Lets B-end (partner) integrators check the x402 ledger balance before
 // delegating to an unsubscribed agent (R19.7 pay-per-call), instead of
@@ -7,16 +7,16 @@
 //   GET /api/v1/billing/balance
 //
 // Auth (either one is required, same as ConversationClient):
-//   - Tenant API Key:  X-Api-Key: agentx_xxx
+//   - Tenant API Key:  X-Api-Key: actora_xxx
 //   - Gateway JWT:     Authorization: Bearer <accessToken>
 // Dimension: tenant wallet by default; pass `endUserId` (0x wallet) to query
 // that end user's balance (same subject resolution as R19.7 access checks).
 // ---------------------------------------------------------------------------
 
 export interface BillingClientConfig {
-  /** Gateway base URL, e.g. https://agentx.0xainet.top */
+  /** Gateway base URL, e.g. https://actora.codes */
   gatewayUrl: string
-  /** Tenant API Key (agentx_...) issued after registration (alternative to accessToken) */
+  /** Tenant API Key (actora_...) issued after registration (alternative to accessToken) */
   apiKey?: string
   /** Gateway JWT access token from wallet-signed login (alternative to apiKey) */
   accessToken?: string
@@ -43,7 +43,7 @@ export interface BalanceResult {
 /**
  * Balance query client for B-end integrations.
  * @example
- * const billing = new BillingClient({ gatewayUrl, apiKey: 'agentx_xxx' })
+ * const billing = new BillingClient({ gatewayUrl, apiKey: 'actora_xxx' })
  * const { balanceWei, priceWei } = await billing.getBalance()
  * if (balanceWei && priceWei && BigInt(balanceWei) < BigInt(priceWei)) {
  *   // show top-up prompt: send native token to billing.payTo

@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Gateway Provider
+// @actora/sdk — Gateway Provider
 // ---------------------------------------------------------------------------
-// Routes LLM requests through AgentX Gateway for multi-tenant SaaS mode.
+// Routes LLM requests through Actora Gateway for multi-tenant SaaS mode.
 // Gateway handles: auth, rate limiting, API key injection, usage tracking.
 // API Key never appears in the browser.
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-# @agentxv2/sdk v0.11.9
+# @actora/sdk v0.11.12
 
 **Decentralized AI Agent Platform SDK** — E2E encryption, on-chain subscriptions, ReAct AgentLoop, multi-tenant LLM providers, A2A multi-agent interop (off-chain + user-wallet-signed on-chain rails), IPFS upload, MCP remote tools, chain-data batch query, hosted conversation sessions & parallel tasks, agent application categories, unified multi-rail payments.
 
@@ -10,14 +10,14 @@ Agent = Prompt + Skills[] + MCP
 
 ## Installation
 
-The current release **0.11.9** is built on the **0.10.0 complete feature release** (agent application categories, sessions & parallel tasks, streaming tool_call fix, typed `onchain_approval_required` SSE event, unified `/api/v1/payments` endpoint) — with the payment engine on the InfraX-maintained `@0xinfrax/payments` `^0.1.4`. R17.6: `0.1.3` restores the a2a / period rails inside the engine; `0.1.4` adds escrow passthrough / ERC20 deposit / structured 402 errors; the AgentX Gateway delegates to the module rails while keeping the HTTP contract identical, so **B-side callers see zero change**. Since **0.11.5** (R19.3) the SDK also ships `TenantPlanPayments` — platform subscription-tier purchases (tenant plans) through the unified payments endpoint — since **0.11.6** the `BillingClient` for B-end balance pre-checks (R19.7 companion), since **0.11.7** the `AgentWalletConfig` — agent-owned MPC wallet management (bind an agent to an InfraX MPC wallet + email-code payment-session unlock) so A2A per-call fees auto-pay server-side, since **0.11.8** the **A2A Session Key auto-pay** surface — end-user wallet-authorized `x402-pay` session keys that auto-fund the per-call fee when the x402 ledger balance is short (see the "A2A Delegated Tasks & Session Key Auto-pay" section), and since **0.11.9** `AgentWalletConfig` gains a **tenant-scoped `apiKey` mode** — manage the MPC wallets of your *own* agents with a tenant API Key instead of the platform `ADMIN_KEY` (SK-1 permission delegation, dual-rail auth on `/api/v1/admin/agent-payers`). Install and use:
+The current release **0.11.12** is built on the **0.10.0 complete feature release** (agent application categories, sessions & parallel tasks, streaming tool_call fix, typed `onchain_approval_required` SSE event, unified `/api/v1/payments` endpoint) — with the payment engine on the InfraX-maintained `@0xinfrax/payments` `^0.1.4`. R17.6: `0.1.3` restores the a2a / period rails inside the engine; `0.1.4` adds escrow passthrough / ERC20 deposit / structured 402 errors; the Actora Gateway delegates to the module rails while keeping the HTTP contract identical, so **B-side callers see zero change**. Since **0.11.5** (R19.3) the SDK also ships `TenantPlanPayments` — platform subscription-tier purchases (tenant plans) through the unified payments endpoint — since **0.11.6** the `BillingClient` for B-end balance pre-checks (R19.7 companion), since **0.11.7** the `AgentWalletConfig` — agent-owned MPC wallet management (bind an agent to an InfraX MPC wallet + email-code payment-session unlock) so A2A per-call fees auto-pay server-side, since **0.11.8** the **A2A Session Key auto-pay** surface — end-user wallet-authorized `x402-pay` session keys that auto-fund the per-call fee when the x402 ledger balance is short (see the "A2A Delegated Tasks & Session Key Auto-pay" section), and since **0.11.9** `AgentWalletConfig` gains a **tenant-scoped `apiKey` mode** — manage the MPC wallets of your *own* agents with a tenant API Key instead of the platform `ADMIN_KEY` (SK-1 permission delegation, dual-rail auth on `/api/v1/admin/agent-payers`). Since **0.11.10** `SubscriptionPayments.pay` gains optional `priceWei` — pay centralized-agent (negative-id) plans without reading the on-chain contract price; since **0.11.11** the SDK ships **`CentralAgentClient`** — read-only client for the centralized (off-chain) marketplace (`list` / `get` / `checkSubscription` / `mySubscriptions`); and since **0.11.12** `CentralAgentClient` gains **authenticated publish/management methods** (`create` / `listMine` / `update` / `activate` / `deactivate` / `createPlan` / `deactivatePlan`) with tenant `apiKey` or registered-user `accessToken`. Install and use:
 
 ```bash
-# latest (recommended) — 0.11.9
-npm install @agentxv2/sdk
+# latest (recommended) — 0.11.12
+npm install @actora/sdk
 
 # or pin the exact release
-npm install @agentxv2/sdk@0.11.9
+npm install @actora/sdk@0.11.12
 ```
 
 ### Peer Dependencies
@@ -36,7 +36,7 @@ npm install @agentxv2/sdk@0.11.9
 ### 1. Use an Agent with AgentLoop (ReAct autonomous tool calling)
 
 ```ts
-import { AgentRunner, AgentLoop, OpenAIProvider, GatewayProvider } from '@agentxv2/sdk'
+import { AgentRunner, AgentLoop, OpenAIProvider, GatewayProvider } from '@actora/sdk'
 
 const runner = new AgentRunner({ reader, wallet })
 const ctx = await runner.useAgent(42)
@@ -44,9 +44,9 @@ const ctx = await runner.useAgent(42)
 // Mode A: Pure frontend — direct LLM API
 const provider = new OpenAIProvider({ apiKey: 'sk-...', model: 'gpt-4o' })
 
-// Mode B: SaaS multi-tenant — via AgentX Gateway (API key never in browser)
+// Mode B: SaaS multi-tenant — via Actora Gateway (API key never in browser)
 const provider = new GatewayProvider({
-  gatewayUrl: 'https://agentx.0xainet.top',   // 生产域名；本地开发可填 http://localhost:3090
+  gatewayUrl: 'https://actora.codes',   // 生产域名；本地开发可填 http://localhost:3090
   accessToken: 'jwt...',
   keySource: 'platform',
 })
@@ -69,7 +69,7 @@ await loop.run('Analyze this contract for vulnerabilities')
 ### 2. React Hook
 
 ```tsx
-import { useAgentRunner } from '@agentxv2/sdk/react'
+import { useAgentRunner } from '@actora/sdk/react'
 
 function ChatPage({ agentId }: { agentId: number }) {
   const { ctx, isLoading, error } = useAgentRunner({ agentId })
@@ -81,7 +81,7 @@ function ChatPage({ agentId }: { agentId: number }) {
 ### 3. Publish an Agent (IPFSUploader + publishAgent pipeline)
 
 ```ts
-import { IPFSUploader, publishAgent } from '@agentxv2/sdk'
+import { IPFSUploader, publishAgent } from '@actora/sdk'
 
 const uploader = new IPFSUploader({ pinataJwt: 'eyJ...' })
 
@@ -128,7 +128,7 @@ import {
   eciesEncrypt, eciesDecrypt,
   generateAesKey, generateKeyPair,
   randomBytes,
-} from '@agentxv2/sdk/core'
+} from '@actora/sdk/core'
 
 // Generate keys
 const keyPair = generateKeyPair()
@@ -137,7 +137,7 @@ const aesKey = generateAesKey()
 // → 64-char hex string (32 bytes)
 
 // AES-256-GCM encrypt/decrypt
-const ciphertext = aesEncrypt('Hello, AgentX!', aesKey)
+const ciphertext = aesEncrypt('Hello, Actora!', aesKey)
 const plaintext = aesDecrypt(ciphertext, aesKey)
 
 // ECIES encrypt/decrypt (key wrapping)
@@ -148,7 +148,7 @@ const unwrapped = eciesDecrypt(wrapped, keyPair.privateKey)
 ### High-Level Payload Encryption
 
 ```ts
-import { encryptPayload, decryptPayload, packAgentForPublish } from '@agentxv2/sdk/core'
+import { encryptPayload, decryptPayload, packAgentForPublish } from '@actora/sdk/core'
 
 // Publisher: encrypt agent payload for a subscriber
 const encrypted = encryptPayload({
@@ -178,8 +178,8 @@ ECIES:        hex( ephemeralPub[33] || IV[16] || ciphertext || MAC[32] )
 ## IPFS Upload
 
 ```ts
-import { IPFSUploader } from '@agentxv2/sdk/ipfs'
-// or: import { IPFSUploader } from '@agentxv2/sdk'
+import { IPFSUploader } from '@actora/sdk/ipfs'
+// or: import { IPFSUploader } from '@actora/sdk'
 
 const uploader = new IPFSUploader({
   pinataJwt: 'eyJ...',              // Pinata JWT token
@@ -212,8 +212,8 @@ const publicUrl = uploader.getUrl('QmXxx...')
 ## MCP Connector (Remote Tool Execution)
 
 ```ts
-import { MCPConnector } from '@agentxv2/sdk/mcp'
-// or: import { MCPConnector } from '@agentxv2/sdk'
+import { MCPConnector } from '@actora/sdk/mcp'
+// or: import { MCPConnector } from '@actora/sdk'
 
 // Connect to any MCP server
 const connector = new MCPConnector({
@@ -239,46 +239,46 @@ const result = await connector.callTool('get_balance', {
 
 ## ConversationClient (v0.8.7) — Remote Conversation Service
 
-Streams agent conversations from the hosted **Conversation Service** via the Gateway (`POST /api/v1/agent/runs`, SSE). Auth requires **either** a tenant `apiKey` (`X-Api-Key`) **or** a Gateway `accessToken` (`Authorization: Bearer` — wallet-signed login). Both credentials unlock the **same** REST surface — single-turn chat plus sessions & parallel tasks — gated uniformly by the tenant's P9 capability bits; a B-end integration key (`agentx_...`) alone is sufficient, **no second key is needed** (only the MCP channel and on-chain operations require a registered-user JWT / the user's own wallet). The client also auto-sends `X-End-User-Id` (end-user memory isolation), `X-Llm-Api-Key` + `X-Llm-Endpoint` + `X-Llm-Model` (stateless BYOK override — **your own key AND endpoint AND model**, e.g. DeepSeek). **BYOK is the recommended pattern for callers**: traffic then runs against your own LLM account, and the platform fallback key is used only when no key is provided.
+Streams agent conversations from the hosted **Conversation Service** via the Gateway (`POST /api/v1/agent/runs`, SSE). Auth requires **either** a tenant `apiKey` (`X-Api-Key`) **or** a Gateway `accessToken` (`Authorization: Bearer` — wallet-signed login). Both credentials unlock the **same** REST surface — single-turn chat plus sessions & parallel tasks — gated uniformly by the tenant's P9 capability bits; a B-end integration key (`actora_...`) alone is sufficient, **no second key is needed** (only the MCP channel and on-chain operations require a registered-user JWT / the user's own wallet). The client also auto-sends `X-End-User-Id` (end-user memory isolation), `X-Llm-Api-Key` + `X-Llm-Endpoint` + `X-Llm-Model` (stateless BYOK override — **your own key AND endpoint AND model**, e.g. DeepSeek). **BYOK is the recommended pattern for callers**: traffic then runs against your own LLM account, and the platform fallback key is used only when no key is provided.
 
-> **v0.8.6 — stored BYOK (`tenantKeyId`)**: each chat/stream request can pass `tenantKeyId` to use a tenant-owned API key already stored & AES-encrypted on the Gateway (managed via Settings → Own LLM Keys, backed by `/tenant/keys`). The Gateway resolves the key server-side and injects it as `X-Llm-Api-Key` (priority over request-level headers) — the plaintext key never leaves the server. This complements the stateless `llmApiKey` override (request-level, highest priority). **`tenantKeyId`s are strictly tenant-scoped**: after rotating your `agentx_` key or switching tenants, re-store a BYOK via `POST /api/v1/tenant/keys` with the new key and update your `tenantKeyId` — reusing another tenant's ID returns `400 Tenant API key not found or inactive`.
+> **v0.8.6 — stored BYOK (`tenantKeyId`)**: each chat/stream request can pass `tenantKeyId` to use a tenant-owned API key already stored & AES-encrypted on the Gateway (managed via Settings → Own LLM Keys, backed by `/tenant/keys`). The Gateway resolves the key server-side and injects it as `X-Llm-Api-Key` (priority over request-level headers) — the plaintext key never leaves the server. This complements the stateless `llmApiKey` override (request-level, highest priority). **`tenantKeyId`s are strictly tenant-scoped**: after rotating your `actora_` key or switching tenants, re-store a BYOK via `POST /api/v1/tenant/keys` with the new key and update your `tenantKeyId` — reusing another tenant's ID returns `400 Tenant API key not found or inactive`.
 > **v0.8.7 — sessions & parallel tasks**: `createSession()` / `createTask()` (returns a `taskId` immediately, runs in the background) / `getTask()` / `listTasks()` / `cancelTask()` + `getCapabilities()`. When the tenant/plan disallows multi-task (P9 capability gate), `createTask()` is rejected with HTTP 403 `{ code: "PARALLEL_TASKS_DISABLED" }` — surfaced as `ConversationTaskError` (`.status` / `.code`); callers should degrade to single-turn `chat()`.
-> **2026-08-08 — B-end keys clarified**: parallel-task capability is now **uniform for all tenants**. A B-end integration key (`agentx_...`) is no longer restricted to chat — it can create sessions/tasks exactly like a registered-user JWT, controlled by the same P9 capability bits (`effective = tenant.allow_parallel_tasks ?? plan.features.parallel_tasks ?? true`). `403 PARTNER_TASKS_DISABLED` no longer exists; a disabled tenant gets `403 PARALLEL_TASKS_DISABLED` and should fall back to `chat()` as above. **One `agentx_` key is enough** — callers do not need a second (wallet-signed) credential for sessions/tasks. Partner task creation additionally **requires a BYOK LLM key** (`X-Llm-Api-Key` header, `llmApiKey`, or stored `tenantKeyId`) — otherwise `400 { code: "LLM_KEY_REQUIRED" }` — so background work never drains the platform key budget. This gate applies to **parallel tasks created via REST/SDK** (`POST /sessions/:id/tasks`); platform-managed background paths (user schedules, orchestration triggers) bypass it and use the stored `tenantKeyId` or the platform fallback key.
+> **2026-08-08 — B-end keys clarified**: parallel-task capability is now **uniform for all tenants**. A B-end integration key (`actora_...`) is no longer restricted to chat — it can create sessions/tasks exactly like a registered-user JWT, controlled by the same P9 capability bits (`effective = tenant.allow_parallel_tasks ?? plan.features.parallel_tasks ?? true`). `403 PARTNER_TASKS_DISABLED` no longer exists; a disabled tenant gets `403 PARALLEL_TASKS_DISABLED` and should fall back to `chat()` as above. **One `actora_` key is enough** — callers do not need a second (wallet-signed) credential for sessions/tasks. Partner task creation additionally **requires a BYOK LLM key** (`X-Llm-Api-Key` header, `llmApiKey`, or stored `tenantKeyId`) — otherwise `400 { code: "LLM_KEY_REQUIRED" }` — so background work never drains the platform key budget. This gate applies to **parallel tasks created via REST/SDK** (`POST /sessions/:id/tasks`); platform-managed background paths (user schedules, orchestration triggers) bypass it and use the stored `tenantKeyId` or the platform fallback key.
 >
-> **MCP boundary (generic)**: the "registered-user `access_token` only" rule applies to the **AgentX platform MCP** (Gateway `/mcp`) — its 6 `agentx_gateway_*` conversation/task tools (`agentx_gateway_chat`, `create_session`, `create_task`, `get_task`, `list_tasks`, `cancel_task`) require a registered-user JWT and reject B-end `agentx_` keys (R14). MCP servers **you deploy yourself** (an in-house agent MCP, a RAG MCP, etc.) are outside this boundary — their auth is yours to configure (anonymous, tenant key, or anything else). Use REST or `ConversationClient` if you only hold a B-end key. **B-end end-users (e.g. aihunter's customers) are fully covered by REST + `X-End-User-Id: 0x<wallet>`** (end-user subscription proxying) — MCP stays JWT-only for B-end callers by design; bridging "B-end user → AgentX JWT" for MCP would be a separate design item.
+> **MCP boundary (generic)**: the "registered-user `access_token` only" rule applies to the **Actora platform MCP** (Gateway `/mcp`) — its 6 `actora_gateway_*` conversation/task tools (`actora_gateway_chat`, `create_session`, `create_task`, `get_task`, `list_tasks`, `cancel_task`) require a registered-user JWT and reject B-end `actora_` keys (R14). MCP servers **you deploy yourself** (an in-house agent MCP, a RAG MCP, etc.) are outside this boundary — their auth is yours to configure (anonymous, tenant key, or anything else). Use REST or `ConversationClient` if you only hold a B-end key. **B-end end-users (e.g. aihunter's customers) are fully covered by REST + `X-End-User-Id: 0x<wallet>`** (end-user subscription proxying) — MCP stays JWT-only for B-end callers by design; bridging "B-end user → Actora JWT" for MCP would be a separate design item.
 >
-> **B-end MCP conversation — alternative paths (2026-08-11)**: if a B-end caller needs *MCP-native* conversation for its end-users, use one of these instead of waiting for a "B-end user → AgentX JWT" bridge (kept as a future design item, **not implemented**):
+> **B-end MCP conversation — alternative paths (2026-08-11)**: if a B-end caller needs *MCP-native* conversation for its end-users, use one of these instead of waiting for a "B-end user → Actora JWT" bridge (kept as a future design item, **not implemented**):
 > 1. **Self-hosted MCP wrapper** (most common — the RAG MCP pattern): deploy your own MCP server that exposes a conversation tool and internally calls REST with `X-Api-Key` + `X-End-User-Id`. Auth is fully under your control — this lives outside the platform boundary.
-> 2. **Direct REST for HTTP-capable AIs**: if the calling AI supports HTTP tool invocation, call `/api/v1/agent/runs` (or the SDK `ConversationClient`) directly — a single `agentx_` key, with `X-End-User-Id` subscription proxying included.
-> 3. **Non-conversation MCP tools are key-usable as-is**: 32 of the 38 platform MCP tools (on-chain read/write) accept B-end `agentx_` keys — only the 6 conversation/task tools require a registered-user JWT. B-end callers can already use those 32 over MCP without any bridge.
+> 2. **Direct REST for HTTP-capable AIs**: if the calling AI supports HTTP tool invocation, call `/api/v1/agent/runs` (or the SDK `ConversationClient`) directly — a single `actora_` key, with `X-End-User-Id` subscription proxying included.
+> 3. **Non-conversation MCP tools are key-usable as-is**: 32 of the 38 platform MCP tools (on-chain read/write) accept B-end `actora_` keys — only the 6 conversation/task tools require a registered-user JWT. B-end callers can already use those 32 over MCP without any bridge.
 >
-> **B-end end-user auth over MCP conversation — how it works (2026-08-11)**: the 6 conversation/task tools authenticate *only* via the `access_token` argument — a registered-user JWT issued by wallet-signed login (EIP-191). The MCP executor reads `access_token`, drops the call with `access_token (registered-user JWT) is required` if absent, and forwards it as `Authorization: Bearer` to the Gateway REST channel; B-end `agentx_` keys are rejected on these tools (R14). Subscription gating therefore resolves against the **JWT holder's wallet**. A B-end end-user who is not a registered AgentX user has **no wallet-signed JWT** and cannot call these tools directly — that is by design: their identity (and subscription) is proxied through the B-end key + `X-End-User-Id: 0x<wallet>` on REST instead. If MCP-native conversation for such end-users is ever required, the bridge keeps the same semantics as REST — exchange (B-end key + end-user subscription check) for a **short-lived scoped JWT** (`sub=partner-<slug>`, `end_user=0x<wallet>`, TTL ~5 min, no refresh) so the MCP tools still do their subscription check against the end-user wallet. Until then, paths 1–3 above apply.
+> **B-end end-user auth over MCP conversation — how it works (2026-08-11)**: the 6 conversation/task tools authenticate *only* via the `access_token` argument — a registered-user JWT issued by wallet-signed login (EIP-191). The MCP executor reads `access_token`, drops the call with `access_token (registered-user JWT) is required` if absent, and forwards it as `Authorization: Bearer` to the Gateway REST channel; B-end `actora_` keys are rejected on these tools (R14). Subscription gating therefore resolves against the **JWT holder's wallet**. A B-end end-user who is not a registered Actora user has **no wallet-signed JWT** and cannot call these tools directly — that is by design: their identity (and subscription) is proxied through the B-end key + `X-End-User-Id: 0x<wallet>` on REST instead. If MCP-native conversation for such end-users is ever required, the bridge keeps the same semantics as REST — exchange (B-end key + end-user subscription check) for a **short-lived scoped JWT** (`sub=partner-<slug>`, `end_user=0x<wallet>`, TTL ~5 min, no refresh) so the MCP tools still do their subscription check against the end-user wallet. Until then, paths 1–3 above apply.
 >
 > **B-end end-user auth over MCP conversation — step-by-step flow (2026-08-11)**: the same call goes through two distinct auth paths depending on the caller's credential:
 >
-> * **Registered user (JWT)** — `agentx_gateway_chat` with `access_token=eyJ...`:
+> * **Registered user (JWT)** — `actora_gateway_chat` with `access_token=eyJ...`:
 >   1. MCP executor calls `gatewayAuthHeaders()` → token present → `Authorization: Bearer <JWT>`.
 >   2. Forwards to Gateway `POST /api/v1/agent/runs`.
 >   3. Gateway resolves the access subject as the **JWT holder's wallet**, then `canAccessAgent(wallet, agentId)` checks on-chain ownership/subscription — `403 AGENT_ACCESS_DENIED` if the JWT wallet holds no subscription to the target agent.
 >   4. SSE stream returned, aggregated into the MCP tool result `{ reply, tool_calls }`.
 > * **B-end end-user (partner key + proxied wallet)** — the *same* conversation over **REST**:
->   1. `X-Api-Key: agentx_...` + `X-End-User-Id: 0x<endUserWallet>` → `POST /api/v1/agent/runs`.
+>   1. `X-Api-Key: actora_...` + `X-End-User-Id: 0x<endUserWallet>` → `POST /api/v1/agent/runs`.
 >   2. `resolveAccessSubject()` (see [gateway agent-access.ts](gateway/src/services/agent-access.ts)) detects `kind=partner` + hex `endUserId` and substitutes the **end-user's wallet** as the access subject.
 >   3. `canAccessAgent(endUserWallet, agentId)` gates on the **end-user's** on-chain subscription (not the partner tenant's).
 >   4. Same SSE stream, same `{ reply, tool_calls }` shape — the two paths differ **only in credential exchange**, never in conversation behavior.
 >
-> Decision rule: a B-end caller holds only `agentx_` keys → use REST (path 1 or 2 above); a registered user holds a wallet-signed JWT → MCP is available as-is; a B-end caller that insists on MCP-native conversation for unregistered end-users → future bridge (above), not yet implemented.
+> Decision rule: a B-end caller holds only `actora_` keys → use REST (path 1 or 2 above); a registered user holds a wallet-signed JWT → MCP is available as-is; a B-end caller that insists on MCP-native conversation for unregistered end-users → future bridge (above), not yet implemented.
 >
 > **B-end key vs user JWT — sessions/tasks behavior (v0.10.1)**: both credentials are gated by the same P9 capability bits and can create sessions/parallel tasks; the differences are (1) **access subject** — a B-end key authorizes as the partner tenant, or as a proxied end-user wallet when `endUserId` is a `0x` address; a JWT authorizes as the user's own wallet; (2) **task LLM key** — partner tasks may use their own BYOK key (`X-Llm-Api-Key` / `llmApiKey` / `tenantKeyId`), or fall back to the platform key, which is **metered against the tenant's plan quota** (exact token counts from the task's `done` event — via SSE for streamed tasks and via a completion callback for background tasks); (3) **platform MCP chat/task tools** and **on-chain A2A/publish/subscribe** are available to JWTs only. A B-end key covers all REST chat + parallel tasks; a JWT additionally covers MCP and on-chain.
 >
 > **`endUserId` is always optional — omitting it is NOT rejected** (2026-08-08 clarification): without it the access subject falls back to the **tenant's own wallet** — for a registered user (kind=user) that *is* the user's wallet (works naturally); for a partner tenant it simply means **no end-user proxying** (the `partner-*` address is not an on-chain address, so subscription-gated agents return `403 AGENT_ACCESS_DENIED` when the chain check fails — not a "missing endUserId" rejection). A non-`0x` `endUserId` is used for memory isolation only. There is **no "must send endUserId" enforcement** anywhere.
 
 ```ts
-import { ConversationClient } from '@agentxv2/sdk/conversation'
+import { ConversationClient } from '@actora/sdk/conversation'
 
 const client = new ConversationClient({
   gatewayUrl: 'https://gateway.example.com',   // Gateway base URL (not the conversation service directly)
-  apiKey: 'agentx_...',                         // tenant API key issued after registration (OR accessToken below)
+  apiKey: 'actora_...',                         // tenant API key issued after registration (OR accessToken below)
   // accessToken: 'eyJ...',                     // gateway JWT from wallet-signed login (alternative to apiKey)
   endUserId: 'user-123',                        // optional: per-end-user memory isolation
   llmApiKey: 'sk-...',                          // optional: BYOK — your own LLM key (highest priority)
@@ -323,9 +323,9 @@ if (result.clarification) {
   const retry = await client.chat({ agentId: 42, message: answer, history: [...prevHistory, ...] })
 }
 
-// Inline mode — no AgentX agent needed; inject your own MCP/HTTP tools (e.g. RAG)
+// Inline mode — no Actora agent needed; inject your own MCP/HTTP tools (e.g. RAG)
 const ragResult = await client.chat({
-  message: '根据知识库回答：AgentX 支持哪些链？',
+  message: '根据知识库回答：Actora 支持哪些链？',
   prompt: '你是客服助手，回答前先调用 rag_query 检索知识库。',
   skills: [{
     name: 'rag_query',
@@ -338,14 +338,14 @@ const ragResult = await client.chat({
 ```
 
 > Auth: the `apiKey` set in the constructor is sent automatically as `X-Api-Key` (tenant API key) — the RAG example above needs no per-request credentials. Your RAG MCP/HTTP `execution.endpoint` stays under your control: secure it with your own auth, the service only forwards the call (30s timeout).
-> Sub-path import: `@agentxv2/sdk/conversation`. Server-side API & headers documented in [`CONVERSATION_SERVICE.md`](../CONVERSATION_SERVICE.md).
+> Sub-path import: `@actora/sdk/conversation`. Server-side API & headers documented in [`CONVERSATION_SERVICE.md`](../CONVERSATION_SERVICE.md).
 
 ### Sessions & Parallel Tasks (v0.8.7)
 
 Create a dialog session, fire multiple tasks into it, poll them in the background and cancel when needed:
 
 ```ts
-import { ConversationClient, ConversationTaskError } from '@agentxv2/sdk/conversation'
+import { ConversationClient, ConversationTaskError } from '@actora/sdk/conversation'
 
 const client = new ConversationClient({ gatewayUrl: 'https://gateway.example.com', accessToken: 'eyJ...' })
 
@@ -388,7 +388,7 @@ Replaces hand-rolled ethers.js + manual ABI/parseLog code. All methods accept vi
 ### IdentityRegistry — batch read
 
 ```ts
-import { AgentRegistry } from '@agentxv2/sdk'
+import { AgentRegistry } from '@actora/sdk'
 
 const registry = new AgentRegistry({ contractAddress, publicClient, walletClient })
 
@@ -416,7 +416,7 @@ const meta = await registry.getAgentMetadata(1)
 ### SubscriptionManager — write + event-parsed results
 
 ```ts
-import { SubscriptionManager } from '@agentxv2/sdk'
+import { SubscriptionManager } from '@actora/sdk'
 
 const sm = new SubscriptionManager({ contractAddress, publicClient, walletClient })
 
@@ -448,7 +448,7 @@ const combined = await sm.createPlanAndSubscribe({ agentId: 42, price: 1n, perio
 ### subscribeToEvents — event-driven sync (< 15s vs 2min polling)
 
 ```ts
-import { subscribeToEvents } from '@agentxv2/sdk'
+import { subscribeToEvents } from '@actora/sdk'
 
 const unwatch = await subscribeToEvents(publicClient, {
   identityRegistryAddress,
@@ -467,7 +467,7 @@ const unwatch = await subscribeToEvents(publicClient, {
 ## A2A Daemon — Multi-Agent Interop
 
 ```ts
-import { A2ADaemon } from '@agentxv2/sdk/agent-loop'
+import { A2ADaemon } from '@actora/sdk/agent-loop'
 
 const a2a = new A2AProtocol({
   contractAddress: '0x7F42a7dC4A0F3C107664C3750bE1B5B6fa6BEb86',
@@ -479,7 +479,7 @@ const a2a = new A2AProtocol({
 const daemon = new A2ADaemon({
   agentId: 53,
   a2a,
-  gatewayUrl: 'https://agentx.0xainet.top',   // 生产域名；本地开发可填 http://localhost:3090
+  gatewayUrl: 'https://actora.codes',   // 生产域名；本地开发可填 http://localhost:3090
   pollIntervalMs: 15000,
   autoComplete: true,
 })
@@ -505,7 +505,7 @@ SDK A2A Daemon → polls Gateway → gets result → completeTask() on-chain
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      @agentxv2/sdk                           │
+│                      @actora/sdk                           │
 ├──────────┬──────────┬──────────┬───────────────────────────┤
 │  Core    │  Agent   │ AgentLoop│  React                    │
 │ crypto   │ Runner   │ executor │  useAgentRunner           │
@@ -536,7 +536,7 @@ SDK A2A Daemon → polls Gateway → gets result → completeTask() on-chain
 | `AgentRunner` | agent | Decrypt + load Agent context from chain |
 | `AgentLoop` | agent-loop | ReAct engine: Think → Tools → Observe → Repeat |
 | `OpenAIProvider` | llm | Direct LLM provider with SSE streaming |
-| `GatewayProvider` | llm | Multi-tenant SaaS LLM via AgentX Gateway |
+| `GatewayProvider` | llm | Multi-tenant SaaS LLM via Actora Gateway |
 | `createLLMProvider` | llm | Auto-select provider based on config |
 | `MCPConnector` | mcp | MCP tool discovery + remote execution |
 | `AgentRegistry` | registry | Register and query agents on-chain |
@@ -552,7 +552,7 @@ SDK A2A Daemon → polls Gateway → gets result → completeTask() on-chain
 | `publishAgent` | core | Full encrypt + IPFS upload + pack pipeline |
 | `KNOWN_CHAINS` | config | Pre-configured chain configs |
 
-### Crypto Exports (from `@agentxv2/sdk/core`)
+### Crypto Exports (from `@actora/sdk/core`)
 
 | Export | Description |
 |--------|-------------|
@@ -573,18 +573,18 @@ SDK A2A Daemon → polls Gateway → gets result → completeTask() on-chain
 
 | Path | Description |
 |------|-------------|
-| `@agentxv2/sdk` | All modules (main entry) |
-| `@agentxv2/sdk/core` | Types, crypto (AES-256-GCM + ECIES) |
-| `@agentxv2/sdk/react` | `useAgentRunner` React hook |
-| `@agentxv2/sdk/agent-loop` | AgentLoop, executor, tool builder, A2A daemon |
-| `@agentxv2/sdk/llm` | OpenAIProvider, GatewayProvider, factory |
-| `@agentxv2/sdk/endpoint` | MultiEndpointClient |
-| `@agentxv2/sdk/configuration` | ConfigurationClient |
-| `@agentxv2/sdk/ipfs` | IPFSUploader (Pinata + custom endpoint upload) |
-| `@agentxv2/sdk/memory` | MemoryProvider interface + types (v0.6.9) |
-| `@agentxv2/sdk/traces` | TraceEmitter interface + types (v0.6.9) |
-| `@agentxv2/sdk/skills` | Browser control skill utilities (v0.6.9) |
-| `@agentxv2/sdk/conversation` | ConversationClient — remote Conversation Service client (v0.7.0) |
+| `@actora/sdk` | All modules (main entry) |
+| `@actora/sdk/core` | Types, crypto (AES-256-GCM + ECIES) |
+| `@actora/sdk/react` | `useAgentRunner` React hook |
+| `@actora/sdk/agent-loop` | AgentLoop, executor, tool builder, A2A daemon |
+| `@actora/sdk/llm` | OpenAIProvider, GatewayProvider, factory |
+| `@actora/sdk/endpoint` | MultiEndpointClient |
+| `@actora/sdk/configuration` | ConfigurationClient |
+| `@actora/sdk/ipfs` | IPFSUploader (Pinata + custom endpoint upload) |
+| `@actora/sdk/memory` | MemoryProvider interface + types (v0.6.9) |
+| `@actora/sdk/traces` | TraceEmitter interface + types (v0.6.9) |
+| `@actora/sdk/skills` | Browser control skill utilities (v0.6.9) |
+| `@actora/sdk/conversation` | ConversationClient — remote Conversation Service client (v0.7.0) |
 
 ---
 
@@ -643,10 +643,10 @@ Subscriber uses Agent:
 
 ## Gateway Integration
 
-For multi-tenant SaaS deployments, the Gateway package (`@agentxv2/gateway`) provides:
+For multi-tenant SaaS deployments, the Gateway package (`@actora/gateway`) provides:
 
 ```
-npm install @agentxv2/gateway@0.1.2
+npm install @actora/gateway@0.1.2
 ```
 
 Features: wallet-based auth (EIP-191 + JWT), rate limiting (IP + tenant), LLM proxy (OpenAI/DeepSeek), MCP server, A2A background worker, admin dashboard API, PostgreSQL + Redis persistence.
@@ -657,7 +657,7 @@ Configuration: 26 environment variables — see `gateway/.env.example`.
 
 ## Payment Method Decision Guide (v0.11.7)
 
-AgentX exposes several payment rails. Pick by **what is being paid for**, **who pays**, and **whether a wallet is present**:
+Actora exposes several payment rails. Pick by **what is being paid for**, **who pays**, and **whether a wallet is present**:
 
 | Payment | What it pays for | Payer | Wallet? | Best for | SDK entry |
 |---|---|---|---|---|---|
@@ -686,10 +686,10 @@ AgentX exposes several payment rails. Pick by **what is being paid for**, **who 
 
 ## Multi-Rail Subscription Payments (v0.9.4)
 
-`SubscriptionPayments` is the single entry point for subscribing across every AgentX payment rail — chain (on-chain escrow), fiat (Stripe card via the Gateway) and x402 (native-token period payment). `fiat` / `x402` / `hasAccess()` go through the unified `/api/v1/payments` endpoint (the `@0xinfrax/payments` engine); `chain` works fully off-Gateway.
+`SubscriptionPayments` is the single entry point for subscribing across every Actora payment rail — chain (on-chain escrow), fiat (Stripe card via the Gateway) and x402 (native-token period payment). `fiat` / `x402` / `hasAccess()` go through the unified `/api/v1/payments` endpoint (the `@0xinfrax/payments` engine); `chain` works fully off-Gateway.
 
 ```ts
-import { SubscriptionManager, SubscriptionPayments } from '@agentxv2/sdk'
+import { SubscriptionManager, SubscriptionPayments } from '@actora/sdk'
 
 const sm = new SubscriptionManager({ contractAddress, publicClient, walletClient })
 const payments = new SubscriptionPayments({
@@ -716,7 +716,7 @@ const ok = await payments.hasAccess(3, '0xabc')                           // uni
 Since **0.11.5** (R19.3) integrators can purchase a platform subscription tier (tenant plan) through the same unified payments endpoint. The business binding is `purpose='tenant-plan'` + `tenantPlanId` — the Gateway verifies the on-chain payment (chain / x402 rails) or Stripe checkout (fiat), then binds the plan to the tenant (quota / rate limits / platform models).
 
 ```ts
-import { TenantPlanPayments } from '@agentxv2/sdk'
+import { TenantPlanPayments } from '@actora/sdk'
 
 const plans = new TenantPlanPayments({
   gatewayUrl: 'https://gw.example.com', // required for fiat / x402 rails
@@ -745,11 +745,11 @@ const { sessionUrl } = await plans.buy({
 Since **0.11.6** (R19.7 companion) B-end integrators can query the x402 ledger balance **before** delegating to an unsubscribed agent — no more guessing whether the next pay-per-call will hit HTTP `403 AGENT_ACCESS_DENIED` (insufficient balance). Backed by `GET /api/v1/billing/balance` (read-only, idempotent, no side effects).
 
 ```ts
-import { BillingClient } from '@agentxv2/sdk'
+import { BillingClient } from '@actora/sdk'
 
 const billing = new BillingClient({
   gatewayUrl: 'https://gw.example.com',
-  apiKey: 'agentx_xxx', // or accessToken
+  apiKey: 'actora_xxx', // or accessToken
 })
 
 // tenant balance (default)
@@ -775,10 +775,10 @@ if (priceWei && BigInt(balanceWei) < BigInt(priceWei)) {
 Since **0.11.10** the SDK can pay for **centralized-agent** subscriptions — `SubscriptionPayments.pay({ method: 'x402', agentId, planId, priceWei, period })` uses the off-chain `central_plans` price (negative agentIds live in the Gateway DB, not on-chain). Since **0.11.11** the read side is wrapped in `CentralAgentClient`; since **0.11.12** the authenticated **publish/manage** side too (tenant `apiKey` or user JWT `accessToken`):
 
 ```ts
-import { CentralAgentClient } from '@agentxv2/sdk'
+import { CentralAgentClient } from '@actora/sdk'
 
 // 公开只读（无需鉴权）
-const central = new CentralAgentClient({ baseUrl: 'https://agentx.0xainet.top' })
+const central = new CentralAgentClient({ baseUrl: 'https://actora.codes' })
 
 // 查询中心化 Agent 列表（固定 source='central'，公开）
 const { agents, total } = await central.list({ activeOnly: true, category: 'finance', page: 1, pageSize: 20 })
@@ -796,7 +796,7 @@ const { subscriptions } = await central.mySubscriptions('0xabc…')
 
 ```ts
 // 发布 / 管理（v0.11.12，需 apiKey（租户）或 accessToken（注册用户））
-const owner = new CentralAgentClient({ baseUrl, apiKey: 'agentx_sk_…' }) // 或 accessToken: 'jwt…'
+const owner = new CentralAgentClient({ baseUrl, apiKey: 'actora_sk_…' }) // 或 accessToken: 'jwt…'
 
 const { agent } = await owner.create({ name: '量化助手', description: '…', category: 'finance', capabilities: ['chat', 'trading'] })
 const { agents: mine } = await owner.listMine()               // 我的中心化 Agent（含计划）
@@ -810,7 +810,7 @@ await owner.deactivate(agent.id)                              // 下架（订阅
 ```ts
 // 中心化 Agent 周期订阅 —— 同一付费通道，priceWei 覆盖链下计划价格
 const payments = new SubscriptionPayments({
-  gatewayUrl: 'https://agentx.0xainet.top',
+  gatewayUrl: 'https://actora.codes',
   subscriptionManager: sm, walletClient, chain: 'oxachain',
 })
 const result = await payments.pay({
@@ -829,11 +829,11 @@ const result = await payments.pay({
 Since **0.11.8** (AItrader REQ-1/2/3) integrators can read the full **A2A delegated-task result** (incl. the `awaiting_payment` state + payment options), drive the **Session Key auto-pay** flow (user wallet authorizes an `x402-pay` session key against the engine; the Gateway auto-transfers from it when the x402 ledger balance is short), and query the Session Key authorization status — all through `ConversationClient`.
 
 ```ts
-import { ConversationClient, A2A_STATUS } from '@agentxv2/sdk'
+import { ConversationClient, A2A_STATUS } from '@actora/sdk'
 
 const client = new ConversationClient({
   gatewayUrl: 'https://gw.example.com',
-  apiKey: 'agentx_xxx',               // or accessToken
+  apiKey: 'actora_xxx',               // or accessToken
   endUserId: '0xuser…',               // = the delegation's payment_payer (for retry)
 })
 
@@ -861,10 +861,10 @@ const bal = await client.getBalance()
 
 ### Protocol Clients (v0.9.3)
 
-Since **0.9.3** the SDK re-exports the generic engine's protocol clients from the root, so integrators can drive the P2-P4 rails directly against any Gateway deployment (AgentX-hosted or your own):
+Since **0.9.3** the SDK re-exports the generic engine's protocol clients from the root, so integrators can drive the P2-P4 rails directly against any Gateway deployment (Actora-hosted or your own):
 
 ```ts
-import { MPPClient, A2AClient, PeriodClient, X402Client, PaymentsClient } from '@agentxv2/sdk'
+import { MPPClient, A2AClient, PeriodClient, X402Client, PaymentsClient } from '@actora/sdk'
 
 const base = { baseUrl: 'https://gw.example.com', accessToken: 'jwt...' } // accessToken optional
 
@@ -883,7 +883,7 @@ const uni    = new PaymentsClient(base) // unified create / verify / access / in
 | `X402Client` | `/api/v1/x402/{info,verify,balance}`, `quote`/`pay` (v2 headers) | `quote(url)` fetches the `PAYMENT-REQUIRED` challenge; `pay({ url, walletClient, account })` funds + signs + replays in one call |
 | `PaymentsClient` | `/api/v1/payments` + `/verify` `/access` `/info` `/quote` | `create({ method: 'fiat'|'x402'|... })`, `verify(txHash)`, `access(subscriber, agentId)`, `info()` rails discovery |
 
-> **Dependency note**: the clients come from [`@0xinfrax/payments`](https://www.npmjs.com/package/@0xinfrax/payments) `^0.1.3` (currently **0.1.3**, InfraX-maintained — the former AgentX-maintained `@agentxv2/payments` is deprecated), auto-installed as a dependency of `@agentxv2/sdk`. `PAYMENT_VERSION` (`'0.1.3'` — the aligned engine API version) is also exported from the SDK root. **Browser/bundler safe**: the engine uses only the Web Crypto API — no Node built-ins (`node:crypto` / `Buffer`) — so webpack/Next.js builds no longer fail on `UnhandledSchemeError`. Endpoints must be exposed by the Gateway the client points at (MPP/period/a2a routes exist on AgentX Gateway `/api/v1/payments/*`).
+> **Dependency note**: the clients come from [`@0xinfrax/payments`](https://www.npmjs.com/package/@0xinfrax/payments) `^0.1.3` (currently **0.1.3**, InfraX-maintained — the former Actora-maintained `@0xinfrax/payments` is deprecated), auto-installed as a dependency of `@actora/sdk`. `PAYMENT_VERSION` (`'0.1.3'` — the aligned engine API version) is also exported from the SDK root. **Browser/bundler safe**: the engine uses only the Web Crypto API — no Node built-ins (`node:crypto` / `Buffer`) — so webpack/Next.js builds no longer fail on `UnhandledSchemeError`. Endpoints must be exposed by the Gateway the client points at (MPP/period/a2a routes exist on Actora Gateway `/api/v1/payments/*`).
 
 ---
 
@@ -900,8 +900,8 @@ Multi-agent delegation follows a **two-rail layering strategy** so integrators g
 
 Inside a conversation run, the main agent is given two platform tools (injected by the Conversation Service, same access boundary as chat — only agents the caller owns or is subscribed to):
 
-- `agentx_list_agents` — discover the agents the caller may delegate to (id / name / description / category).
-- `agentx_delegate` — `{ targetAgentId, message, mode? }`. **Default `mode: "offchain"`**: the sub-agent runs synchronously inside the conversation channel and its final answer returns to the main agent in real time. **When the user explicitly requests an auditable / settled / on-chain delegation** (e.g. "上链", "可审计", "结算", "on-chain", "audit"), use `mode: "onchain"`: the service emits `onchain_approval_required` and the **user signs the A2A `createTask` in their own wallet** (they pay the gas); the returned `taskId` is the audit trail, picked up by the Gateway A2A worker and recorded in `a2a_task_results`.
+- `actora_list_agents` — discover the agents the caller may delegate to (id / name / description / category).
+- `actora_delegate` — `{ targetAgentId, message, mode? }`. **Default `mode: "offchain"`**: the sub-agent runs synchronously inside the conversation channel and its final answer returns to the main agent in real time. **When the user explicitly requests an auditable / settled / on-chain delegation** (e.g. "上链", "可审计", "结算", "on-chain", "audit"), use `mode: "onchain"`: the service emits `onchain_approval_required` and the **user signs the A2A `createTask` in their own wallet** (they pay the gas); the returned `taskId` is the audit trail, picked up by the Gateway A2A worker and recorded in `a2a_task_results`.
 
 Platform configuration (Conversation Service env):
 
@@ -925,17 +925,17 @@ ORCHESTRATE_MAX_DEPTH=4               # max nested delegation depth
 | **0.11.6** | 2026-08-16 | **B 端余额预检（R19.7 companion）** — 新增 `BillingClient` + `GET /api/v1/billing/balance`：委派未订阅 agent 前程序化预检 x402 余额（租户维度默认，`endUserId` 0x 钱包透传返回端用户余额）；返回 `{ balance (OXA 高精度 decimal), balanceWei, currency, updatedAt, payTo?, priceWei? }`；余额 0 正常返回不报错；鉴权沿用 X-Api-Key / Bearer JWT。解决 aihunter-saas 提出的「先撞 403 再引导充值」体验问题。**No breaking changes** |
 | **0.11.5** | 2026-08-12 | **R19.3/R19.7 商业化闭环** — 新增 `TenantPlanPayments`（平台套餐购买：统一支付入口 `purpose=tenant-plan`，chain/fiat/x402 三轨，`buy()` 返回 `{ method, ... }` 判别结果，绑定租户套餐）；服务端 A2A 按次付费（R19.7）——未订阅 agent 时按次扣 x402 余额（服务端 deduct + 审计幂等），SDK 调用方零改动、对话自动触发；`PaymentsClient.create({ purpose: 'tenant-plan' })` 支持套餐购买元数据。**No breaking changes** |
 | **0.11.4** | 2026-08-11 | **B 端计费策略对齐（R18）** — 服务端「partner 任务强制 BYOK」已废除（2026-08-11 起不强制；未带 key 时走平台兜底 key，平台按 done 事件 usage 精确计费，扣套餐每日配额；`400 LLM_KEY_REQUIRED` 不再返回）；`ConversationSSEEvent` done 事件新增可选 `llmSource?: 'byok' | 'platform'`（计费来源标记，仅供观测）。SDK 调用方**零代码改动**（BYOK 参数仍可用），README/UPGRADE 文档同步。**No breaking changes** |
-| **0.11.3** | 2026-08-10 | **R17.6 a2a/period 回归模块 rails** — 跟随 infraX `@0xinfrax/payments` `^0.1.3`（0.1.3 在模块内置恢复 a2a/period rails，并新增 batch/invite/transfer）；AgentX Gateway 自托管 a2a/period 迁移为模块委托，**HTTP 契约与客户端签名完全不变**，`PAYMENT_VERSION` 对齐 `0.1.3`。`A2AClient` 继续由 SDK 本地实现（修复 0.11.1 ESM 导入崩溃）。**No breaking changes** |
+| **0.11.3** | 2026-08-10 | **R17.6 a2a/period 回归模块 rails** — 跟随 infraX `@0xinfrax/payments` `^0.1.3`（0.1.3 在模块内置恢复 a2a/period rails，并新增 batch/invite/transfer）；Actora Gateway 自托管 a2a/period 迁移为模块委托，**HTTP 契约与客户端签名完全不变**，`PAYMENT_VERSION` 对齐 `0.1.3`。`A2AClient` 继续由 SDK 本地实现（修复 0.11.1 ESM 导入崩溃）。**No breaking changes** |
 | **0.11.2** | 2026-08-10 | **A2AClient ESM 修复** — `A2AClient` 从 `@0xinfrax/payments` 导入（0.1.2 已移除该导出 → ESM 构建 `Named export not found` 崩溃）改为 SDK 本地实现，签名不变；`PAYMENT_VERSION` 对齐 `0.1.2`。CJS 调用方不受影响。**No breaking changes** |
 | **0.11.1** | 2026-08-10 | **首次跟随演练（F2）** — 跟随 infraX `@0xinfrax/payments` `^0.1.1`（补丁版：新增 `createWebhookForwarder` 事件出站转发 + `ChainAdapter` `rpcHeaders`）；解耦回归 19 项断言通过（消费已安装 npm 包）、sdk 32/32 全绿；`PAYMENT_VERSION` 对齐 `0.1.1`。`SubscriptionPayments` + 协议客户端 API 不变。**No breaking changes** |
-| **0.11.0** | 2026-08-10 | **Payment engine migrated** — the underlying engine moved from the AgentX-maintained `@agentxv2/payments` (now **deprecated**) to the InfraX-maintained [`@0xinfrax/payments`](https://www.npmjs.com/package/@0xinfrax/payments) `^0.1.0`; capabilities identical (chain / Stripe fiat / x402 v1+v2 / MPP channels / stablecoin EIP-3009+Permit2 / period authorizations / a2a-pay), dependency-source only; `PAYMENT_VERSION` aligned to `0.1.0`. `SubscriptionPayments` + protocol clients (MPP/A2A/Period/X402/Payments) API unchanged. **No breaking changes** (see UPGRADE.md) |
+| **0.11.0** | 2026-08-10 | **Payment engine migrated** — the underlying engine moved from the Actora-maintained `@0xinfrax/payments` (now **deprecated**) to the InfraX-maintained [`@0xinfrax/payments`](https://www.npmjs.com/package/@0xinfrax/payments) `^0.1.0`; capabilities identical (chain / Stripe fiat / x402 v1+v2 / MPP channels / stablecoin EIP-3009+Permit2 / period authorizations / a2a-pay), dependency-source only; `PAYMENT_VERSION` aligned to `0.1.0`. `SubscriptionPayments` + protocol clients (MPP/A2A/Period/X402/Payments) API unchanged. **No breaking changes** (see UPGRADE.md) |
 | **0.10.1** | 2026-08-08 | **Released** — per-request `endUserId` on `createTask` (body) / `stream` (header) for B-end subscription proxying; B-end key vs user JWT behavior documented (identical P9 capability bits; partner tasks **require BYOK** → `400 LLM_KEY_REQUIRED`; platform MCP & on-chain are JWT-only); MCP boundary note (platform `/mcp` vs self-hosted MCP). Non-breaking additive change (see UPGRADE.md) |
 | **0.10.0** | 2026-08-08 | **Complete feature release** — consolidates the 0.9.x line into a stable baseline: typed `onchain_approval_required` SSE event + `OnChainApprovalRequest` (user-wallet-signed on-chain delegation, no platform gas), agent categories, unified payments rails, sessions & parallel tasks, streaming tool_call fix. **No breaking changes** |
 | **0.9.6** | 2026-08-08 | **Typed on-chain approval event** — `ConversationSSEEvent` adds `'onchain_approval_required'` + `OnChainApprovalRequest { targetAgentId, taskType, inputData }` so consumers no longer need `as unknown as` narrowing when the agent requests an auditable on-chain A2A delegation (the user's wallet signs `createTask` and pays the gas). Frontend `useAgentChat` updated to the typed event (also resolves the pre-existing `AgentPayload.category` error). **No breaking changes** |
 | **0.9.5** | 2026-08-08 | **Fix: streaming tool_call arguments dropped** — DeepSeek/OpenAI argument-delta chunks carry only an `index` (no `id`); `GatewayProvider` / `OpenAIProvider` now keep an `index→id` map so accumulated tool arguments attach to the real call (previously silently discarded). **No breaking changes** (see UPGRADE.md) |
-| **0.9.4** | 2026-08-07 | **Agent application categories** — `AgentPayload.category` + `AGENT_CATEGORIES` / `AgentCategory` (13 enums); written to public metadata + on-chain attrs; `getAllAgents()` / `getAgentMetadata()` resolve `category`; Gateway `?category=` filter + byCategory aggregation; frontend Studio requires it, Marketplace categorizes by it. `@agentxv2/payments` resolved to **0.2.2** (ownership metadata). **No breaking changes** (see UPGRADE.md) |
-| **0.9.3** | 2026-08-07 | **P2-P4 rails aligned** — `@agentxv2/payments` bumped to `^0.2.0` (MPP payment channels / stablecoin EIP-3009+Permit2 / period authorizations / a2a-pay); re-exports `MPPClient` / `A2AClient` / `PeriodClient` / `X402Client` / `PaymentsClient` from the SDK root. **No breaking changes** — `SubscriptionPayments` API unchanged (see UPGRADE.md) |
-| **0.9.2** | 2026-08-07 | **Unified payments endpoint** — `SubscriptionPayments` fiat / x402 / `hasAccess()` now go through the Gateway's `/api/v1/payments` via the decoupled `@agentxv2/payments` engine (`^0.1.0`, new dependency); `fetchX402Info()` reads the rails-discovery `/info`. **No breaking changes** — `pay()` / `hasAccess()` / result types unchanged (see UPGRADE.md) |
+| **0.9.4** | 2026-08-07 | **Agent application categories** — `AgentPayload.category` + `AGENT_CATEGORIES` / `AgentCategory` (13 enums); written to public metadata + on-chain attrs; `getAllAgents()` / `getAgentMetadata()` resolve `category`; Gateway `?category=` filter + byCategory aggregation; frontend Studio requires it, Marketplace categorizes by it. `@0xinfrax/payments` resolved to **0.2.2** (ownership metadata). **No breaking changes** (see UPGRADE.md) |
+| **0.9.3** | 2026-08-07 | **P2-P4 rails aligned** — `@0xinfrax/payments` bumped to `^0.2.0` (MPP payment channels / stablecoin EIP-3009+Permit2 / period authorizations / a2a-pay); re-exports `MPPClient` / `A2AClient` / `PeriodClient` / `X402Client` / `PaymentsClient` from the SDK root. **No breaking changes** — `SubscriptionPayments` API unchanged (see UPGRADE.md) |
+| **0.9.2** | 2026-08-07 | **Unified payments endpoint** — `SubscriptionPayments` fiat / x402 / `hasAccess()` now go through the Gateway's `/api/v1/payments` via the decoupled `@0xinfrax/payments` engine (`^0.1.0`, new dependency); `fetchX402Info()` reads the rails-discovery `/info`. **No breaking changes** — `pay()` / `hasAccess()` / result types unchanged (see UPGRADE.md) |
 | **0.9.0** | 2026-08-06 | Browser Control Skill extension: new actions `hover` / `press` / `select` (select+checkbox+radio) / `back` / `forward` / `getInfo` (url/title/viewport); `extractAccessibleDOM` now includes `name`/`role`/`aria-label`/input `value`/checkbox `checked`/anchor `target`; new `sleep(ms)` async pacing helper; `findElement` also matches `name` attr |
 | **0.8.11** | 2026-08-07 | **Multi-rail subscription payments** — new `SubscriptionPayments` class (`pay({ method })` for `chain` / `fiat` / `x402`, `hasAccess()` unified chain-OR-fiat/x402 check, `fetchX402Info()` discovery); fiat `amountCents` now optional (Gateway auto-prices from the on-chain plan); x402 auto-funding from a configured `walletClient` |
 | **0.8.10** | 2026-08-06 | Master-key crypto helpers `encryptWithKey()` / `decryptWithKey()` (AES-256-GCM, `base64(IV‖tag‖ciphertext)`, byte-compatible with Gateway at-rest key encryption); `parseTokenURIJSON` exported from the main entry; `A2AProtocol.createTask()` accepts raw string `input`; **subscription status mapping fix** (on-chain enum `0/1/2/3` → `pending/active/expired/cancelled`, previously shifted) |
@@ -945,16 +945,16 @@ ORCHESTRATE_MAX_DEPTH=4               # max nested delegation depth
 | **0.8.6** | 2026-08-06 | `ConversationChatParams` gains `tenantKeyId` — BYOK via a stored tenant-owned API key, resolved server-side by the Gateway (plaintext key never leaves the server); used by the new frontend own-key settings flow |
 | **0.8.5** | 2026-08-06 | Docs sync — re-published with updated README (same code as 0.8.4) |
 | **0.8.4** | 2026-08-06 | `ConversationClient` now supports Gateway JWT auth (`accessToken` → `Authorization: Bearer`, alternative to `apiKey`) and external abort (`stream(params, { signal })`); `tool_result` event gains optional `error` field. Frontend chat hook unified onto it (single SSE client implementation) |
-| **0.8.3** | 2026-08-05 | Install fix: `wagmi` promoted from optional to required peer dependency — the package is now directly usable via `npm install @agentxv2/sdk@0.8.3` (no manual `wagmi` install); verified from a clean install (ESM + CJS, chain reads OK) |
+| **0.8.3** | 2026-08-05 | Install fix: `wagmi` promoted from optional to required peer dependency — the package is now directly usable via `npm install @actora/sdk@0.8.3` (no manual `wagmi` install); verified from a clean install (ESM + CJS, chain reads OK) |
 | **0.8.2** | 2026-08-05 | Write-op fix: `createPlan()` / `subscribe()` / `releaseFunds()` / `cancel()` resolve the full viem `walletClient.account` instead of a bare address string — local/private-key signers now work (`eth_sendRawTransaction`); browser wallets unchanged. Verified on-chain (OxaChain L1) |
 | **0.8.1** | 2026-08-04 | `parseTokenURIJSON()` fault-tolerant parsing aligned with Gateway indexer: base64 trailing garbage cleanup, unterminated JSON repair, regex fallback, explicit `ipfs://` handling |
 | **0.8.0** | 2026-08-04 | Chain-data capabilities: `getAllAgents()` / `totalAgents()` / `getAgentMetadata()` on IdentityRegistry; `createPlan()` (typed period `day|week|month|year`) / `subscribe()` (event-parsed result) / `createPlanAndSubscribe()`; `subscribeToEvents()` event stream |
 | **0.7.5** | 2026-08-04 | Fix AgentLoop forcing `ctx.model ?? 'gpt-4o'` over provider model — priority now `ctx.model ?? provider.model ?? default` |
 | **0.7.4** | 2026-08-04 | `ConversationClient` adds `llmModel` (forwarded as `X-Llm-Model`) — BYOK now covers key + endpoint + model (e.g. `deepseek-v4-pro`) |
-| **0.7.3** | 2026-08-04 | Stateless BYOK: `ConversationClient` adds `llmEndpoint` (forwarded as `X-Llm-Endpoint`) so callers supply their own LLM key + endpoint (e.g. DeepSeek) per request — no AgentX-side key storage needed |
+| **0.7.3** | 2026-08-04 | Stateless BYOK: `ConversationClient` adds `llmEndpoint` (forwarded as `X-Llm-Endpoint`) so callers supply their own LLM key + endpoint (e.g. DeepSeek) per request — no Actora-side key storage needed |
 | **0.7.2** | 2026-08-03 | Clarification interruption: `ConversationSSEEvent` adds `clarification` + `question`; `chat()` returns `result.clarification` when the service interrupts an ambiguous request |
 | **0.7.1** | 2026-08-03 | ConversationClient inline mode: `prompt` + `skills` params (inject MCP/HTTP tools e.g. RAG), `agentId` now optional; Gateway forwards `X-Llm-Api-Key` |
-| **0.7.0** | 2026-08-01 | **ConversationClient** (`@agentxv2/sdk/conversation`) — remote Conversation Service client: SSE streaming via Gateway, auto `X-Api-Key` / `X-End-User-Id` / `X-Llm-Api-Key`; Gateway Agent-as-MCP `tools/call` now executes skills directly (no LLM second-pass) |
+| **0.7.0** | 2026-08-01 | **ConversationClient** (`@actora/sdk/conversation`) — remote Conversation Service client: SSE streaming via Gateway, auto `X-Api-Key` / `X-End-User-Id` / `X-Llm-Api-Key`; Gateway Agent-as-MCP `tools/call` now executes skills directly (no LLM second-pass) |
 | **0.6.9** | 2026-08-01 | Microservice Agent Conversation — 6-Phase Optimization: Conversation Service (Memory + Context + Sandbox), Observability (TraceEmitter), Skills Marketplace, Agent-as-MCP Export, Browser Control Skill, 3 new sub-path exports (memory/traces/skills) |
 | **0.6.8** | 2026-07-28 | Fixed import paths in platform-tools (definitions.ts, executor.ts, index.ts) after module split; Frontend: 3 God Components modularized (AgentCardManager→5 files, AgentRegistration→4 files, RevenueDisplay→5 files) |
 | **0.6.7** | 2026-07-27 | Code review: 22 fixes across contracts/gateway/frontend/sdk; Redis-backed auth; unified error handler; i18n agent dashboard; barrel exports; custom errors in SubscriptionManager; ValidationRegistry interface fix; TokenPriceOracle de-hardcoded |

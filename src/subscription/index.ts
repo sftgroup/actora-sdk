@@ -1,4 +1,4 @@
-// @agentx/sdk — Subscription module v2
+// @actora/sdk — Subscription module v2
 export { SubscriptionManager, guardSubscription, ZERO_ADDRESS, SUBSCRIPTION_PERIODS } from './subscription'
 export type {
   SubscriptionConfig,
@@ -9,6 +9,6 @@ export type {
   CreatePlanResult,
   SubscribeResult,
 } from './subscription'
-export { AgentX402 } from './agent-x402'
-export type { AgentX402Config } from './agent-x402'
+export { Actora402 } from './agent-x402'
+export type { Actora402Config } from './agent-x402'
 export const SUBSCRIPTION_VERSION = '0.3.0'

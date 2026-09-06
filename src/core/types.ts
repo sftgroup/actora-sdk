@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Core Type Definitions
+// @actora/sdk — Core Type Definitions
 // ---------------------------------------------------------------------------
 // Agent = Prompt + Skills[] + MCP
 // All crypto-related "wire" fields (encryptedPayloadCid, eciesEncryptedKey)
@@ -51,7 +51,7 @@ export interface SkillDef {
    * - { type: "mcp", toolName: "..." }: Source lives on the publisher's
    *     MCP server.  Subscriber only gets Schema + remote execution endpoint.
    *     MCP server verifies on-chain subscription on every call.
-   * - { type: "a2a", targetAgentId: 42 }: Delegates to another AgentX Agent.
+   * - { type: "a2a", targetAgentId: 42 }: Delegates to another Actora Agent.
    *     The caller's AgentRunner loads + decrypts the target Agent, injects
    *     its prompt into the LLM context, and exposes its skills as callable
    *     tools.  This is the core Agent Composition primitive.
@@ -71,7 +71,7 @@ export interface SkillExecutionRemote {
 }
 
 /**
- * A2A Skill Execution — delegate to another AgentX Agent.
+ * A2A Skill Execution — delegate to another Actora Agent.
  *
  * Example: A "trading" Agent has a skill:
  *   execution: { type: "a2a", targetAgentId: 42 }
@@ -321,15 +321,15 @@ export interface AgentReview {
   timestamp: number
 }
 
-// ── AgentX Client Configuration ────────────────────────────────────────────
+// ── Actora Client Configuration ────────────────────────────────────────────
 
-export interface AgentXConfig {
+export interface ActoraConfig {
   /** Chain ID (e.g. 11155111 for Sepolia) */
   chainId: number
   /** RPC endpoint override (uses viem's default if omitted) */
   rpcUrl?: string
   /** Contract addresses for the current chain */
-  contracts: AgentXContracts
+  contracts: ActoraContracts
   /** IPFS gateway URLs (ordered by priority) */
   ipfsGateways: string[]
   /** Default IPFS pinning service */
@@ -337,7 +337,7 @@ export interface AgentXConfig {
   pinataJwt?: string
 }
 
-export interface AgentXContracts {
+export interface ActoraContracts {
   identityRegistry: `0x${string}`
   subscriptionManager: `0x${string}`
   a2aProtocolRegistry: `0x${string}`
@@ -369,7 +369,7 @@ export interface UnpackResult {
 
 // ── Error Types ────────────────────────────────────────────────────────────
 
-export enum AgentXErrorCode {
+export enum ActoraErrorCode {
   NOT_SUBSCRIBED = 'NOT_SUBSCRIBED',
   SUBSCRIPTION_EXPIRED = 'SUBSCRIPTION_EXPIRED',
   DECRYPTION_FAILED = 'DECRYPTION_FAILED',
@@ -380,14 +380,14 @@ export enum AgentXErrorCode {
   WALLET_NOT_CONNECTED = 'WALLET_NOT_CONNECTED',
 }
 
-export class AgentXError extends Error {
-  code: AgentXErrorCode
+export class ActoraError extends Error {
+  code: ActoraErrorCode
   /** If NOT_SUBSCRIBED, carry enough info for wallet/X402 auto-payment */
   paymentInfo?: SubscriptionRequired
-  constructor(code: AgentXErrorCode, message: string) {
+  constructor(code: ActoraErrorCode, message: string) {
     super(message)
     this.code = code
-    this.name = 'AgentXError'
+    this.name = 'ActoraError'
   }
 }
 

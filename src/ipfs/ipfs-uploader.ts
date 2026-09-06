@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — IPFS Uploader
+// @actora/sdk — IPFS Uploader
 // ---------------------------------------------------------------------------
 // Lightweight IPFS upload via Pinata REST API (JWT auth) or custom endpoint.
 // Zero extra deps — works in browser, Node, edge with native fetch.
@@ -56,7 +56,7 @@ export class IPFSUploader {
     this.gatewayUrl = config.gatewayUrl ?? 'https://ipfs.io'
     this.timeoutMs = config.timeoutMs ?? 30_000
     this.pinataGroupId = config.pinataGroupId ?? null
-    this.namePrefix = config.namePrefix ?? 'agentx-'
+    this.namePrefix = config.namePrefix ?? 'actora-'
   }
 
   isConfigured(): boolean {
@@ -127,7 +127,7 @@ export class IPFSUploader {
     return this._doFetch(endpoint, formData)
   }
 
-  // ── Encrypted Payload Upload (AgentX specific) ────────────────────────
+  // ── Encrypted Payload Upload (Actora specific) ────────────────────────
 
   /**
    * Upload an encrypted agent payload to IPFS.

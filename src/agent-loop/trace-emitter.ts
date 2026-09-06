@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Loop Trace Emitter
+// @actora/sdk — Loop Trace Emitter
 // ---------------------------------------------------------------------------
 // Fire-and-forget structured observability for AgentLoop.
 // Extracted from AgentLoop for decoupling.

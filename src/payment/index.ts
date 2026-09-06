@@ -1,4 +1,4 @@
-// @agentx/sdk — Payment module (three-rail subscription payments + generic clients)
+// @actora/sdk — Payment module (three-rail subscription payments + generic clients)
 export { SubscriptionPayments } from './payments'
 export type {
   SubscriptionPaymentMethod,
@@ -19,12 +19,12 @@ export type {
 } from './tenant-plan'
 
 // v0.9.3: the generic engine (@0xinfrax/payments) adds MPP payment channels,
-// stablecoin (EIP-3009 / Permit2), period authorization and a2a-pay. AgentX
+// stablecoin (EIP-3009 / Permit2), period authorization and a2a-pay. Actora
 // re-exports the protocol-level clients so integrators can drive those rails
 // directly; the business semantics stay in `@0xinfrax/payments` metadata.
 //
 // R17.5: @0xinfrax/payments@0.1.2 removed the a2a and period rails from the
-// generic engine, so AgentX self-hosted both (services/payments-a2a-period.ts).
+// generic engine, so Actora self-hosted both (services/payments-a2a-period.ts).
 // R17.6: @0xinfrax/payments@0.1.3 restored both rails inside the engine. The
 // gateway now delegates to the module rails while keeping the HTTP contract
 // identical, so A2AClient / PeriodClient keep their public signatures and

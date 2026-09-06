@@ -1,3 +1,3 @@
-// @agentx/sdk — Core module
+// @actora/sdk — Core module
 export * from './types'
 export * from './crypto'

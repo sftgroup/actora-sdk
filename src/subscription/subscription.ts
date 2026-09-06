@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Subscription Manager v2
+// @actora/sdk — Subscription Manager v2
 // ---------------------------------------------------------------------------
 // Wraps SubscriptionManager v2 contract (escrow, platform fee, multi-currency).
 // Uses viem PublicClient / WalletClient (chain-agnostic).

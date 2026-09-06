@@ -83,13 +83,13 @@ describe('CentralAgentClient', () => {
   const bodyOf = (call: unknown[]) => JSON.parse((call as [string, RequestInit])[1]?.body as string)
 
   it('create() sends POST with tenant X-Api-Key header', async () => {
-    const client = new CentralAgentClient({ baseUrl: 'https://gw.example.com/', apiKey: 'agentx_sk_test' })
+    const client = new CentralAgentClient({ baseUrl: 'https://gw.example.com/', apiKey: 'actora_sk_test' })
     fetchMock.mockResolvedValue(jsonResponse({ agent: { id: -4, name: 'Quant Bot', source: 'central' } }, 201))
     await client.create({ name: 'Quant Bot', description: 'x', category: 'finance', capabilities: ['chat'], skills: ['analysis'], tags: ['quant'] })
     const { url, method, headers } = firstCall(fetchMock.mock.calls[0]!)
     expect(url).toBe('https://gw.example.com/api/v1/agents/central')
     expect(method).toBe('POST')
-    expect(headers['X-Api-Key']).toBe('agentx_sk_test')
+    expect(headers['X-Api-Key']).toBe('actora_sk_test')
     expect(headers['Authorization']).toBeUndefined()
     expect(bodyOf(fetchMock.mock.calls[0]!)).toEqual({ name: 'Quant Bot', description: 'x', category: 'finance', capabilities: ['chat'], skills: ['analysis'], tags: ['quant'] })
   })
@@ -103,13 +103,13 @@ describe('CentralAgentClient', () => {
   })
 
   it('listMine() GETs /central/mine with auth header', async () => {
-    const client = new CentralAgentClient({ baseUrl: 'https://gw.example.com/', apiKey: 'agentx_sk_test' })
+    const client = new CentralAgentClient({ baseUrl: 'https://gw.example.com/', apiKey: 'actora_sk_test' })
     fetchMock.mockResolvedValue(jsonResponse({ agents: [{ id: -4, subscriptionPlans: [] }] }))
     const res = await client.listMine()
     const { url, method, headers } = firstCall(fetchMock.mock.calls[0]!)
     expect(url).toBe('https://gw.example.com/api/v1/agents/central/mine')
     expect(method).toBe('GET')
-    expect(headers['X-Api-Key']).toBe('agentx_sk_test')
+    expect(headers['X-Api-Key']).toBe('actora_sk_test')
     expect(res.agents[0]?.id).toBe(-4)
   })
 

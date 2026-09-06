@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — IPFS Fetcher
+// @actora/sdk — IPFS Fetcher
 // ---------------------------------------------------------------------------
 // Multi-gateway IPFS fetcher with in-memory cache, deduplication, and
 // automatic fallback.  Compatible with the EncryptedPayload wire format.

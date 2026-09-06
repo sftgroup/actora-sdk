@@ -1,7 +1,7 @@
 interface ConversationClientConfig {
-    /** Gateway base URL, e.g. https://agentx.0xainet.top */
+    /** Gateway base URL, e.g. https://actora.codes */
     gatewayUrl: string;
-    /** Tenant API Key (agentx_...) issued after registration (alternative to accessToken) */
+    /** Tenant API Key (actora_...) issued after registration (alternative to accessToken) */
     apiKey?: string;
     /** Gateway JWT access token from wallet-signed login (alternative to apiKey) */
     accessToken?: string;
@@ -30,7 +30,7 @@ interface ConversationSkillDef {
     };
 }
 interface ConversationChatParams {
-    /** AgentX agent id (omit when using inline prompt/skills mode) */
+    /** Actora agent id (omit when using inline prompt/skills mode) */
     agentId?: number;
     message: string;
     /** Full conversation history — caller is responsible for per-end-user isolation */
@@ -83,7 +83,7 @@ interface ConversationSSEEvent {
     };
     iterations?: number;
     /** Billing source of the LLM that produced this run (emitted on `done`).
-     *  'byok' → caller's own key (not metered); 'platform' → AgentX key (metered
+     *  'byok' → caller's own key (not metered); 'platform' → Actora key (metered
      *  against the tenant's plan quota). Observability only — metering is server-side. */
     llmSource?: 'byok' | 'platform';
 }
@@ -126,7 +126,7 @@ interface ConversationTask {
 }
 interface ConversationCreateTaskParams {
     sessionId: string;
-    /** AgentX agent id (omit when using inline prompt/skills mode) */
+    /** Actora agent id (omit when using inline prompt/skills mode) */
     agentId?: number;
     message: string;
     enableMemory?: boolean;

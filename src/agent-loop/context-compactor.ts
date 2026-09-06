@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Context Compactor
+// @actora/sdk — Context Compactor
 // ---------------------------------------------------------------------------
 // Token estimation + LLM-based message summarization.
 // Extracted from AgentLoop for decoupling.

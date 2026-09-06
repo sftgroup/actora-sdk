@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Crypto Engine
+// @actora/sdk — Crypto Engine
 // ---------------------------------------------------------------------------
 // AES-256-GCM for content encryption (NIST standard wire format).
 // ECIES (secp256k1) for key wrapping.

@@ -16,7 +16,7 @@ var IPFSUploader = class _IPFSUploader {
     this.gatewayUrl = config.gatewayUrl ?? "https://ipfs.io";
     this.timeoutMs = config.timeoutMs ?? 3e4;
     this.pinataGroupId = config.pinataGroupId ?? null;
-    this.namePrefix = config.namePrefix ?? "agentx-";
+    this.namePrefix = config.namePrefix ?? "actora-";
   }
   isConfigured() {
     if (this.customEndpoint) return true;
@@ -61,7 +61,7 @@ var IPFSUploader = class _IPFSUploader {
     formData.append("pinataMetadata", metadata);
     return this._doFetch(endpoint, formData);
   }
-  // ── Encrypted Payload Upload (AgentX specific) ────────────────────────
+  // ── Encrypted Payload Upload (Actora specific) ────────────────────────
   /**
    * Upload an encrypted agent payload to IPFS.
    * This is the primary method used by Agent Studio publish flow.

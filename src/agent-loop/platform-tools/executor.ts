@@ -12,7 +12,7 @@ export async function executePlatformTool(
   try {
     switch (toolName) {
       // ── Identity ──────────────────────────────────
-      case 'agentx_identity_register': {
+      case 'actora_identity_register': {
         const { tokenURI, encryptedPayloadCid, eciesEncryptedKey, aesKeyHex } = args as any
         const metadata = [
           { key: 'encryptedPayloadCid', value: encryptedPayloadCid },
@@ -21,77 +21,77 @@ export async function executePlatformTool(
         if (aesKeyHex) metadata.push({ key: 'aesKeyHex', value: aesKeyHex })
         return ctx.agentRegistry.register(tokenURI, metadata)
       }
-      case 'agentx_identity_get':
+      case 'actora_identity_get':
         return {
           tokenURI: await ctx.agentRegistry.tokenURI(args.agentId as number),
           attributes: await ctx.agentRegistry.getAttributes(args.agentId as number),
           exists: await ctx.agentRegistry.agentExists(args.agentId as number),
         }
-      case 'agentx_identity_list':
+      case 'actora_identity_list':
         return ctx.agentRegistry.getAgentsByOwner((args.ownerAddress ?? ctx.userAddress) as `0x${string}`)
-      case 'agentx_identity_exists':
+      case 'actora_identity_exists':
         return ctx.agentRegistry.agentExists(args.agentId as number)
-      case 'agentx_identity_total_count':
+      case 'actora_identity_total_count':
         return { totalAgents: await ctx.agentRegistry.getCurrentAgentId() }
 
       // ── Subscription ──────────────────────────────
-      case 'agentx_subscription_plans':
+      case 'actora_subscription_plans':
         return ctx.subscriptionManager.getPlan(args.planId as number)
-      case 'agentx_subscription_check':
+      case 'actora_subscription_check':
         return ctx.subscriptionManager.hasActiveSubscription(
           (args.subscriberAddress ?? ctx.userAddress) as `0x${string}`,
           args.agentId as number
         )
-      case 'agentx_subscription_detail':
+      case 'actora_subscription_detail':
         return ctx.subscriptionManager.getSubscriptionDetail(args.subscriptionId as number)
-      case 'agentx_subscription_my_list':
+      case 'actora_subscription_my_list':
         return ctx.subscriptionManager.getUserSubscriptions(ctx.userAddress as `0x${string}`)
-      case 'agentx_subscription_subscribe': {
+      case 'actora_subscription_subscribe': {
         const valueWei = args.valueWei ? BigInt(args.valueWei as string) : undefined
         return ctx.subscriptionManager.subscribe(args.planId as number, { valueWei })
       }
-      case 'agentx_subscription_cancel':
+      case 'actora_subscription_cancel':
         return ctx.subscriptionManager.cancel(args.subscriptionId as number)
-      case 'agentx_subscription_release':
+      case 'actora_subscription_release':
         return ctx.subscriptionManager.releaseFunds(args.subscriptionId as number)
-      case 'agentx_subscription_fee':
+      case 'actora_subscription_fee':
         return { platformFeeBps: await ctx.subscriptionManager.getPlatformFeeBps() }
 
       // ── A2A ───────────────────────────────────────
-      case 'agentx_a2a_create_task':
+      case 'actora_a2a_create_task':
         return ctx.a2a.createTask(
           args.targetAgentId as number,
           args.taskType as string,
           typeof args.inputData === 'string' ? JSON.parse(args.inputData as string) : args.inputData as Record<string, unknown>
         )
-      case 'agentx_a2a_get_task':
+      case 'actora_a2a_get_task':
         return ctx.a2a.getTask(args.taskId as number)
-      case 'agentx_a2a_complete_task':
+      case 'actora_a2a_complete_task':
         return ctx.a2a.completeTask(args.taskId as number, args.outputData as string)
-      case 'agentx_a2a_my_tasks':
+      case 'actora_a2a_my_tasks':
         return ctx.a2a.getUserTasks(ctx.userAddress as `0x${string}`)
-      case 'agentx_a2a_agent_card':
+      case 'actora_a2a_agent_card':
         return ctx.a2a.getAgentCard(args.agentId as number)
 
       // ── Reputation ─────────────────────────────────
-      case 'agentx_reputation_rate':
+      case 'actora_reputation_rate':
         if (!ctx.reputationRegistry) throw new Error('ReputationRegistry not configured')
         return ctx.reputationRegistry.rateAgent(args.agentId as number, args.rating as number, (args.comment as string) ?? '')
-      case 'agentx_reputation_get':
+      case 'actora_reputation_get':
         if (!ctx.reputationRegistry) throw new Error('ReputationRegistry not configured')
         return ctx.reputationRegistry.getRating(args.agentId as number)
-      case 'agentx_reputation_reviews':
+      case 'actora_reputation_reviews':
         if (!ctx.reputationRegistry) throw new Error('ReputationRegistry not configured')
         return ctx.reputationRegistry.getReviews(args.agentId as number)
 
       // ── Configuration ──────────────────────────────
-      case 'agentx_config_get':
+      case 'actora_config_get':
         if (!ctx.configurationRegistry) throw new Error('ConfigurationRegistry not configured')
         return ctx.configurationRegistry.getConfig(args.agentId as number, args.configKey as string)
-      case 'agentx_config_list':
+      case 'actora_config_list':
         if (!ctx.configurationRegistry) throw new Error('ConfigurationRegistry not configured')
         return ctx.configurationRegistry.getAgentConfigs(args.agentId as number)
-      case 'agentx_config_set':
+      case 'actora_config_set':
         if (!ctx.configurationRegistry) throw new Error('ConfigurationRegistry not configured')
         return ctx.configurationRegistry.setConfig(
           args.agentId as number, args.key as string,
@@ -99,18 +99,18 @@ export async function executePlatformTool(
         )
 
       // ── MultiEndpoint ──────────────────────────────
-      case 'agentx_endpoint_list':
+      case 'actora_endpoint_list':
         if (!ctx.multiEndpointRegistry) throw new Error('MultiEndpointRegistry not configured')
         return ctx.multiEndpointRegistry.getAgentEndpoints(args.agentId as number)
-      case 'agentx_endpoint_active':
+      case 'actora_endpoint_active':
         if (!ctx.multiEndpointRegistry) throw new Error('MultiEndpointRegistry not configured')
         return ctx.multiEndpointRegistry.getActiveAgentEndpoints(args.agentId as number)
-      case 'agentx_endpoint_best_mcp':
+      case 'actora_endpoint_best_mcp':
         if (!ctx.multiEndpointRegistry) throw new Error('MultiEndpointRegistry not configured')
         return { mcpUrl: await ctx.multiEndpointRegistry.getBestMCPUrl(args.agentId as number) }
 
       // ── Gateway ────────────────────────────────────
-      case 'agentx_gateway_chat': {
+      case 'actora_gateway_chat': {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error('Gateway not configured')
         const body: Record<string, unknown> = {
           model: args.model ?? 'gpt-4o',
@@ -132,28 +132,28 @@ export async function executePlatformTool(
         })
         return res.json()
       }
-      case 'agentx_gateway_tenant_me': {
+      case 'actora_gateway_tenant_me': {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error('Gateway not configured')
         const res = await fetch(`${ctx.gatewayUrl}/api/v1/tenant/me`, {
           headers: { 'Authorization': `Bearer ${ctx.gatewayToken}` },
         })
         return res.json()
       }
-      case 'agentx_gateway_tenant_usage': {
+      case 'actora_gateway_tenant_usage': {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error('Gateway not configured')
         const res = await fetch(`${ctx.gatewayUrl}/api/v1/tenant/usage?days=${args.days ?? 30}`, {
           headers: { 'Authorization': `Bearer ${ctx.gatewayToken}` },
         })
         return res.json()
       }
-      case 'agentx_gateway_tenant_keys': {
+      case 'actora_gateway_tenant_keys': {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error('Gateway not configured')
         const res = await fetch(`${ctx.gatewayUrl}/api/v1/tenant/keys`, {
           headers: { 'Authorization': `Bearer ${ctx.gatewayToken}` },
         })
         return res.json()
       }
-      case 'agentx_gateway_models': {
+      case 'actora_gateway_models': {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error('Gateway not configured')
         const res = await fetch(`${ctx.gatewayUrl}/api/v1/models`, {
           headers: { 'Authorization': `Bearer ${ctx.gatewayToken}` },
@@ -162,13 +162,13 @@ export async function executePlatformTool(
       }
 
       // ── IPFS ───────────────────────────────────────
-      case 'agentx_ipfs_upload': {
+      case 'actora_ipfs_upload': {
         if (!ctx.ipfsUploader) throw new Error('IPFSUploader not configured')
         const data = typeof args.data === 'string' ? JSON.parse(args.data as string) : args.data
         const result = await ctx.ipfsUploader.uploadJSON(data, { name: args.name as string })
         return { cid: result.cid, url: result.url }
       }
-      case 'agentx_ipfs_upload_encrypted': {
+      case 'actora_ipfs_upload_encrypted': {
         if (!ctx.ipfsUploader) throw new Error('IPFSUploader not configured')
         const { generateAesKey, encryptPayload } = await import('../../core/crypto')
         const privatePayload = {
@@ -181,7 +181,7 @@ export async function executePlatformTool(
         const result = await ctx.ipfsUploader.uploadEncryptedPayload(encrypted, args.agentName as string)
         return { cid: result.cid, url: result.url, aesKeyHex: key }
       }
-      case 'agentx_ipfs_get_url': {
+      case 'actora_ipfs_get_url': {
         const gateway = (args.gateway as string) ?? 'https://ipfs.io'
         return { url: `${gateway}/ipfs/${args.cid}` }
       }

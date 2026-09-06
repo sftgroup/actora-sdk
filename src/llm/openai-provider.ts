@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — OpenAI Provider
+// @actora/sdk — OpenAI Provider
 // ---------------------------------------------------------------------------
 // Direct OpenAI-compatible chat completions with SSE streaming.
 // Supports: OpenAI, DeepSeek, and any /v1/chat/completions endpoint.

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Fact Extractor
+// @actora/sdk — Fact Extractor
 // ---------------------------------------------------------------------------
 // Extracts key facts from conversation for memory storage.
 // Uses a single cheap LLM call for summarization.

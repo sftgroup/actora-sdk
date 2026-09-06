@@ -273,14 +273,14 @@ var IPFSFetcher = class {
 var defaultIPFSFetcher = new IPFSFetcher();
 
 // src/core/types.ts
-var AgentXError = class extends Error {
+var ActoraError = class extends Error {
   code;
   /** If NOT_SUBSCRIBED, carry enough info for wallet/X402 auto-payment */
   paymentInfo;
   constructor(code, message) {
     super(message);
     this.code = code;
-    this.name = "AgentXError";
+    this.name = "ActoraError";
   }
 };
 
@@ -317,7 +317,7 @@ var AgentRunner = class {
     const address = await this.wallet.getAddress();
     const isActive = await this.reader.hasActiveSubscription(address, agentId);
     if (!isActive) {
-      const err = new AgentXError(
+      const err = new ActoraError(
         "NOT_SUBSCRIBED" /* NOT_SUBSCRIBED */,
         `No active subscription for Agent #${agentId}. Check error.paymentInfo for auto-subscribe via wallet/X402.`
       );
@@ -330,7 +330,7 @@ var AgentRunner = class {
     const encryptedPayloadCid = attrs.encryptedPayloadCid;
     const eciesEncryptedKey = attrs.eciesEncryptedKey;
     if (!encryptedPayloadCid || !eciesEncryptedKey) {
-      throw new AgentXError(
+      throw new ActoraError(
         "AGENT_NOT_FOUND" /* AGENT_NOT_FOUND */,
         `Agent #${agentId} metadata incomplete \u2014 missing encryptedPayloadCid or eciesEncryptedKey`
       );
@@ -339,7 +339,7 @@ var AgentRunner = class {
     try {
       encryptedPayload = await this.ipfs.fetchEncryptedPayload(encryptedPayloadCid);
     } catch (e) {
-      throw new AgentXError(
+      throw new ActoraError(
         "IPFS_FETCH_FAILED" /* IPFS_FETCH_FAILED */,
         `Failed to fetch encrypted payload for agent #${agentId}: ${e}`
       );
@@ -349,7 +349,7 @@ var AgentRunner = class {
       const privKey = await this._getPrivateKey();
       privatePayload = unpackAgent(encryptedPayload, eciesEncryptedKey, privKey);
     } catch (e) {
-      throw new AgentXError(
+      throw new ActoraError(
         "DECRYPTION_FAILED" /* DECRYPTION_FAILED */,
         `Failed to decrypt agent #${agentId}: ${e}`
       );
@@ -400,14 +400,14 @@ var AgentRunner = class {
           return this._executeA2ASkill(skill, input);
         };
       } else {
-        throw new AgentXError(
+        throw new ActoraError(
           "INVALID_SCHEMA" /* INVALID_SCHEMA */,
           `Unknown execution type "${skill.execution.type}" for skill "${skill.name}"`
         );
       }
     } else {
       executeFn = async () => {
-        throw new AgentXError(
+        throw new ActoraError(
           "INVALID_SCHEMA" /* INVALID_SCHEMA */,
           `Open skill "${skill.name}" has no local executor. Implement execute() or switch to execution.type = "mcp" or "a2a".`
         );
@@ -428,7 +428,7 @@ var AgentRunner = class {
   async _executeMCPTool(endpoint, toolName, params) {
     const address = await this.wallet.getAddress();
     const timestamp = Math.floor(Date.now() / 1e3);
-    const message = `agentx:mcp:${toolName}:${timestamp}`;
+    const message = `actora:mcp:${toolName}:${timestamp}`;
     const signature = await this.wallet.signMessage(message);
     const res = await fetch(endpoint, {
       method: "POST",
@@ -449,12 +449,12 @@ var AgentRunner = class {
     if (!res.ok) {
       const text = await res.text();
       if (res.status === 403) {
-        throw new AgentXError(
+        throw new ActoraError(
           "SUBSCRIPTION_EXPIRED" /* SUBSCRIPTION_EXPIRED */,
           `MCP server rejected request: subscription may have expired. ${text}`
         );
       }
-      throw new AgentXError(
+      throw new ActoraError(
         "TX_FAILED" /* TX_FAILED */,
         `MCP tool "${toolName}" failed (HTTP ${res.status}): ${text}`
       );
@@ -471,7 +471,7 @@ var AgentRunner = class {
     return data;
   }
   /**
-   * Execute an A2A skill — delegate to another AgentX Agent.
+   * Execute an A2A skill — delegate to another Actora Agent.
    *
    * Standard Interface:
    *   Input:  { task, ...taskSpecificParams }
@@ -484,7 +484,7 @@ var AgentRunner = class {
   async _executeA2ASkill(skill, input) {
     const exec = skill.execution;
     if (!exec || exec.type !== "a2a") {
-      throw new AgentXError(
+      throw new ActoraError(
         "INVALID_SCHEMA" /* INVALID_SCHEMA */,
         `Skill "${skill.name}" is not an A2A delegation skill`
       );
@@ -494,7 +494,7 @@ var AgentRunner = class {
     try {
       subContext = await this.useAgent(targetAgentId);
     } catch (e) {
-      throw new AgentXError(
+      throw new ActoraError(
         "AGENT_NOT_FOUND" /* AGENT_NOT_FOUND */,
         `A2A delegation failed: cannot load Agent #${targetAgentId}. ${e}`
       );
@@ -523,7 +523,7 @@ var AgentRunner = class {
   }
   async _getPrivateKey() {
     if (this.wallet.getPrivateKey) return this.wallet.getPrivateKey();
-    throw new AgentXError(
+    throw new ActoraError(
       "WALLET_NOT_CONNECTED" /* WALLET_NOT_CONNECTED */,
       "Wallet must support getPrivateKey() for ECIES decryption."
     );

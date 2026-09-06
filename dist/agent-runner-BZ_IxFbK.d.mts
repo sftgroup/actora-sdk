@@ -1,4 +1,4 @@
-import { E as EncryptedPayload, A as AgentPayload, P as PackResult } from './types-DJHPGJSX.js';
+import { E as EncryptedPayload, A as AgentPayload, P as PackResult } from './types-mZ3W6woU.mjs';
 
 interface IPFSFetcherConfig {
     /** Primary IPFS gateway (default: ipfs.io) */
@@ -146,7 +146,7 @@ declare class AgentRunner {
     /** Call a tool on the publisher's MCP server (Closed skill). */
     private _executeMCPTool;
     /**
-     * Execute an A2A skill — delegate to another AgentX Agent.
+     * Execute an A2A skill — delegate to another Actora Agent.
      *
      * Standard Interface:
      *   Input:  { task, ...taskSpecificParams }

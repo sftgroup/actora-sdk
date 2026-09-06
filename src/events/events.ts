@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — On-chain Event Listener
+// @actora/sdk — On-chain Event Listener
 // ---------------------------------------------------------------------------
 // Lightweight contract event subscription (Transfer / AgentRegistered on the
 // IdentityRegistry, PlanCreated / Subscribed on the SubscriptionManager).
@@ -34,10 +34,10 @@ const EVENT_ABI = {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type AgentXEventType = 'Transfer' | 'AgentRegistered' | 'PlanCreated' | 'Subscribed'
+export type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'PlanCreated' | 'Subscribed'
 
-export interface AgentXChainEvent {
-  type: AgentXEventType
+export interface ActoraChainEvent {
+  type: ActoraEventType
   args: Record<string, unknown>
   txHash: Hash
 }
@@ -47,8 +47,8 @@ export interface EventListenerOptions {
   identityRegistryAddress?: Address
   /** SubscriptionManager address (emits PlanCreated / Subscribed). */
   subscriptionManagerAddress?: Address
-  events: AgentXEventType[]
-  onEvent: (event: AgentXChainEvent) => void
+  events: ActoraEventType[]
+  onEvent: (event: ActoraChainEvent) => void
   /** Start listening from this block (default: latest). */
   fromBlock?: number
   /** Polling interval in ms (default: 4000). */
@@ -56,7 +56,7 @@ export interface EventListenerOptions {
 }
 
 // Which events each contract can emit.
-const CONTRACT_EVENTS: Record<'identityRegistryAddress' | 'subscriptionManagerAddress', readonly AgentXEventType[]> = {
+const CONTRACT_EVENTS: Record<'identityRegistryAddress' | 'subscriptionManagerAddress', readonly ActoraEventType[]> = {
   identityRegistryAddress: ['Transfer', 'AgentRegistered'],
   subscriptionManagerAddress: ['PlanCreated', 'Subscribed'],
 }
@@ -64,7 +64,7 @@ const CONTRACT_EVENTS: Record<'identityRegistryAddress' | 'subscriptionManagerAd
 // ── Listener ───────────────────────────────────────────────────────────────
 
 /**
- * Subscribe to AgentX contract events and receive a normalized callback.
+ * Subscribe to Actora contract events and receive a normalized callback.
  *
  * @returns A function that unsubscribes from all watched events.
  */

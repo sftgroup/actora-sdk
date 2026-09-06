@@ -21,7 +21,7 @@ describe('ConversationClient — parallel tasks (P8/P9)', () => {
   })
 
   const makeClient = (extra: Record<string, unknown> = {}) =>
-    new ConversationClient({ gatewayUrl: 'https://gw.example.com', apiKey: 'agentx_test', ...extra })
+    new ConversationClient({ gatewayUrl: 'https://gw.example.com', apiKey: 'actora_test', ...extra })
 
   /** Assert helper: pull method + headers + parsed body out of the first fetch call. */
   const firstCall = (call: unknown[]) => {
@@ -34,10 +34,10 @@ describe('ConversationClient — parallel tasks (P8/P9)', () => {
   describe('auth headers', () => {
     it('apiKey mode sends X-Api-Key (no Authorization)', async () => {
       fetchMock.mockResolvedValue(jsonResponse({ id: 's1', tenant: 't' }, 201))
-      const client = new ConversationClient({ gatewayUrl: 'https://gw.example.com', apiKey: 'agentx_123' })
+      const client = new ConversationClient({ gatewayUrl: 'https://gw.example.com', apiKey: 'actora_123' })
       await client.createSession({ title: 'x' })
       const { headers } = firstCall(fetchMock.mock.calls[0]!)
-      expect(headers['X-Api-Key']).toBe('agentx_123')
+      expect(headers['X-Api-Key']).toBe('actora_123')
       expect(headers['Authorization']).toBeUndefined()
     })
 
@@ -60,7 +60,7 @@ describe('ConversationClient — parallel tasks (P8/P9)', () => {
       fetchMock.mockResolvedValue(jsonResponse({ id: 's1', tenant: 't' }, 201))
       const client = new ConversationClient({
         gatewayUrl: 'https://gw.example.com',
-        apiKey: 'agentx_1',
+        apiKey: 'actora_1',
         endUserId: 'u-1',
         llmApiKey: 'sk-llm',
         llmEndpoint: 'https://api.deepseek.com/v1',

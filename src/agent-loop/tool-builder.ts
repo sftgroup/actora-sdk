@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — Tool Builder
+// @actora/sdk — Tool Builder
 // ---------------------------------------------------------------------------
-// Converts AgentX RunnableSkill[] into OpenAI function-calling Tool JSON.
+// Converts Actora RunnableSkill[] into OpenAI function-calling Tool JSON.
 //
 //   const tools = buildTools(ctx.skills)
 //   // → [{ type: "function", function: { name, description, parameters } }]

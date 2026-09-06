@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentxv2/sdk — AgentWalletConfig (t9, P2)
+// @actora/sdk — AgentWalletConfig (t9, P2)
 // ---------------------------------------------------------------------------
 // agent 自主钱包（InfraX MPC 钱包，Email 2-of-2 TSS）管理客户端。A2A 委派
 // 按次付费时，配置了自主钱包的 agent 由 gateway worker 自动代付（agent-payer
@@ -19,11 +19,11 @@
 
 /** AgentWalletConfig 客户端配置。 */
 export interface AgentWalletConfigOptions {
-  /** Gateway 地址（如 https://agentx.0xainet.top）。 */
+  /** Gateway 地址（如 https://actora.codes）。 */
   baseUrl: string
   /** Gateway ADMIN_KEY（admin 路由鉴权，平台全量）。与 apiKey 二选一。 */
   adminKey?: string
-  /** 租户 API Key（agentx_...，租户作用域，仅限自有 agent）。与 adminKey 二选一。 */
+  /** 租户 API Key（actora_...，租户作用域，仅限自有 agent）。与 adminKey 二选一。 */
   apiKey?: string
 }
 

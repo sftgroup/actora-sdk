@@ -1,23 +1,23 @@
 // ---------------------------------------------------------------------------
-// agentx-protocol — AgentX402: Auto-Subscription Gate
+// actora-protocol — Actora402: Auto-Subscription Gate
 // ---------------------------------------------------------------------------
 // Standardized error handling for wallet/X402 integration.
 //
-// AgentX does NOT implement X402 or wallet logic.
+// Actora does NOT implement X402 or wallet logic.
 // Instead, it provides a clean subscription guard with structured
 // error metadata so external payment layers can react.
 //
 // Flow:
 //   App/Agent → AgentRunner.useAgent(id)
 //     → NOT_SUBSCRIBED error + { agentId }
-//     → X402 + AgentX402.requireSubscription() checks plans
+//     → X402 + Actora402.requireSubscription() checks plans
 //     → Wallet/X402 layer: user/Agent approves + subscribes
 //     → App/Agent retries AgentRunner.useAgent(id)
 //     → ✅ success
 // ---------------------------------------------------------------------------
 
 import type { PublicClient, WalletClient, Address } from 'viem'
-import { AgentXError, AgentXErrorCode } from '../core/types'
+import { ActoraError, ActoraErrorCode } from '../core/types'
 import type { SubscriptionRequired } from '../core/types'
 import { ZERO_ADDRESS } from './subscription'
 
@@ -61,16 +61,16 @@ const hasActiveSubAbi = {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export interface AgentX402Config {
+export interface Actora402Config {
   subscriptionManagerAddress: Address
   publicClient: PublicClient
   walletClient: WalletClient
 }
 
-// ── AgentX402 ──────────────────────────────────────────────────────────────
+// ── Actora402 ──────────────────────────────────────────────────────────────
 
-export class AgentX402 {
-  constructor(private config: AgentX402Config) {}
+export class Actora402 {
+  constructor(private config: Actora402Config) {}
 
   /**
    * Require active subscription — or throw with auto-pay info.
@@ -79,7 +79,7 @@ export class AgentX402 {
    *   await x402.requireSubscription(agentId, address, { planIds: [1,2,3] })
    *
    * On success, returns silently.
-   * On failure, throws AgentXError with paymentInfo populated
+   * On failure, throws ActoraError with paymentInfo populated
    * so the caller can auto-pay via wallet/X402.
    */
   async requireSubscription(
@@ -129,11 +129,11 @@ export class AgentX402 {
       }
     }
 
-    const err = new AgentXError(
-      AgentXErrorCode.NOT_SUBSCRIBED,
+    const err = new ActoraError(
+      ActoraErrorCode.NOT_SUBSCRIBED,
       `No active subscription for Agent #${agentId}. Use error.paymentInfo for auto-subscribe via X402/wallet.`,
     )
-    ;(err as AgentXError & { paymentInfo: SubscriptionRequired }).paymentInfo = {
+    ;(err as ActoraError & { paymentInfo: SubscriptionRequired }).paymentInfo = {
       agentId,
       plans: plans.length > 0 ? plans : undefined,
     }

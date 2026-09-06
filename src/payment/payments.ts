@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — SubscriptionPayments: unified three-rail subscription payment
+// @actora/sdk — SubscriptionPayments: unified three-rail subscription payment
 // ---------------------------------------------------------------------------
-// A single entry point for subscribing across all AgentX payment rails:
+// A single entry point for subscribing across all Actora payment rails:
 //
 //   method: 'chain'  → on-chain SubscriptionManager (native / ERC20, escrow)
 //   method: 'fiat'   → unified payments endpoint (Stripe card, no wallet)
@@ -9,7 +9,7 @@
 //
 // 0.9.0: the fiat / x402 / access rails now talk to the generic
 // `@0xinfrax/payments` engine through the Gateway's unified endpoint
-// (/api/v1/payments) via PaymentsClient. AgentX subscription semantics
+// (/api/v1/payments) via PaymentsClient. Actora subscription semantics
 // (planId/agentId/subscription state) still live here — the generic module
 // never interprets them.
 // ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ export type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year'
 export type ChainKey = 'oxachain' | 'sepolia'
 
 export interface SubscriptionPaymentsConfig {
-  /** AgentX Gateway base URL (required for fiat / x402 rails). */
+  /** Actora Gateway base URL (required for fiat / x402 rails). */
   gatewayUrl?: string
   /** Optional gateway bearer token. */
   accessToken?: string
@@ -156,7 +156,7 @@ export class SubscriptionPayments {
       // on-chain plan price when omitted (FIAT_TOKEN_USD_PRICE on the Gateway).
       amountCents: input.amountCents,
       pricing: { planId: input.planId },
-      // AgentX business context rides in metadata (the unified endpoint reads
+      // Actora business context rides in metadata (the unified endpoint reads
       // it back out — the generic module never interprets it).
       metadata: { agentId: input.agentId, planId: input.planId },
       successUrl: input.successUrl,
@@ -181,7 +181,7 @@ export class SubscriptionPayments {
       txHash = await this._autoFundX402(input)
     }
 
-    // The x402 subscription is AgentX business (planId/agentId/txHash), so it
+    // The x402 subscription is Actora business (planId/agentId/txHash), so it
     // hits the unified endpoint with the full body — the generic client only
     // models rails, not subscription semantics.
     const data = await this._fetchJson<{ subscriptionId: number; creditedWei?: string }>('/api/v1/payments', {

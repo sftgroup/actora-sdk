@@ -1,4 +1,4 @@
-// @agentx/sdk — Agent module
+// @actora/sdk — Agent module
 export { AgentRunner } from './agent-runner'
 export type {
   AgentRunnerConfig,

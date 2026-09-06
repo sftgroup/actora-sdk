@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @agentx/sdk — LLM Provider Types
+// @actora/sdk — LLM Provider Types
 // ---------------------------------------------------------------------------
 
 export type { ChatRequest, ChatStreamEvent, LLMProvider } from '../agent-loop/types'
