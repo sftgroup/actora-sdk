@@ -821,6 +821,7 @@ const result = await payments.pay({
 
 - 所有读端点公开（无需鉴权）；**发布/管理**（v0.11.12）需 `apiKey`（owner=`partner-<slug>`，适合平台为市场建 Agent）或 `accessToken`（owner=注册用户钱包）。
 - 订阅付费走与链上 Agent 相同的 x402 通道，支付写入 `fiat_subscriptions` 后 `resolveAccess` 无感放行。
+- **前端发布交互（Studio，C-6）**：C 端 Studio 基础信息页以「链上发布 / 仅中心化」二选一卡片引导发布方式，选「仅中心化」可设默认订阅周期（day/week/month/year）。当前中心化发布为**两步交互**：首次点击「发布」先钱包签名换 `access_token`（提示「签名完成，请再次点击发布」），再次点击才真正提交。**交互建议**：合并为「签名后自动继续发布」、单次点击完成——纯前端体验优化，API 语义不变，集成方无需配合。
 
 ### A2A Delegated Tasks & Session Key Auto-pay (v0.11.8)
 
