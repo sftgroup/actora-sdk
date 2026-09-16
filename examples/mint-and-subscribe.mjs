@@ -13,19 +13,24 @@
  *      - PRIVATE_KEY  铸造/订阅钱包私钥（必填，0x 前缀可选）
  *      - CHAIN_ID     目标链 chainId，默认 8453（Base）。
  *                     可用：19505（OxaChain L1）/ 56（BSC）/ 1（Ethereum）/ 8453（Base）/ 11155111（Sepolia）
+ *      - PAY_TOKEN    可选，稳定币计价：'usdt' | 'usdc'（仅 BSC/Ethereum/Base）。
+ *                     不设则用原生币（BNB/ETH）计价。
  *   3. 链的 RPC / 合约地址自动从 KNOWN_CHAINS 读取（生产勿硬编码）。
  *      Sepolia 在 KNOWN_CHAINS 中无 rpcUrl，需在 config.ts 补充或改用其他链。
- *   4. 钱包需持有该链原生代币（支付 0.001 订阅费 + Gas）。
+ *   4. 钱包需持有该链原生代币（Gas）；
+ *      原生币计划额外需 0.001 原生币，稳定币计划需持有对应 USDT/USDC。
  *
  * 运行：node examples/mint-and-subscribe.mjs
+ *       PAY_TOKEN=usdc node examples/mint-and-subscribe.mjs
  */
-import { createPublicClient, createWalletClient, http, parseEther } from 'viem'
+import { createPublicClient, createWalletClient, http, parseEther, parseUnits } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { AgentRegistry, SubscriptionManager, KNOWN_CHAINS } from '@actora/sdk'
 
 // ── 配置 ──────────────────────────────────────────────────────────────
 const PRIVATE_KEY = process.env.PRIVATE_KEY
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 8453)
+const PAY_TOKEN = process.env.PAY_TOKEN?.toLowerCase() || ''
 
 const CHAIN_META = {
   19505: { name: 'OxaChain L1', symbol: 'OXA' },
@@ -33,6 +38,23 @@ const CHAIN_META = {
   1: { name: 'Ethereum', symbol: 'ETH' },
   8453: { name: 'Base', symbol: 'ETH' },
   11155111: { name: 'Sepolia', symbol: 'ETH' },
+}
+
+// 各链白名单稳定币（与链上 setTokenWhitelist 登记一致）。
+// 注意：BSC 上的 USDT/USDC 为 18 位，Ethereum/Base 为 6 位。
+const STABLECOINS = {
+  56: {
+    usdt: { symbol: 'USDT', address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18 },
+    usdc: { symbol: 'USDC', address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', decimals: 18 },
+  },
+  1: {
+    usdt: { symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6 },
+    usdc: { symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6 },
+  },
+  8453: {
+    usdt: { symbol: 'USDT', address: '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2', decimals: 6 },
+    usdc: { symbol: 'USDC', address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6 },
+  },
 }
 
 async function main() {
@@ -76,16 +98,24 @@ async function main() {
   console.log(`  txHash=${mintTx}`)
 
   // ── 3. 创建订阅计划 ──────────────────────────────────────────────────
-  console.log('\n[2/4] 创建订阅计划（period=month, price=0.001 ' + meta.symbol + '）')
+  // PAY_TOKEN 未设 → 原生币计划；设了 → 稳定币计划（payToken 传白名单地址）
+  const stable = PAY_TOKEN ? STABLECOINS[CHAIN_ID]?.[PAY_TOKEN] : null
+  if (PAY_TOKEN && !stable) {
+    throw new Error(`链 ${CHAIN_ID} 不支持 PAY_TOKEN=${PAY_TOKEN}（可用：usdt / usdc）`)
+  }
+  const priceLabel = stable ? `10 ${stable.symbol}` : `0.001 ${meta.symbol}`
+  console.log(`\n[2/4] 创建订阅计划（period=month, price=${priceLabel}）`)
   const { planId, txHash: planTx } = await sub.createPlan({
     agentId,
-    price: parseEther('0.001'),
+    price: stable ? parseUnits('10', stable.decimals) : parseEther('0.001'),
     period: 'month', // 'day' | 'week' | 'month' | 'year'
+    ...(stable ? { payToken: stable.address } : {}),
   })
   console.log(`  planId=${planId}`)
   console.log(`  txHash=${planTx}`)
 
   // ── 4. 订阅 ──────────────────────────────────────────────────────────
+  // 稳定币计划：SDK 自动按 plan.payToken 检测 ERC20，先 approve 再 subscribe
   console.log(`\n[3/4] 订阅（钱包 ${account.address}）`)
   const { subscriptionId, expiresAt } = await sub.subscribe(planId)
   console.log(`  subscriptionId=${subscriptionId}`)

@@ -1,4 +1,4 @@
-# @actora/sdk v0.15.2
+# @actora/sdk v0.15.3
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
@@ -36,6 +36,38 @@ Base 已开通全部 6 个核心合约（部署于 SM block 51401326），可直
 | MultiEndpointRegistry | `0xB8065829dBb450B8fC7375D910521EA641EC6Ee5` |
 
 > 程序化访问建议直接读 `KNOWN_CHAINS[8453].contracts`（六个字段同名），避免复制粘贴出错。
+
+### 白名单稳定币（USDT / USDC）
+
+BSC / Ethereum / Base 三链的 `SubscriptionManager` 已登记 USDT / USDC 白名单，计划可用稳定币定价（`createPlan` 的 `payToken` 传下表地址）：
+
+| 链 | 代币 | 地址 | 精度 |
+|----|------|------|------|
+| BSC | USDT | `0x55d398326f99059fF775485246999027B3197955` | 18 |
+| BSC | USDC | `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d` | 18 |
+| Ethereum | USDT | `0xdAC17F958D2ee523a2206206994597C13D831ec7` | 6 |
+| Ethereum | USDC | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` | 6 |
+| Base | USDT | `0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2` | 6 |
+| Base | USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 |
+
+**ERC20 计划要点**：
+
+- `price` 用代币最小单位（**注意 BSC 上的 USDT/USDC 是 18 位，ETH/Base 上是 6 位**，不要统一按 1e6 换算）；
+- 订阅方必须先 `approve(SubscriptionManager, price)`，再由 `subscribe(planId)` 完成订阅；SDK 的 `SubscriptionManager.subscribe` 会自动处理 approve（见 3.d）；
+- ERC20 计划的订阅交易 **不要带原生币**（合约要求 `msg.value == 0`），原生币只用于付 gas；
+- 非白名单 ERC20 会被合约 revert，新增币种需由合约 owner 调 `setTokenWhitelist(token, true)`。
+
+```ts
+import { parseUnits } from 'viem'
+
+// Base 上用 USDC 定价：9.9 USDC / 月
+const { planId } = await sub.createPlan({
+  agentId,
+  price: parseUnits('9.9', 6),                        // Base USDC 精度 6
+  period: 'month',
+  payToken: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+})
+```
 
 ### 链选择指引
 
@@ -124,7 +156,7 @@ const { agentId } = await registry.register('ipfs://Qm...', [
 
 ```ts
 import { SubscriptionManager } from '@actora/sdk'
-import { parseEther } from 'viem' // 价格单位工具来自 viem
+import { parseEther, parseUnits } from 'viem' // 价格单位工具来自 viem
 
 const sub = new SubscriptionManager({
   contractAddress: cfg.contracts.subscriptionManager,
@@ -132,12 +164,20 @@ const sub = new SubscriptionManager({
   walletClient,
 })
 
+// 原生币计划（OXA / BNB / ETH）
 const { planId, txHash } = await sub.createPlan({
   agentId,
-  price: parseEther('0.01'),          // 原生币 wei；ERC20 计划则填代币最小单位
+  price: parseEther('0.01'),          // 原生币 wei
   period: 'month',                     // 'day' | 'week' | 'month' | 'year'
-  // payToken: '0x...',                // 默认 address(0) = 原生币
   // trialDays: 3,                     // 0–30，默认 0
+})
+
+// 稳定币计划（USDT / USDC）—— payToken 传白名单地址，price 用代币最小单位
+const usdcPlan = await sub.createPlan({
+  agentId,
+  price: parseUnits('9.9', 6),                              // Base USDC 精度 6
+  period: 'month',
+  payToken: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
 })
 ```
 
@@ -240,7 +280,7 @@ function makeChainClients(chainId: number) {
 ### 价格单位
 
 - 原生币计划：`price` 为该链原生代币的 wei（OXA / BNB / ETH）；
-- ERC20 计划：`price` 为代币最小单位（如 USDT 的 1e6 分之一）；
+- ERC20 计划：`price` 为代币最小单位 —— **ETH/Base 的 USDT/USDC 是 6 位（1e6），BSC 的 USDT/USDC 是 18 位（1e18）**；
 - 跨链比较价格时统一用 `getPlan(planId).price` + `plan.payToken` 判断计价币种；
 - 中心化 Agent 的价格以 `priceWei` 字符串返回（见 `CentralPlan`），避免 JS 精度丢失。
 
@@ -491,6 +531,7 @@ aesDecrypt(c, '00'.repeat(32))            // 'hello'
 | 0.15.0 | **Base 开通**：Base 主网合约部署（SubscriptionManager block 51401326） |
 | 0.15.1 | **Base 地址修正**：按 `broadcast/DeployBase.s.sol/8453/run-latest.json` 的 contractName 映射修正 Base 合约地址（SubscriptionManager 修正为 `0x0f129e...`） |
 | 0.15.2 | **B 端接入文档/样例**：README 彻底重写（多链市场、接入全流程、模块参考、FAQ）；`examples/` 随包发布（`mint-and-subscribe` / `conversation-bend` / `central-agent-bend`） |
+| 0.15.3 | **USDT/USDC 计价**：BSC/ETH/Base 三链 `SubscriptionManager` 登记 USDT/USDC 白名单；README 补稳定币地址表、精度差异（BSC 18 / ETH·Base 6）与 ERC20 订阅要点；`mint-and-subscribe` 支持 `PAY_TOKEN=usdt/usdc` |
 
 ---
 
