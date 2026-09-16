@@ -22,6 +22,21 @@ Agent = Prompt + Skills + MCP
 
 > ⚠️ **地址来源**：上表全部取自 `KNOWN_CHAINS[chainId]`（`src/config/config.ts`）。**生产环境请优先从 `KNOWN_CHAINS[chainId].contracts.identityRegistry / subscriptionManager` 读取，避免硬编码**——合约地址可能随部署修正而更新。
 
+### Base 主网完整合约地址（chainId 8453）
+
+Base 已开通全部 6 个核心合约（部署于 SM block 51401326），可直接用于链上铸造 / 订阅 / A2A：
+
+| 合约 | 地址 |
+|------|------|
+| IdentityRegistry | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` |
+| SubscriptionManager | `0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29` |
+| A2AProtocolRegistry | `0x2172145F2A8f7A66019A4F4048Af46844243607E` |
+| ReputationRegistry | `0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e` |
+| ConfigurationRegistry | `0x5EF8c35738311B971A64de64487E1E304Ae53993` |
+| MultiEndpointRegistry | `0xB8065829dBb450B8fC7375D910521EA641EC6Ee5` |
+
+> 程序化访问建议直接读 `KNOWN_CHAINS[8453].contracts`（六个字段同名），避免复制粘贴出错。
+
 ### 链选择指引
 
 - **B 端优先 Base / Ethereum**：Gas 便宜或生态成熟，原生币即 ETH；
