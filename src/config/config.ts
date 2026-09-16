@@ -108,22 +108,19 @@ export const KNOWN_CHAINS: Record<number, ChainConfig> = {
     rpcUrl: 'https://bsc-rpc.publicnode.com',
   },
 
-  // ── Ethereum Mainnet / Base — 预留（合约未部署）──────────────────────
-  // ChainId 1 / 8453，天然 EVM 兼容。合约部署后把 PENDING_ADDRESS 替换为
-  // 真实地址并置 deployed: true，SDK 即可在对应链上铸造/订阅（wrapper 链无关）。
+  // ── Ethereum Mainnet — 已开通（2026-09-17 部署 DeployEthereum.s.sol，SM block 25992521）──
   1: {
     chainId: 1,
     contracts: {
-      identityRegistry: PENDING_ADDRESS,
-      subscriptionManager: PENDING_ADDRESS,
-      a2aProtocolRegistry: PENDING_ADDRESS,
-      reputationRegistry: PENDING_ADDRESS,
-      configurationRegistry: PENDING_ADDRESS,
-      multiEndpointRegistry: PENDING_ADDRESS,
+      identityRegistry: '0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e',
+      subscriptionManager: '0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE',
+      a2aProtocolRegistry: '0x09f6C8f9AE6CEf12C4a078c91aeb2EcCb7CbD012',
+      reputationRegistry: '0x72C1236bc425b1A6129b76400aE7b26c1fbFAeFE',
+      configurationRegistry: '0x2Bf6962301164A301e4fEC9036aB97edcBcE1bCa',
+      multiEndpointRegistry: '0xE93fbED3Df2a5D357856f2f2712B3c1Ebb8d026f',
     },
     ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
     rpcUrl: 'https://ethereum-rpc.publicnode.com',
-    deployed: false,
   },
   8453: {
     chainId: 8453,
