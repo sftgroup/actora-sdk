@@ -22,20 +22,30 @@ Agent = Prompt + Skills + MCP
 
 > ⚠️ **地址来源**：上表全部取自 `KNOWN_CHAINS[chainId]`（`src/config/config.ts`）。**生产环境请优先从 `KNOWN_CHAINS[chainId].contracts.identityRegistry / subscriptionManager` 读取，避免硬编码**——合约地址可能随部署修正而更新。
 
-### Base 主网完整合约地址（chainId 8453）
+### 各链完整合约地址（6 个核心合约）
 
-Base 已开通全部 6 个核心合约（部署于 SM block 51401326），可直接用于链上铸造 / 订阅 / A2A：
+4 条市场链（OxaChain / BSC / Ethereum / Base）均已部署全套 6 个合约，可直接用于链上铸造 / 订阅 / A2A。下表与 `KNOWN_CHAINS[chainId].contracts` 一一对应：
 
-| 合约 | 地址 |
-|------|------|
-| IdentityRegistry | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` |
-| SubscriptionManager | `0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29` |
-| A2AProtocolRegistry | `0x2172145F2A8f7A66019A4F4048Af46844243607E` |
-| ReputationRegistry | `0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e` |
-| ConfigurationRegistry | `0x5EF8c35738311B971A64de64487E1E304Ae53993` |
-| MultiEndpointRegistry | `0xB8065829dBb450B8fC7375D910521EA641EC6Ee5` |
+| 合约 | OxaChain (19505) | BSC (56) |
+|------|------------------|----------|
+| IdentityRegistry | `0xbf5F9db266c8c97E3334466C88597Eb758AfE212` | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` |
+| SubscriptionManager | `0x019AC9d945467478Dd371CDbD70cb2f325800E6B` | `0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b` |
+| A2AProtocolRegistry | `0x7F42a7dC4A0F3C107664C3750bE1B5B6fa6BEb86` | `0x842F0B9E85f5aBd9752B5ea20Cc888b94dBb5E16` |
+| ReputationRegistry | `0x6a18C2664E1b42063860d864b6448b824d7B843F` | `0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee` |
+| ConfigurationRegistry | `0x07280674ccc2898Fd038A9e3C22005CA83ffD2F8` | `0xd9B984cF591dc1C3663991e7D75c44C2bDE1a9BB` |
+| MultiEndpointRegistry | `0xB361d04F49000013FC131D3C59C41c8486C64f8c` | `0x80Bc36634693d7935109f5cdbc95E64a9c1bdA6a` |
 
-> 程序化访问建议直接读 `KNOWN_CHAINS[8453].contracts`（六个字段同名），避免复制粘贴出错。
+| 合约 | Ethereum (1) | Base (8453) |
+|------|---------------|-------------|
+| IdentityRegistry | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` |
+| SubscriptionManager | `0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE` | `0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29` |
+| A2AProtocolRegistry | `0x09f6C8f9AE6CEf12C4a078c91aeb2EcCb7CbD012` | `0x2172145F2A8f7A66019A4F4048Af46844243607E` |
+| ReputationRegistry | `0x72C1236bc425b1A6129b76400aE7b26c1fbFAeFE` | `0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e` |
+| ConfigurationRegistry | `0x2Bf6962301164A301e4fEC9036aB97edcBcE1bCa` | `0x5EF8c35738311B971A64de64487E1E304Ae53993` |
+| MultiEndpointRegistry | `0xE93fbED3Df2a5D357856f2f2712B3c1Ebb8d026f` | `0xB8065829dBb450B8fC7375D910521EA641EC6Ee5` |
+
+> 部署起始块（网关索引 `*_SYNC_FROM_BLOCK` 用）：BSC SM `122277574`、Ethereum SM `25992521`、Base SM `51401326`。
+> 程序化访问请直接读 `KNOWN_CHAINS[chainId].contracts`（六个字段同名），避免复制粘贴出错。
 
 ### 白名单稳定币（USDT / USDC）
 
@@ -53,7 +63,7 @@ BSC / Ethereum / Base 三链的 `SubscriptionManager` 已登记 USDT / USDC 白�
 **ERC20 计划要点**：
 
 - `price` 用代币最小单位（**注意 BSC 上的 USDT/USDC 是 18 位，ETH/Base 上是 6 位**，不要统一按 1e6 换算）；
-- 订阅方必须先 `approve(SubscriptionManager, price)`，再由 `subscribe(planId)` 完成订阅；SDK 的 `SubscriptionManager.subscribe` 会自动处理 approve（见 3.d）；
+- 订阅方必须先 `approve(SubscriptionManager, price)`，再由 `subscribe(planId)` 完成订阅；SDK 的 `SubscriptionManager.subscribe` 会自动处理 approve（见 3.e）；
 - ERC20 计划的订阅交易 **不要带原生币**（合约要求 `msg.value == 0`），原生币只用于付 gas；
 - 非白名单 ERC20 会被合约 revert，新增币种需由合约 owner 调 `setTokenWhitelist(token, true)`。
 
@@ -90,7 +100,7 @@ const { planId } = await sub.createPlan({
 ```bash
 npm install @actora/sdk
 # 或锁定版本
-npm install @actora/sdk@0.15.2
+npm install @actora/sdk@0.15.3
 ```
 
 > 包内含 `examples/`（B 端可运行样例），安装后可从 `node_modules/@actora/sdk/examples/` 查看。
@@ -111,7 +121,28 @@ npm install @actora/sdk@0.15.2
 
 完整可运行脚本见 `examples/mint-and-subscribe.mjs`。下面按步骤说明。
 
-### a. 连接钱包（viem）
+### a. 开户：注册 partner 租户，拿到 API Key
+
+B 端接入的第一步是**用钱包签名建一个 partner 租户**，网关会签发一把长期有效的租户 API Key（`actora_<hex>`）：
+
+```bash
+# 1) 取挑战
+curl -X POST https://actora.codes/api/v1/auth/challenge \
+  -H 'Content-Type: application/json' -d '{"address":"0xYourWallet"}'
+
+# 2) 用钱包对 challenge 做 EIP-191 签名，再调 verify（intent=partner）
+curl -X POST https://actora.codes/api/v1/auth/verify \
+  -H 'Content-Type: application/json' \
+  -d '{"address":"0xYourWallet","signature":"0x...","intent":"partner"}'
+# → { "token": "<jwt>", "tenant": {...}, "api_key": "actora_..." }   ← api_key 仅返回一次
+```
+
+- partner 租户初始**无套餐**：`quota_daily=0`、`rate_limit_rpm=5`、`max_concurrent=1`，**平台 LLM 不可用**；可先 BYOK，或购买平台档位（见 §8）。
+- 一个钱包只对应一个租户；已有租户再传 `intent='partner'` **不会改变其 kind**。
+- `api_key` 丢失只能轮换（`POST /api/v1/tenant/rotate-key`），**不能找回**。
+- 拿到 Key 后即可跳过后面的链上部分（b–d），直接使用 e/f 的订阅支付与托管对话能力。
+
+### b. 连接钱包（viem）
 
 ```ts
 import { createPublicClient, createWalletClient, http } from 'viem'
@@ -131,7 +162,7 @@ const publicClient = createPublicClient({ chain, transport: http(cfg.rpcUrl) })
 const walletClient = createWalletClient({ account, chain, transport: http(cfg.rpcUrl) })
 ```
 
-### b. 铸造 Agent（AgentRegistry）
+### c. 铸造 Agent（AgentRegistry）
 
 ```ts
 import { AgentRegistry } from '@actora/sdk'
@@ -152,7 +183,7 @@ const { agentId } = await registry.register('ipfs://Qm...', [
 ])
 ```
 
-### c. 创建订阅计划（SubscriptionManager）
+### d. 创建订阅计划（SubscriptionManager）
 
 ```ts
 import { SubscriptionManager } from '@actora/sdk'
@@ -181,7 +212,7 @@ const usdcPlan = await sub.createPlan({
 })
 ```
 
-### d. 订阅（SubscriptionManager.subscribe 或 SubscriptionPayments.pay）
+### e. 订阅（SubscriptionManager.subscribe 或 SubscriptionPayments.pay）
 
 链上原生币订阅（自动按 plan.price 支付；ERC20 计划自动 approve）：
 
@@ -226,7 +257,7 @@ const res3 = await payments3.pay({ method: 'x402', planId, agentId, subscriber: 
 // → { method: 'x402', subscriptionId, txHash, creditedWei }
 ```
 
-### e. 与 Agent 对话（ConversationClient）
+### f. 与 Agent 对话（ConversationClient）
 
 B 端只需 **tenant API Key（`actora_...`）**，无需钱包：
 
@@ -501,6 +532,14 @@ aesDecrypt(c, '00'.repeat(32))            // 'hello'
 
 > `ConversationClient` 必须二选一提供 `apiKey` 或 `accessToken`，否则构造后请求即抛错。
 
+### B 端开户后为什么调不通平台 LLM？
+
+partner 租户注册时**不带套餐**（`quota_daily=0`），平台模型列表为空。两条路：先配 BYOK（`POST /api/v1/tenant/keys`，不计额度），或购买平台档位（`GET /api/v1/tenant/plans` → `POST /api/v1/payments`，`purpose='tenant-plan'`）。详见 §3.a 与 §8。
+
+### 一个租户如何服务多个终端用户？
+
+服务端调用时带 `X-End-User-Id: 0x<用户钱包或业务 ID>`，网关会以该地址作为计费 / 订阅判定的 subject；若传 `0x` 钱包地址，还会额外做订阅代理鉴权（该钱包的订阅决定访问权）。见 §8.1 / §8.6。
+
 ### archive RPC 的坑
 
 - `eth_call`（读合约）与事件订阅用 publicnode 免费 RPC 即可；
@@ -521,7 +560,126 @@ aesDecrypt(c, '00'.repeat(32))            // 'hello'
 
 ---
 
-## 8. 版本记录
+## 8. 网关 REST API 参考（B 端接入面）
+
+SDK 是网关 REST API 的封装；需要自行实现 HTTP 客户端（Go / Java / Python 等）时，按本节对接即可。
+网关地址：`https://actora.codes`（生产）。平台侧运维视角的完整端点清单见仓库根目录 `DEPLOYMENT.md` §13。
+
+### 8.1 鉴权头
+
+| 头 | 取值 | 适用 |
+|----|------|------|
+| `X-Api-Key` | `actora_<32hex>` | **B 端主用**（租户级）。服务端存 SHA-256 摘要，旧租户回退明文校验 |
+| `Authorization` | `Bearer <jwt>` | 钱包签名登录（`POST /api/v1/auth/verify`）签发的 JWT，与 `X-Api-Key` 二选一 |
+| `X-End-User-Id` | `0x...` 或业务用户 ID | **代终端用户调用**：计费 / 订阅判定以该地址为 subject；`0x` 地址还会触发订阅代理鉴权 |
+| `X-Admin-Key` | `<ADMIN_KEY>` | 仅平台运维（`/api/v1/admin/*`），B 端不需要 |
+
+> `X-Api-Key` 缺失时请求会回落到 JWT 校验；两者都无 → 401。
+> MCP 端点（`/mcp`、`/mcp/agent/:id`）**只接受注册用户 JWT**，不接受 API Key，B 端需自行代理。
+
+BYOK（自带模型 Key）另用三个头逐请求覆盖：`X-LLM-Api-Key` / `X-LLM-Endpoint` / `X-LLM-Model`（`ConversationClient` 的 `llmApiKey` / `llmEndpoint` / `llmModel` 即写这三个头），此类调用 `llmSource='byok'`，**不计平台额度**。
+
+### 8.2 认证与租户
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/v1/auth/challenge?address=0x...` | 取登录挑战（nonce + 时间戳，5 分钟有效） |
+| `POST` | `/api/v1/auth/verify` | 提交签名换 JWT；带 `intent:'partner'` 时注册 B 端租户并**一次性**返回 `api_key` |
+| `GET` | `/api/v1/auth/api-key` | 取回明文 Key（**仅旧租户可用**；摘要化后的 Key 只在签发/轮换时返回） |
+| `GET` | `/api/v1/tenant/me` | 档位、`quota_daily` / `quota_used`、`rate_limit_rpm` / `max_concurrent` / `parallel_tasks`、`usage_today` |
+| `GET` | `/api/v1/tenant/usage?days=30` | 用量汇总（按 `key_source=platform\|byok`）+ 日粒度 timeline（`days` 1–365） |
+| `GET` | `/api/v1/tenant/plans` | 可购买平台档位（含 `price_wei`，由 `price_monthly` USD 折算） |
+| `POST` | `/api/v1/tenant/rotate-key` | 轮换 Key，旧 Key 立即失效，新 Key 仅返回一次 |
+| `GET`/`POST`/`DELETE` | `/api/v1/tenant/keys[/:keyId]` | BYOK Key 增删查（`api_key` 密文入库） |
+| `POST` | `/api/v1/tenant/keys/:keyId/validate` | BYOK Key 探活（请求 `<endpoint>/models`） |
+| `GET` | `/api/v1/models` | 可用模型：`platform`（按档位过滤，需平台 Key 存在）+ `tenant_owned`（BYOK） |
+
+### 8.3 市场与订阅
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/v1/agents` | 市场列表，支持 `?chain=oxachain\|bsc\|ethereum\|base`、分页 / 标签过滤 |
+| `GET` | `/api/v1/agents/:id` | 详情（默认 `chain IN ('oxachain','central')`；BSC/ETH/Base 需显式 `?chain=`） |
+| `GET` | `/api/v1/agents/check-subscription` | 校验订阅态（`subscriber` + `agentId`，可选 `chain`） |
+| `GET` | `/api/v1/chain/health?chain=bsc` | 链索引健康（`status: ok \| degraded \| pending`） |
+| `GET` | `/api/v1/chain/plans/:planId` · `/chain/total` · `/chain/agents` | 实时链上读（SDK 直读合约） |
+| `GET` | `/api/v1/agents/central` | 中心化 Agent 管理（需鉴权；`CentralAgentClient` 对应） |
+
+### 8.4 支付与计费
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/v1/payments` | **统一下单**。`purpose` = `agent-subscription`（默认）/ `tenant-plan` / `token-pack` / `a2a`；`method` = `chain` / `fiat` / `x402` / `mpp` |
+| `POST` | `/api/v1/payments/verify` | 校验链上交易并记账（`{ txHash, chain }`） |
+| `GET` | `/api/v1/payments/access` | 跨轨道访问检查（链上订阅 / x402 台账 / fiat 订阅） |
+| `GET` | `/api/v1/payments/info` · `/quote` | x402 发现信息（`priceWei` / `payTo` / `network`）与报价 |
+| `POST` | `/api/v1/payments/a2a` · `/a2a/settle` | A2A 按次付费两段式（create → settle） |
+| `POST` | `/api/v1/payments/period/authorize` · `/charge` · `GET /period/authorization` | 周期授权扣款（P4） |
+| `POST` | `/api/v1/payments/mpp/open` · `/voucher` · `/topup` · `/settle` · `/close` · `GET /mpp/session` | MPP 通道（按量结算） |
+| `GET` | `/api/v1/billing/balance` | 余额 / token 包余量 / Session Key 授权态（`BillingClient.getBalance`） |
+| `GET` | `/api/v1/billing/token-packs` | 加油包列表（5M/$9.9、20M/$29.9、100M/$99.9，30 天有效） |
+| `GET`/`POST` | `/api/v1/billing/agent-wallets` | agent 自主 MPC 钱包绑定 / 解锁 / 解绑（A2A 自动代付） |
+| `GET` | `/api/v1/x402/info` · `/balance` · `/paywall` | x402 支付发现与台账（公开 / 租户） |
+
+**`purpose` 与关键字段**：
+
+```jsonc
+// 1) 购买平台档位（partner 开通平台 LLM）
+POST /api/v1/payments
+{ "method": "chain", "purpose": "tenant-plan", "tenantPlanId": "<plans.id>",
+  "subscriber": "0xWallet", "chain": "oxachain", "txHash": "0x..." }
+
+// 2) 购买 token 加油包（超出日额度后自动消耗，先到期先用）
+{ "method": "chain", "purpose": "token-pack", "packId": "<pack id>",
+  "subscriber": "0xWallet", "chain": "oxachain", "txHash": "0x..." }
+
+// 3) 订阅链上 Agent（原生币 / ERC20）
+{ "method": "chain", "purpose": "agent-subscription",
+  "agentId": 1, "planId": 2, "subscriber": "0xWallet", "chain": "base", "txHash": "0x..." }
+```
+
+### 8.5 托管对话与任务
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/v1/agent/runs` | 执行 Agent（SSE 流式返回；`ConversationClient.chat/stream` 对应） |
+| `POST` | `/api/v1/chat/completions` | 平台 / BYOK LLM 直连对话（计费入口，OpenAI 兼容请求体） |
+| `POST` | `/api/v1/sessions` · `GET /api/v1/sessions/:id` | 会话管理 |
+| `POST` | `/api/v1/tasks` · `GET /api/v1/tasks/:id` · `POST /api/v1/tasks/:id/cancel` | 异步任务（`parallel_tasks` 关闭时返回 403 `PARALLEL_TASKS_DISABLED`） |
+| `POST` | `/api/v1/a2a/tasks/:id/resume` · `/retry` · `GET /a2a/task-result/:taskId` | A2A 委派任务续跑 / 重试 / 取结果 |
+| `GET` | `/api/v1/a2a/session-key/info` | Session Key 授权状态（`balanceReturnEnabled` 等） |
+| `POST` | `/api/v1/a2a/session-key/create` · `/revoke` | 创建 / 撤销 Session Key（自动代付） |
+
+### 8.6 计费与配额语义
+
+- **两条 Key 来源**：`platform`（平台 LLM，按 `quota_daily` 扣 token，超出后消耗 token 包）/ `byok`（自带 Key，不计费）；用量日志按 `key_source` 分组。
+- **额度耗尽**：返回 **402**（`QUOTA_EXHAUSTED`），Session Key 自动代付任务会被挂起为 `awaiting_payment`，24 小时内充值即可续跑。
+- **限流**：默认 partner `5 rpm` / 并发 `1`；购买档位后按档位生效。超限返回 **429**。
+- **`X-End-User-Id`**：同一把租户 API Key 可服务多个终端用户，计费与订阅判定按该地址归属，是 B 端「一次接入多用户」的标准做法。
+
+### 8.7 常见错误码
+
+| 状态 | 含义 | 处理建议 |
+|------|------|----------|
+| 401 | Key / JWT 缺失或失效 | 检查 `X-Api-Key`；若被轮换需换新 Key |
+| 402 | 额度耗尽 / 订阅过期 | 购档位或加油包；x402 任务等待充值 |
+| 403 | 租户被 suspend / 能力未开通 | 查 `GET /tenant/me` 的 `status`；`PARALLEL_TASKS_DISABLED` 时降级为 `chat()` |
+| 404 | 路径或资源不存在（含 Key 摘要不可读回） | 核对端点；Key 丢失只能轮换 |
+| 429 | 触发限流 | 指数退避重试 |
+| 503 | 链未开通 / 索引不可用 | 先调 `GET /api/v1/chain/health?chain=`，`pending` 表示该链未部署 |
+
+### 8.8 B 端上线检查清单
+
+1. `POST /api/v1/auth/verify`（`intent:'partner'`）建租户，**立即落库 `api_key`**；
+2. `GET /api/v1/tenant/me` 确认档位 / 限流；未购档位则先配 BYOK（`POST /api/v1/tenant/keys`）跑通链路；
+3. 需要平台 LLM → 购档位（`GET /tenant/plans` + `POST /api/v1/payments`，`purpose='tenant-plan'`）；
+4. 需要链上 Agent → 选链（`GET /api/v1/chain/health` 探活）→ 订阅（`SubscriptionManager` / `SubscriptionPayments`）；
+5. 服务端调用一律带 `X-Api-Key` + `X-End-User-Id`，并实现 401/402/429/503 的重试与降级；
+6. 监控 `GET /api/v1/tenant/usage` 与 `GET /api/v1/billing/balance`，避免线上断供。
+
+---
+
+## 9. 版本记录
 
 | 版本 | 要点 |
 |------|------|
