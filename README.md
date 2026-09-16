@@ -608,13 +608,17 @@ Subscriber uses Agent:
 
 ## Supported Chains
 
-| Network | Chain ID | RPC | Gas Token |
-|---------|----------|-----|-----------|
-| **OxaChain L1** | **19505** | `https://rpc-oxa.0xainet.top` | OXA |
-| **BNB Smart Chain (BSC)** | **56** | `https://bsc-rpc.publicnode.com` | BNB |
-| Sepolia (Testnet) | 11155111 | `https://ethereum-sepolia-rpc.publicnode.com` | ETH |
+| Network | Chain ID | RPC | Gas Token | Status |
+|---------|----------|-----|-----------|--------|
+| **OxaChain L1** | **19505** | `https://rpc-oxa.0xainet.top` | OXA | 已开通 |
+| **BNB Smart Chain (BSC)** | **56** | `https://bsc-rpc.publicnode.com` | BNB | 已开通 |
+| **Ethereum Mainnet** | **1** | `https://ethereum-rpc.publicnode.com` | ETH | 预留（合约未部署） |
+| **Base** | **8453** | `https://base-rpc.publicnode.com` | ETH | 预留（合约未部署） |
+| Sepolia (Testnet) | 11155111 | `https://ethereum-sepolia-rpc.publicnode.com` | ETH | 测试网 |
 
-> **多链**：`KNOWN_CHAINS`（按 chainId 索引）与 `ChainKey`（`'oxachain' | 'sepolia' | 'bsc'`）已覆盖上表全部网络。链上 wrapper（`SubscriptionManager` / `AgentRegistry`）通过 viem client + 合约地址工作，天然链无关 —— 用 `KNOWN_CHAINS[56].contracts` 取地址即可在 BSC 上铸造 / 订阅，链选择仅影响合约地址与 RPC，无需改调用代码。
+> **多链**：`KNOWN_CHAINS`（按 chainId 索引）与 `ChainKey`（`'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base'`）已覆盖上表全部网络。链上 wrapper（`SubscriptionManager` / `AgentRegistry`）通过 viem client + 合约地址工作，天然链无关 —— 用 `KNOWN_CHAINS[56].contracts` 取地址即可在 BSC 上铸造 / 订阅，链选择仅影响合约地址与 RPC，无需改调用代码。
+>
+> **预留链**：Ethereum（chainId 1）与 Base（8453）为预留条目 —— `KNOWN_CHAINS[1]` / `KNOWN_CHAINS[8453]` 已含 chainId/RPC，但 `deployed: false`、contracts 为占位地址。部署合约后替换为真实地址并置 `deployed: true` 即可开通，调用方可先检查 `KNOWN_CHAINS[chainId]?.deployed`。
 
 ```ts
 import { KNOWN_CHAINS, SubscriptionManager, AgentRegistry } from '@actora/sdk'

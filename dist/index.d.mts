@@ -16,7 +16,7 @@ export { BrowserAction, BrowserActionResult, executeBrowserAction, extractAccess
 export { A2ADelegatedTaskResult, A2A_STATUS, BillingBalance, ConversationChatParams, ConversationChatResult, ConversationClient, ConversationClientConfig, ConversationCreateSessionParams, ConversationCreateTaskParams, ConversationSSEEvent, ConversationSkillDef, ConversationTask, ConversationTaskError, ConversationTaskStatus, OnChainApprovalRequest, SessionKeyAuthStatus, SessionKeyInfo } from './conversation/index.mjs';
 import { ClientOptions, ChainKey as ChainKey$1 } from '@0xinfrax/payments';
 export { ClientOptions, MPPClient, PaymentsClient, X402Client } from '@0xinfrax/payments';
-export { C as ChainConfig, a as ConfigRegistryOpts, b as ConfigurationRegistry, K as KNOWN_CHAINS } from './config-BFeSR_GK.mjs';
+export { C as ChainConfig, a as ConfigRegistryOpts, b as ConfigurationRegistry, K as KNOWN_CHAINS } from './config-DOyidIlP.mjs';
 export { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 import 'events';
 
@@ -83,7 +83,7 @@ declare const SUBSCRIPTION_VERSION = "0.3.0";
 
 type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402';
 type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year';
-type ChainKey = 'oxachain' | 'sepolia' | 'bsc';
+type ChainKey = 'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base';
 interface SubscriptionPaymentsConfig {
     /** Actora Gateway base URL (required for fiat / x402 rails). */
     gatewayUrl?: string;

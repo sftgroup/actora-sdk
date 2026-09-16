@@ -12,6 +12,8 @@ interface ChainConfig {
     };
     ipfsGateways: string[];
     rpcUrl?: string;
+    /** 合约是否已部署（false = 预留条目，contracts 为占位地址，部署后填写并置 true）。 */
+    deployed?: boolean;
 }
 declare const KNOWN_CHAINS: Record<number, ChainConfig>;
 interface ConfigRegistryOpts {

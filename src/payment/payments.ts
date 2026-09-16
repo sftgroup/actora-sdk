@@ -21,7 +21,7 @@ import { SubscriptionManager } from '../subscription/subscription'
 
 export type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402'
 export type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year'
-export type ChainKey = 'oxachain' | 'sepolia' | 'bsc'
+export type ChainKey = 'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base'
 
 export interface SubscriptionPaymentsConfig {
   /** Actora Gateway base URL (required for fiat / x402 rails). */

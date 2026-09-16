@@ -47,7 +47,12 @@ export interface ChainConfig {
   }
   ipfsGateways: string[]
   rpcUrl?: string
+  /** 合约是否已部署（false = 预留条目，contracts 为占位地址，部署后填写并置 true）。 */
+  deployed?: boolean
 }
+
+/** 未部署链的占位合约地址（ETH/Base 预留在内）。 */
+const PENDING_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
 
 export const KNOWN_CHAINS: Record<number, ChainConfig> = {
   // Sepolia Testnet
@@ -101,6 +106,38 @@ export const KNOWN_CHAINS: Record<number, ChainConfig> = {
     },
     ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
     rpcUrl: 'https://bsc-rpc.publicnode.com',
+  },
+
+  // ── Ethereum Mainnet / Base — 预留（合约未部署）──────────────────────
+  // ChainId 1 / 8453，天然 EVM 兼容。合约部署后把 PENDING_ADDRESS 替换为
+  // 真实地址并置 deployed: true，SDK 即可在对应链上铸造/订阅（wrapper 链无关）。
+  1: {
+    chainId: 1,
+    contracts: {
+      identityRegistry: PENDING_ADDRESS,
+      subscriptionManager: PENDING_ADDRESS,
+      a2aProtocolRegistry: PENDING_ADDRESS,
+      reputationRegistry: PENDING_ADDRESS,
+      configurationRegistry: PENDING_ADDRESS,
+      multiEndpointRegistry: PENDING_ADDRESS,
+    },
+    ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
+    rpcUrl: 'https://ethereum-rpc.publicnode.com',
+    deployed: false,
+  },
+  8453: {
+    chainId: 8453,
+    contracts: {
+      identityRegistry: PENDING_ADDRESS,
+      subscriptionManager: PENDING_ADDRESS,
+      a2aProtocolRegistry: PENDING_ADDRESS,
+      reputationRegistry: PENDING_ADDRESS,
+      configurationRegistry: PENDING_ADDRESS,
+      multiEndpointRegistry: PENDING_ADDRESS,
+    },
+    ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
+    rpcUrl: 'https://base-rpc.publicnode.com',
+    deployed: false,
   },
 }
 
