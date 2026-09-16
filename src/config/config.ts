@@ -120,15 +120,17 @@ export const KNOWN_CHAINS: Record<number, ChainConfig> = {
     rpcUrl: 'https://ethereum-rpc.publicnode.com',
   },
   // ── Base — 已开通（2026-09-17 部署 DeployBase.s.sol，SM block 51401326）──
+  // 注：地址以 broadcast/DeployBase.s.sol/8453/run-latest.json 的 contractName 映射为准
+  // （2026-09-17 曾误按交易顺序分配地址，实际 SM=0x0f129e... 已修正）
   8453: {
     chainId: 8453,
     contracts: {
       identityRegistry: '0x37f3919D64d648ddF70747e159fd9A1c6890CA3b',
-      subscriptionManager: '0x2172145F2A8f7A66019A4F4048Af46844243607E',
-      a2aProtocolRegistry: '0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e',
-      reputationRegistry: '0x5EF8c35738311B971A64de64487E1E304Ae53993',
-      configurationRegistry: '0xB8065829dBb450B8fC7375D910521EA641EC6Ee5',
-      multiEndpointRegistry: '0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29',
+      subscriptionManager: '0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29',
+      a2aProtocolRegistry: '0x2172145F2A8f7A66019A4F4048Af46844243607E',
+      reputationRegistry: '0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e',
+      configurationRegistry: '0x5EF8c35738311B971A64de64487E1E304Ae53993',
+      multiEndpointRegistry: '0xB8065829dBb450B8fC7375D910521EA641EC6Ee5',
     },
     ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
     rpcUrl: 'https://base-rpc.publicnode.com',
