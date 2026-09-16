@@ -531,7 +531,6 @@ var AgentRunner = class {
 };
 
 // src/config/config.ts
-var PENDING_ADDRESS = "0x0000000000000000000000000000000000000000";
 var KNOWN_CHAINS = {
   // Sepolia Testnet
   // v3 (deployed 2026-07-13): platformFee=250bps(2.5%), ReentrancyGuard, audit fixes
@@ -597,19 +596,19 @@ var KNOWN_CHAINS = {
     ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"],
     rpcUrl: "https://ethereum-rpc.publicnode.com"
   },
+  // ── Base — 已开通（2026-09-17 部署 DeployBase.s.sol，SM block 51401326）──
   8453: {
     chainId: 8453,
     contracts: {
-      identityRegistry: PENDING_ADDRESS,
-      subscriptionManager: PENDING_ADDRESS,
-      a2aProtocolRegistry: PENDING_ADDRESS,
-      reputationRegistry: PENDING_ADDRESS,
-      configurationRegistry: PENDING_ADDRESS,
-      multiEndpointRegistry: PENDING_ADDRESS
+      identityRegistry: "0x37f3919D64d648ddF70747e159fd9A1c6890CA3b",
+      subscriptionManager: "0x2172145F2A8f7A66019A4F4048Af46844243607E",
+      a2aProtocolRegistry: "0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e",
+      reputationRegistry: "0x5EF8c35738311B971A64de64487E1E304Ae53993",
+      configurationRegistry: "0xB8065829dBb450B8fC7375D910521EA641EC6Ee5",
+      multiEndpointRegistry: "0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29"
     },
     ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"],
-    rpcUrl: "https://base-rpc.publicnode.com",
-    deployed: false
+    rpcUrl: "https://base-rpc.publicnode.com"
   }
 };
 
