@@ -1,1007 +1,488 @@
-# @actora/sdk v0.11.13
+# @actora/sdk v0.15.2
 
-**Decentralized AI Agent Platform SDK** — E2E encryption, on-chain subscriptions, ReAct AgentLoop, multi-tenant LLM providers, A2A multi-agent interop (off-chain + user-wallet-signed on-chain rails), IPFS upload, MCP remote tools, chain-data batch query, hosted conversation sessions & parallel tasks, agent application categories, unified multi-rail payments.
+**去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
 ```
-Agent = Prompt + Skills[] + MCP
+Agent = Prompt + Skills + MCP
 ```
+
+一个 Agent 就是一枚链上 NFT：`Prompt`（系统提示词）+ `Skills`（可执行工具）+ `MCP`（远程工具连接），加密存放在 IPFS，通过 `AgentRegistry` 铸造、`SubscriptionManager` 订阅、`ConversationClient` 托管对话。B 端只需一个 `actora_...` API Key 即可接入，无需自建钱包基础设施。
 
 ---
 
-## Installation
+## 1. 支持的多链市场
 
-The current release **0.11.12** is built on the **0.10.0 complete feature release** (agent application categories, sessions & parallel tasks, streaming tool_call fix, typed `onchain_approval_required` SSE event, unified `/api/v1/payments` endpoint) — with the payment engine on the InfraX-maintained `@0xinfrax/payments` `^0.1.4`. R17.6: `0.1.3` restores the a2a / period rails inside the engine; `0.1.4` adds escrow passthrough / ERC20 deposit / structured 402 errors; the Actora Gateway delegates to the module rails while keeping the HTTP contract identical, so **B-side callers see zero change**. Since **0.11.5** (R19.3) the SDK also ships `TenantPlanPayments` — platform subscription-tier purchases (tenant plans) through the unified payments endpoint — since **0.11.6** the `BillingClient` for B-end balance pre-checks (R19.7 companion), since **0.11.7** the `AgentWalletConfig` — agent-owned MPC wallet management (bind an agent to an InfraX MPC wallet + email-code payment-session unlock) so A2A per-call fees auto-pay server-side, since **0.11.8** the **A2A Session Key auto-pay** surface — end-user wallet-authorized `x402-pay` session keys that auto-fund the per-call fee when the x402 ledger balance is short (see the "A2A Delegated Tasks & Session Key Auto-pay" section), and since **0.11.9** `AgentWalletConfig` gains a **tenant-scoped `apiKey` mode** — manage the MPC wallets of your *own* agents with a tenant API Key instead of the platform `ADMIN_KEY` (SK-1 permission delegation, dual-rail auth on `/api/v1/admin/agent-payers`). Since **0.11.10** `SubscriptionPayments.pay` gains optional `priceWei` — pay centralized-agent (negative-id) plans without reading the on-chain contract price; since **0.11.11** the SDK ships **`CentralAgentClient`** — read-only client for the centralized (off-chain) marketplace (`list` / `get` / `checkSubscription` / `mySubscriptions`); and since **0.11.12** `CentralAgentClient` gains **authenticated publish/management methods** (`create` / `listMine` / `update` / `activate` / `deactivate` / `createPlan` / `deactivatePlan`) with tenant `apiKey` or registered-user `accessToken`. Install and use:
+| 链 | chainId | IdentityRegistry | SubscriptionManager | 原生代币 | RPC |
+|----|---------|------------------|---------------------|----------|-----|
+| OxaChain L1 | 19505 | `0xbf5F9db266c8c97E3334466C88597Eb758AfE212` | `0x019AC9d945467478Dd371CDbD70cb2f325800E6B` | OXA | `https://rpc-oxa.0xainet.top` |
+| BSC | 56 | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` | `0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b` | BNB | `https://bsc-rpc.publicnode.com` |
+| Ethereum | 1 | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE` | ETH | `https://ethereum-rpc.publicnode.com` |
+| Base | 8453 | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` | `0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29` | ETH | `https://base-rpc.publicnode.com` |
+| Sepolia 测试网 | 11155111 | `0xe94ad380d3F8d08a7590eda0C84f354a93F96e5F` | `0xC15fE80b9d800abb72121F353a6ae6d6E9077E63` | ETH | 自备（Alchemy/Infura 等） |
+
+> ⚠️ **地址来源**：上表全部取自 `KNOWN_CHAINS[chainId]`（`src/config/config.ts`）。**生产环境请优先从 `KNOWN_CHAINS[chainId].contracts.identityRegistry / subscriptionManager` 读取，避免硬编码**——合约地址可能随部署修正而更新。
+
+### 链选择指引
+
+- **B 端优先 Base / Ethereum**：Gas 便宜或生态成熟，原生币即 ETH；
+- **测试联调用 Sepolia**：无真实资金风险；
+- **OxaChain L1 为主链**：平台默认支付/验证链（`SubscriptionPayments` 的 `chain` 参数默认 `'oxachain'`）；
+- 每链的 `SubscriptionManager` 独立托管各自链上的订阅计划与资金，**订阅与铸造必须在同一链上完成**（`agentId` 是链内 ID）。
+
+### RPC 注意事项
+
+- `eth_call` / 事件监听：publicnode 即可（上面 BSC/ETH/Base 的 RPC）；
+- `getTransactionReceipt`（archive 查询）在 publicnode 会 **403**，需换带 archive 的 RPC：
+  - BSC：`https://1rpc.io/bnb`
+  - Base：`https://mainnet.base.org`
+
+---
+
+## 2. 安装
 
 ```bash
-# latest (recommended) — 0.11.12
 npm install @actora/sdk
-
-# or pin the exact release
-npm install @actora/sdk@0.11.12
+# 或锁定版本
+npm install @actora/sdk@0.15.2
 ```
 
-### Peer Dependencies
+> 包内含 `examples/`（B 端可运行样例），安装后可从 `node_modules/@actora/sdk/examples/` 查看。
 
-| Package | Version | Required |
-|---------|---------|----------|
-| `react` | ^18 or ^19 | yes |
-| `wagmi` | ^2.0 | optional (React hooks only) |
-| `@tanstack/react-query` | ^5.0 | optional (React hooks only) |
-| `viem` | ^2.0 | optional (chain reader only) |
+### Peer Dependencies（均为 optional）
+
+| 包 | 版本 | 用途 |
+|----|------|------|
+| `react` | ^18 或 ^19 | React hooks（`@actora/sdk/react`） |
+| `wagmi` | ^2.0 | React hooks 内部 |
+| `@tanstack/react-query` | ^5.0 | React hooks 内部 |
+
+> **`viem`（^2.0）不是 peer dependency**：仅链上模块（`AgentRegistry` / `SubscriptionManager` / `A2AProtocol` 等）需要 viem 的 `PublicClient` / `WalletClient`，使用时请自行安装；纯 REST 客户端（`ConversationClient` / `CentralAgentClient` / `BillingClient` 等）完全不需要。仓库内可运行示例见 `examples/`（viem 已在 devDependencies 中）。
 
 ---
 
-## Quick Start
+## 3. 快速开始 —— B 端典型接入流程
 
-### 1. Use an Agent with AgentLoop (ReAct autonomous tool calling)
+完整可运行脚本见 `examples/mint-and-subscribe.mjs`。下面按步骤说明。
 
-```ts
-import { AgentRunner, AgentLoop, OpenAIProvider, GatewayProvider } from '@actora/sdk'
-
-const runner = new AgentRunner({ reader, wallet })
-const ctx = await runner.useAgent(42)
-
-// Mode A: Pure frontend — direct LLM API
-const provider = new OpenAIProvider({ apiKey: 'sk-...', model: 'gpt-4o' })
-
-// Mode B: SaaS multi-tenant — via Actora Gateway (API key never in browser)
-const provider = new GatewayProvider({
-  gatewayUrl: 'https://actora.codes',   // 生产域名；本地开发可填 http://localhost:3090
-  accessToken: 'jwt...',
-  keySource: 'platform',
-})
-
-const loop = new AgentLoop({
-  ctx,
-  llmProvider: provider,
-  maxIterations: 5,
-  contextBudget: 8000,           // NEW: auto-summarize when exceeding token budget
-  memory: { enabled: true },     // NEW: pgvector cross-session memory (default: disabled)
-  trace: { enabled: true },      // NEW: structured observability (default: disabled)
-  onTextDelta: (delta) => appendAssistantMessage(delta),
-  onToolCall: ({ name, arguments: args }) => showToolBubble(name, args),
-  onToolResult: ({ name, result }) => updateToolBubble(name, result),
-})
-
-await loop.run('Analyze this contract for vulnerabilities')
-```
-
-### 2. React Hook
-
-```tsx
-import { useAgentRunner } from '@actora/sdk/react'
-
-function ChatPage({ agentId }: { agentId: number }) {
-  const { ctx, isLoading, error } = useAgentRunner({ agentId })
-  if (isLoading) return <div>Loading...</div>
-  return <ChatInterface prompt={ctx!.prompt} skills={ctx!.skills} />
-}
-```
-
-### 3. Publish an Agent (IPFSUploader + publishAgent pipeline)
+### a. 连接钱包（viem）
 
 ```ts
-import { IPFSUploader, publishAgent } from '@actora/sdk'
+import { createPublicClient, createWalletClient, http } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { KNOWN_CHAINS } from '@actora/sdk'
 
-const uploader = new IPFSUploader({ pinataJwt: 'eyJ...' })
-
-const result = await publishAgent({
-  agent: {
-    name: 'Solidity Auditor',
-    description: 'AI agent that audits Solidity smart contracts',
-    version: '1.0.0',
-    tags: ['security', 'audit'],
-    category: 'security',               // v0.9.4: application category — see AGENT_CATEGORIES
-    capabilities: ['smart_contract_audit'],
-    supportedTasks: ['audit'],
-    communicationProtocol: 'mcp',
-    authenticationMethod: 'ecdsa',
-    pricing: { type: 'subscription', amount: '10', currency: '', period: 'month' },
-    prompt: 'You are an expert Solidity auditor...',
-    skills: [{ name: 'audit', description: 'Audit a contract', version: '1.0', inputSchema: {...} }],
-    mcp: { type: 'http', url: 'https://my-mcp.example.com/mcp' },
-  },
-  publicKey: '0x04abc...',
-  uploader,
-})
-
-// 3. Mint Agent NFT on-chain
-await registry.register(`ipfs://${result.publicCid}`, [
-  { key: 'encryptedPayloadCid', value: result.encryptedCid },
-  { key: 'eciesEncryptedKey', value: result.eciesEncryptedKeyHex },
-])
-```
-
-> **Application category (v0.9.4)** — publishing agents now takes a `category` field (one of `AGENT_CATEGORIES`: `operations` / `customer-service` / `sales` / `personal-assistant` / `coding` / `server-monitoring` / `airdrop` / `quant-trading` / `data-analysis` / `content` / `security` / `finance` / `other`). It is written into the public metadata + on-chain attrs and drives Marketplace category filtering. The Studio UI enforces it as required; SDK-level it is optional for backward compatibility (agents without it fall back to `other`). `getAllAgents()` / `getAgentMetadata()` return the resolved `category`.
-
----
-
-## Encryption & Decryption (Core)
-
-The SDK provides a full E2E encryption pipeline using AES-256-GCM + ECIES (secp256k1).
-
-### Low-Level Crypto
-
-```ts
-import {
-  aesEncrypt, aesDecrypt,
-  eciesEncrypt, eciesDecrypt,
-  generateAesKey, generateKeyPair,
-  randomBytes,
-} from '@actora/sdk/core'
-
-// Generate keys
-const keyPair = generateKeyPair()
-// → { privateKey: '0x...', publicKey: '0x04...' }
-const aesKey = generateAesKey()
-// → 64-char hex string (32 bytes)
-
-// AES-256-GCM encrypt/decrypt
-const ciphertext = aesEncrypt('Hello, Actora!', aesKey)
-const plaintext = aesDecrypt(ciphertext, aesKey)
-
-// ECIES encrypt/decrypt (key wrapping)
-const wrapped = eciesEncrypt(aesKey, keyPair.publicKey)
-const unwrapped = eciesDecrypt(wrapped, keyPair.privateKey)
-```
-
-### High-Level Payload Encryption
-
-```ts
-import { encryptPayload, decryptPayload, packAgentForPublish } from '@actora/sdk/core'
-
-// Publisher: encrypt agent payload for a subscriber
-const encrypted = encryptPayload({
-  prompt: 'You are a DeFi analyst...',
-  skills: [{ name: 'audit', ... }],
-  mcp: { type: 'http', url: '...' },
-}, subscriberPublicKey)
-// → { aesKeyHex, eciesEncryptedKeyHex, encryptedCid }
-
-// Subscriber: decrypt with private key
-const decrypted = decryptPayload(encrypted, subscriberPrivateKey)
-// → { prompt, skills, mcp }
-
-// Package agent ready for on-chain registration
-const pack = packAgentForPublish(agentPayload, creatorPublicKey)
-```
-
-### Wire Format
-
-```
-AES-256-GCM:  base64( IV[12] || ciphertext || authTag[16] )
-ECIES:        hex( ephemeralPub[33] || IV[16] || ciphertext || MAC[32] )
-```
-
----
-
-## IPFS Upload
-
-```ts
-import { IPFSUploader } from '@actora/sdk/ipfs'
-// or: import { IPFSUploader } from '@actora/sdk'
-
-const uploader = new IPFSUploader({
-  pinataJwt: 'eyJ...',              // Pinata JWT token
-  // customEndpoint: 'https://my-ipfs.example.com/api/v0/add',
-  // customApiKey: '...',
-  gatewayUrl: 'https://ipfs.io',     // default
-  namePrefix: 'agentx-',
-  timeoutMs: 30_000,                // request timeout
-})
-
-// Upload JSON
-const { cid, url } = await uploader.uploadJSON(
-  { hello: 'world' },
-  { name: 'test-data', keyvalues: { app: 'agentx' } }
-)
-
-// Upload encrypted agent payload
-const encrypted = await uploader.uploadEncryptedPayload(
-  { encrypted: true, algorithm: 'AES-256-GCM', data: '...' },
-  'my-agent'
-)
-
-// Get public gateway URL from CID
-const publicUrl = uploader.getUrl('QmXxx...')
-// → https://ipfs.io/ipfs/QmXxx...
-```
-
----
-
-## MCP Connector (Remote Tool Execution)
-
-```ts
-import { MCPConnector } from '@actora/sdk/mcp'
-// or: import { MCPConnector } from '@actora/sdk'
-
-// Connect to any MCP server
-const connector = new MCPConnector({
-  transport: 'http',                        // 'http' | 'sse' | 'stdio'
-  url: 'https://my-mcp.example.com/mcp',
-  authType: 'ecdsa',                        // optional: ecdsa signature auth
-  privateKey: '0x...',                      // required for ecdsa auth
-})
-
-// Discover available tools
-const tools = await connector.listTools()
-// → [{ name: 'get_balance', description: '...', inputSchema: {...} }, ...]
-
-// Execute a tool remotely
-const result = await connector.callTool('get_balance', {
-  address: '0x1234...',
-  chainId: 19505,
-})
-// → { token: 'ETH', balance: '1.5' }
-```
-
----
-
-## ConversationClient (v0.8.7) — Remote Conversation Service
-
-Streams agent conversations from the hosted **Conversation Service** via the Gateway (`POST /api/v1/agent/runs`, SSE). Auth requires **either** a tenant `apiKey` (`X-Api-Key`) **or** a Gateway `accessToken` (`Authorization: Bearer` — wallet-signed login). Both credentials unlock the **same** REST surface — single-turn chat plus sessions & parallel tasks — gated uniformly by the tenant's P9 capability bits; a B-end integration key (`actora_...`) alone is sufficient, **no second key is needed** (only the MCP channel and on-chain operations require a registered-user JWT / the user's own wallet). The client also auto-sends `X-End-User-Id` (end-user memory isolation), `X-Llm-Api-Key` + `X-Llm-Endpoint` + `X-Llm-Model` (stateless BYOK override — **your own key AND endpoint AND model**, e.g. DeepSeek). **BYOK is the recommended pattern for callers**: traffic then runs against your own LLM account, and the platform fallback key is used only when no key is provided.
-
-> **v0.8.6 — stored BYOK (`tenantKeyId`)**: each chat/stream request can pass `tenantKeyId` to use a tenant-owned API key already stored & AES-encrypted on the Gateway (managed via Settings → Own LLM Keys, backed by `/tenant/keys`). The Gateway resolves the key server-side and injects it as `X-Llm-Api-Key` (priority over request-level headers) — the plaintext key never leaves the server. This complements the stateless `llmApiKey` override (request-level, highest priority). **`tenantKeyId`s are strictly tenant-scoped**: after rotating your `actora_` key or switching tenants, re-store a BYOK via `POST /api/v1/tenant/keys` with the new key and update your `tenantKeyId` — reusing another tenant's ID returns `400 Tenant API key not found or inactive`.
-> **v0.8.7 — sessions & parallel tasks**: `createSession()` / `createTask()` (returns a `taskId` immediately, runs in the background) / `getTask()` / `listTasks()` / `cancelTask()` + `getCapabilities()`. When the tenant/plan disallows multi-task (P9 capability gate), `createTask()` is rejected with HTTP 403 `{ code: "PARALLEL_TASKS_DISABLED" }` — surfaced as `ConversationTaskError` (`.status` / `.code`); callers should degrade to single-turn `chat()`.
-> **2026-08-08 — B-end keys clarified**: parallel-task capability is now **uniform for all tenants**. A B-end integration key (`actora_...`) is no longer restricted to chat — it can create sessions/tasks exactly like a registered-user JWT, controlled by the same P9 capability bits (`effective = tenant.allow_parallel_tasks ?? plan.features.parallel_tasks ?? true`). `403 PARTNER_TASKS_DISABLED` no longer exists; a disabled tenant gets `403 PARALLEL_TASKS_DISABLED` and should fall back to `chat()` as above. **One `actora_` key is enough** — callers do not need a second (wallet-signed) credential for sessions/tasks. Partner task creation additionally **requires a BYOK LLM key** (`X-Llm-Api-Key` header, `llmApiKey`, or stored `tenantKeyId`) — otherwise `400 { code: "LLM_KEY_REQUIRED" }` — so background work never drains the platform key budget. This gate applies to **parallel tasks created via REST/SDK** (`POST /sessions/:id/tasks`); platform-managed background paths (user schedules, orchestration triggers) bypass it and use the stored `tenantKeyId` or the platform fallback key.
->
-> **MCP boundary (generic)**: the "registered-user `access_token` only" rule applies to the **Actora platform MCP** (Gateway `/mcp`) — its 6 `actora_gateway_*` conversation/task tools (`actora_gateway_chat`, `create_session`, `create_task`, `get_task`, `list_tasks`, `cancel_task`) require a registered-user JWT and reject B-end `actora_` keys (R14). MCP servers **you deploy yourself** (an in-house agent MCP, a RAG MCP, etc.) are outside this boundary — their auth is yours to configure (anonymous, tenant key, or anything else). Use REST or `ConversationClient` if you only hold a B-end key. **B-end end-users (e.g. aihunter's customers) are fully covered by REST + `X-End-User-Id: 0x<wallet>`** (end-user subscription proxying) — MCP stays JWT-only for B-end callers by design; bridging "B-end user → Actora JWT" for MCP would be a separate design item.
->
-> **B-end MCP conversation — alternative paths (2026-08-11)**: if a B-end caller needs *MCP-native* conversation for its end-users, use one of these instead of waiting for a "B-end user → Actora JWT" bridge (kept as a future design item, **not implemented**):
-> 1. **Self-hosted MCP wrapper** (most common — the RAG MCP pattern): deploy your own MCP server that exposes a conversation tool and internally calls REST with `X-Api-Key` + `X-End-User-Id`. Auth is fully under your control — this lives outside the platform boundary.
-> 2. **Direct REST for HTTP-capable AIs**: if the calling AI supports HTTP tool invocation, call `/api/v1/agent/runs` (or the SDK `ConversationClient`) directly — a single `actora_` key, with `X-End-User-Id` subscription proxying included.
-> 3. **Non-conversation MCP tools are key-usable as-is**: 34 of the 43 platform MCP tools (on-chain read/write, minus the 3 centralized-agent publish/update/subscribe writes that require a JWT) accept B-end `actora_` keys — only the 6 conversation/task tools plus the 3 central-agent WRITE tools require a registered-user JWT. B-end callers can already use those 34 over MCP without any bridge.
->
-> **B-end end-user auth over MCP conversation — how it works (2026-08-11)**: the 6 conversation/task tools authenticate *only* via the `access_token` argument — a registered-user JWT issued by wallet-signed login (EIP-191). The MCP executor reads `access_token`, drops the call with `access_token (registered-user JWT) is required` if absent, and forwards it as `Authorization: Bearer` to the Gateway REST channel; B-end `actora_` keys are rejected on these tools (R14). Subscription gating therefore resolves against the **JWT holder's wallet**. A B-end end-user who is not a registered Actora user has **no wallet-signed JWT** and cannot call these tools directly — that is by design: their identity (and subscription) is proxied through the B-end key + `X-End-User-Id: 0x<wallet>` on REST instead. If MCP-native conversation for such end-users is ever required, the bridge keeps the same semantics as REST — exchange (B-end key + end-user subscription check) for a **short-lived scoped JWT** (`sub=partner-<slug>`, `end_user=0x<wallet>`, TTL ~5 min, no refresh) so the MCP tools still do their subscription check against the end-user wallet. Until then, paths 1–3 above apply.
->
-> **B-end end-user auth over MCP conversation — step-by-step flow (2026-08-11)**: the same call goes through two distinct auth paths depending on the caller's credential:
->
-> * **Registered user (JWT)** — `actora_gateway_chat` with `access_token=eyJ...`:
->   1. MCP executor calls `gatewayAuthHeaders()` → token present → `Authorization: Bearer <JWT>`.
->   2. Forwards to Gateway `POST /api/v1/agent/runs`.
->   3. Gateway resolves the access subject as the **JWT holder's wallet**, then `canAccessAgent(wallet, agentId)` checks on-chain ownership/subscription — `403 AGENT_ACCESS_DENIED` if the JWT wallet holds no subscription to the target agent.
->   4. SSE stream returned, aggregated into the MCP tool result `{ reply, tool_calls }`.
-> * **B-end end-user (partner key + proxied wallet)** — the *same* conversation over **REST**:
->   1. `X-Api-Key: actora_...` + `X-End-User-Id: 0x<endUserWallet>` → `POST /api/v1/agent/runs`.
->   2. `resolveAccessSubject()` (see [gateway agent-access.ts](gateway/src/services/agent-access.ts)) detects `kind=partner` + hex `endUserId` and substitutes the **end-user's wallet** as the access subject.
->   3. `canAccessAgent(endUserWallet, agentId)` gates on the **end-user's** on-chain subscription (not the partner tenant's).
->   4. Same SSE stream, same `{ reply, tool_calls }` shape — the two paths differ **only in credential exchange**, never in conversation behavior.
->
-> Decision rule: a B-end caller holds only `actora_` keys → use REST (path 1 or 2 above); a registered user holds a wallet-signed JWT → MCP is available as-is; a B-end caller that insists on MCP-native conversation for unregistered end-users → future bridge (above), not yet implemented.
->
-> **B-end key vs user JWT — sessions/tasks behavior (v0.10.1)**: both credentials are gated by the same P9 capability bits and can create sessions/parallel tasks; the differences are (1) **access subject** — a B-end key authorizes as the partner tenant, or as a proxied end-user wallet when `endUserId` is a `0x` address; a JWT authorizes as the user's own wallet; (2) **task LLM key** — partner tasks may use their own BYOK key (`X-Llm-Api-Key` / `llmApiKey` / `tenantKeyId`), or fall back to the platform key, which is **metered against the tenant's plan quota** (exact token counts from the task's `done` event — via SSE for streamed tasks and via a completion callback for background tasks); (3) **platform MCP chat/task tools** and **on-chain A2A/publish/subscribe** are available to JWTs only. A B-end key covers all REST chat + parallel tasks; a JWT additionally covers MCP and on-chain.
->
-> **`endUserId` is always optional — omitting it is NOT rejected** (2026-08-08 clarification): without it the access subject falls back to the **tenant's own wallet** — for a registered user (kind=user) that *is* the user's wallet (works naturally); for a partner tenant it simply means **no end-user proxying** (the `partner-*` address is not an on-chain address, so subscription-gated agents return `403 AGENT_ACCESS_DENIED` when the chain check fails — not a "missing endUserId" rejection). A non-`0x` `endUserId` is used for memory isolation only. There is **no "must send endUserId" enforcement** anywhere.
-
-```ts
-import { ConversationClient } from '@actora/sdk/conversation'
-
-const client = new ConversationClient({
-  gatewayUrl: 'https://gateway.example.com',   // Gateway base URL (not the conversation service directly)
-  apiKey: 'actora_...',                         // tenant API key issued after registration (OR accessToken below)
-  // accessToken: 'eyJ...',                     // gateway JWT from wallet-signed login (alternative to apiKey)
-  endUserId: 'user-123',                        // optional: per-end-user memory isolation
-  llmApiKey: 'sk-...',                          // optional: BYOK — your own LLM key (highest priority)
-  llmEndpoint: 'https://api.deepseek.com/v1',   // optional: endpoint for llmApiKey (default OpenAI)
-  llmModel: 'deepseek-v4-pro',                  // optional: model for llmApiKey (default gpt-4o)
-  timeoutMs: 120_000,                           // optional: stream timeout (default 120s)
-})
-
-// Stream events (text / tool_call / tool_result / thinking / clarification / onchain_approval_required / done / error)
-const controller = new AbortController()        // optional: external stop (user "Stop" button)
-for await (const event of client.stream({
-  agentId: 42,
-  message: 'Analyze this contract',
-  enableMemory: true,
-  history: [{ role: 'user', content: 'hi' }],
-  tenantKeyId: 'key-01HX...',               // v0.8.6: BYOK via a stored tenant-owned API key (Settings → Own LLM Keys)
-}, { signal: controller.signal })) {
-  switch (event.type) {
-    case 'text':           appendDelta(event.content!); break
-    case 'tool_call':      showToolBubble(event.toolName!, event.toolArgs); break
-    case 'tool_result':    updateToolBubble(event.toolName!, event.toolResult); break
-    case 'thinking':       setThinking(event.content!); break
-    case 'clarification':  askUser(event.question!); break  // request was ambiguous — prompt the user
-    case 'onchain_approval_required':
-      // v0.9.6+: the agent requested an auditable on-chain A2A delegation.
-      // The USER must approve it in their own wallet (they pay the gas and
-      // become the on-chain client). Show a wallet modal with
-      // event.approval = { targetAgentId, taskType, inputData }.
-      openWalletModal(event.approval!); break
-    case 'done':           onDone(event.usage); break
-    case 'error':          onError(event.error!); break
-  }
+const chainId = 8453 // Base —— 用 KNOWN_CHAINS 选链
+const cfg = KNOWN_CHAINS[chainId]
+const chain = {
+  id: cfg.chainId,
+  name: 'Base',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
 }
 
-// Or aggregate into a single result
-const result = await client.chat({ agentId: 42, message: 'Hello' })
-// → { text, toolCalls: [{ name, arguments, result }], usage, iterations }
-// When the service interrupts an ambiguous request, result.clarification carries
-// the clarifying question and no tools were run:
-if (result.clarification) {
-  const answer = await promptUser(result.clarification)
-  const retry = await client.chat({ agentId: 42, message: answer, history: [...prevHistory, ...] })
-}
-
-// Inline mode — no Actora agent needed; inject your own MCP/HTTP tools (e.g. RAG)
-const ragResult = await client.chat({
-  message: '根据知识库回答：Actora 支持哪些链？',
-  prompt: '你是客服助手，回答前先调用 rag_query 检索知识库。',
-  skills: [{
-    name: 'rag_query',
-    description: 'Retrieve relevant chunks from the knowledge base',
-    inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
-    execution: { type: 'mcp', endpoint: 'https://your-rag-mcp.example.com/mcp', toolName: 'rag_query' },
-  }],
-  enableMemory: false,
-})
+const account = privateKeyToAccount(`0x${process.env.PRIVATE_KEY}`) // 服务端私钥；浏览器用 window.ethereum 注入
+const publicClient = createPublicClient({ chain, transport: http(cfg.rpcUrl) })
+const walletClient = createWalletClient({ account, chain, transport: http(cfg.rpcUrl) })
 ```
 
-> Auth: the `apiKey` set in the constructor is sent automatically as `X-Api-Key` (tenant API key) — the RAG example above needs no per-request credentials. Your RAG MCP/HTTP `execution.endpoint` stays under your control: secure it with your own auth, the service only forwards the call (30s timeout).
-> Sub-path import: `@actora/sdk/conversation`. Server-side API & headers documented in [`CONVERSATION_SERVICE.md`](../CONVERSATION_SERVICE.md).
-
-### Sessions & Parallel Tasks (v0.8.7)
-
-Create a dialog session, fire multiple tasks into it, poll them in the background and cancel when needed:
-
-```ts
-import { ConversationClient, ConversationTaskError } from '@actora/sdk/conversation'
-
-const client = new ConversationClient({ gatewayUrl: 'https://gateway.example.com', accessToken: 'eyJ...' })
-
-// (optional) check the integrator's capability first — when false, use single-turn chat() instead
-const caps = await client.getCapabilities()
-if (!caps.parallelTasks) {
-  const r = await client.chat({ agentId: 42, message: 'hello' })
-}
-
-const session = await client.createSession({ title: 'Audit' })          // dialog container (idempotent)
-const t1 = await client.createTask({ sessionId: session.id, agentId: 42, message: 'Analyze contract A' })
-const t2 = await client.createTask({ sessionId: session.id, agentId: 42, message: 'Analyze contract B' })
-// → both return immediately with { id, status: 'queued' } — execution runs in the background
-const tasks = await client.listTasks(session.id)                        // all tasks of the session
-
-let task = await client.getTask(t1.id)                                  // poll until terminal
-// task.status: queued → running → done / error / cancelled
-
-try {
-  await client.cancelTask(t2.id)                                        // cancel queued/running task
-} catch (err) {
-  if (err instanceof ConversationTaskError && err.code === 'PARALLEL_TASKS_DISABLED') {
-    // tenant/plan disallows multi-task → fall back to single-turn chat()
-  }
-}
-```
-
-> **B-end subscription proxying** (v0.10.1, Gateway 2026-08-08): a partner caller can authorize by an end-user's subscription by passing that user's wallet via `endUserId` (`0x<wallet>`; `createSession` / `createTask` params, or `X-End-User-Id` header). The Gateway then checks ownership/subscription against that wallet instead of the partner tenant itself — so "my end-user already subscribed → I may chat on their behalf". Non-`0x` end-user ids remain memory-isolation-only. `stream(params)` accepts `params.endUserId` too (per-request override of the constructor-level id).
-
----
-
-## On-Chain Data (v0.8.1) — Batch Query + Subscription Writes + Event Stream
-
-Replaces hand-rolled ethers.js + manual ABI/parseLog code. All methods accept viem `PublicClient` / `WalletClient` (chain-agnostic).
-
-> 完整接入样例（SDK / MCP / REST 三通道 + 关键约定）：[docs/sdk-integration-example.md](../docs/sdk-integration-example.md)
-> 可运行的 SDK 链上读取完整样例（生产地址）：[examples/sdk-chain-read.ts](../examples/sdk-chain-read.ts)
-> 可运行的 SDK 写操作样例（创建套餐，需私钥）：[examples/sdk-create-plan.ts](../examples/sdk-create-plan.ts)
-
-### IdentityRegistry — batch read
+### b. 铸造 Agent（AgentRegistry）
 
 ```ts
 import { AgentRegistry } from '@actora/sdk'
 
-const registry = new AgentRegistry({ contractAddress, publicClient, walletClient })
-
-const total = await registry.totalAgents()            // reads totalAgents() — replaces binary search
-
-const agents = await registry.getAllAgents({
-  fromId: 1,                  // default 1
-  // toId: 100,               // default: totalAgents()
-  activeOnly: true,           // default false — metadata.isActive === true
-  capabilities: ['trading'],  // AND filter on metadata.capabilities
-  batchSize: 10,              // RPC batching (default 10)
-})
-// → [{ agentId, owner, tokenURI, metadata: { name, description, capabilities, skills, isActive }, createdAt }]
-
-const meta = await registry.getAgentMetadata(1)
-// → { name, description, encryptedPayloadCid, eciesEncryptedKey, publicPayloadCid,
-//     capabilities, skills, isActive }
-```
-
-> **v0.8.1 容错解析**：tokenURI 可能因合约 bug 损坏（base64 尾部垃圾 / JSON 未闭合）。
-> `getAllAgents()` / `getAgentMetadata()` 会自动清理尾部垃圾、补齐未闭合引号/花括号，
-> 仍失败时以 regex 兜底提取 `name`，最终回退为 `Agent {id}`——与 Gateway indexer 行为一致，
-> 不会因单条损坏数据导致整批查询失败。
-
-### SubscriptionManager — write + event-parsed results
-
-```ts
-import { SubscriptionManager } from '@actora/sdk'
-
-const sm = new SubscriptionManager({ contractAddress, publicClient, walletClient })
-
-// period MUST be one of 'day' | 'week' | 'month' | 'year' — the only values the
-// contract maps to real durations. 'monthly'/'quarterly'/'yearly' silently become
-// 30 days on-chain, so they are rejected at runtime.
-const { planId, txHash } = await sm.createPlan({
-  agentId: 42,
-  price: 5000000000000000n,   // wei
-  period: 'month',
-  payToken: '0x0000...',      // default: native token
-  trialDays: 0,
-})
-
-const sub = await sm.subscribe(planId, { valueWei: 5000000000000000n })
-// → { subscriptionId, txHash, subscriber, agentId, expiresAt }  // parsed from Subscribed event
-
-const combined = await sm.createPlanAndSubscribe({ agentId: 42, price: 1n, period: 'day' })
-// → { planId, subscriptionId, txHash, subscriber, agentId, expiresAt }
-```
-
-> **v0.8.2 写操作签名修复**：`createPlan()` / `subscribe()` / `releaseFunds()` / `cancel()`
-> 现在优先使用完整的 viem `walletClient.account`（含签名能力），支持**本地私钥签名**场景
-> （`privateKeyToAccount` → `eth_sendRawTransaction`）；浏览器钱包（MetaMask 等，
-> json-rpc account）行为不变。此前传入裸地址字符串会走 `eth_sendTransaction`
-> （仅节点托管账户），本地签名时被 RPC 拒绝（`unknown account`）。
-> 写操作完整样例：[examples/sdk-create-plan.ts](../examples/sdk-create-plan.ts)
-
-### subscribeToEvents — event-driven sync (< 15s vs 2min polling)
-
-```ts
-import { subscribeToEvents } from '@actora/sdk'
-
-const unwatch = await subscribeToEvents(publicClient, {
-  identityRegistryAddress,
-  subscriptionManagerAddress,
-  events: ['Transfer', 'AgentRegistered', 'PlanCreated', 'Subscribed'],
-  fromBlock: 123456,
-  onEvent: ({ type, args, txHash }) => {
-    if (type === 'AgentRegistered') syncAgent(Number(args.agentId))
-  },
-})
-// ... later: unwatch()
-```
-
----
-
-## A2A Daemon — Multi-Agent Interop
-
-```ts
-import { A2ADaemon } from '@actora/sdk/agent-loop'
-
-const a2a = new A2AProtocol({
-  contractAddress: '0x7F42a7dC4A0F3C107664C3750bE1B5B6fa6BEb86',
+const registry = new AgentRegistry({
+  contractAddress: cfg.contracts.identityRegistry,
   publicClient,
   walletClient,
 })
 
-// Start daemon — auto-processes incoming A2A tasks
-const daemon = new A2ADaemon({
-  agentId: 53,
-  a2a,
-  gatewayUrl: 'https://actora.codes',   // 生产域名；本地开发可填 http://localhost:3090
-  pollIntervalMs: 15000,
-  autoComplete: true,
-})
+// 简单铸造：仅 tokenURI
+const { agentId, txHash } = await registry.registerSimple('ipfs://Qm...')
 
-daemon.on('taskCompleted', (result) => {
-  console.log(`Task #${result.task.taskId} completed!`, result.txHash)
-})
-
-daemon.start()
-// daemon.stop()
+// 完整铸造：tokenURI + 链上元数据（加密载荷 CID / ECIES 公钥等）
+const { agentId } = await registry.register('ipfs://Qm...', [
+  { key: 'encryptedPayloadCid', value: encryptedCid },
+  { key: 'eciesEncryptedKey', value: eciesEncryptedKeyHex },
+])
 ```
 
-**Flow:**
-```
-Agent A → createTask(Agent B) on-chain
-Gateway Worker → detects → LLM processes → stores result
-SDK A2A Daemon → polls Gateway → gets result → completeTask() on-chain
-```
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      @actora/sdk                           │
-├──────────┬──────────┬──────────┬───────────────────────────┤
-│  Core    │  Agent   │ AgentLoop│  React                    │
-│ crypto   │ Runner   │ executor │  useAgentRunner           │
-│ types    │ useAgent │ loop     │                           │
-├──────────┼──────────┼──────────┼───────────────────────────┤
-│ Registry │ Subscrip │ A2A      │ Reputation                │
-│ register │ subscribe│ protocol │ giveFeedback              │
-│ query    │ verify   │ daemon   │                           │
-├──────────┼──────────┼──────────┼───────────────────────────┤
-│ MCP      │ IPFS     │ LLM      │ Config                    │
-│ Connector│ Uploader │ Factory  │ Chains                    │
-│          │          │ OpenAI   │                           │
-│          │          │ Gateway  │                           │
-├──────────┼──────────┼──────────┼───────────────────────────┤
-│ Endpoint │ConfigReg │ Payment  │ AgentWallet               │
-│ MultiEP  │ KV Store │ Gateway  │                           │
-└──────────┴──────────┴──────────┴───────────────────────────┘
-```
-
----
-
-## API Reference
-
-### Main Exports
-
-| Export | Module | Description |
-|--------|--------|-------------|
-| `AgentRunner` | agent | Decrypt + load Agent context from chain |
-| `AgentLoop` | agent-loop | ReAct engine: Think → Tools → Observe → Repeat |
-| `OpenAIProvider` | llm | Direct LLM provider with SSE streaming |
-| `GatewayProvider` | llm | Multi-tenant SaaS LLM via Actora Gateway |
-| `createLLMProvider` | llm | Auto-select provider based on config |
-| `MCPConnector` | mcp | MCP tool discovery + remote execution |
-| `AgentRegistry` | registry | Register and query agents on-chain |
-| `SubscriptionManager` | subscription | Subscribe (ETH/ERC20), verify, cancel, trial |
-| `subscribeToEvents` | events | Contract event stream (Transfer/AgentRegistered/PlanCreated/Subscribed) |
-| `AgentX402` | subscription | Auto-subscription gate + X402 payment |
-| `A2AProtocol` | a2a | Agent-to-Agent task delegation |
-| `A2ADaemon` | agent-loop | Background daemon for auto-processing A2A tasks |
-| `ReputationRegistry` | reputation | Feedback + reputation queries |
-| `ConfigurationRegistry` | configuration | On-chain KV configuration |
-| `MultiEndpointClient` | endpoint | Multi-endpoint routing |
-| `IPFSUploader` | ipfs | Upload to IPFS via Pinata or custom endpoint |
-| `publishAgent` | core | Full encrypt + IPFS upload + pack pipeline |
-| `KNOWN_CHAINS` | config | Pre-configured chain configs |
-
-### Crypto Exports (from `@actora/sdk/core`)
-
-| Export | Description |
-|--------|-------------|
-| `aesEncrypt(plaintext, keyHex)` | AES-256-GCM encrypt → base64 |
-| `aesDecrypt(ciphertext, keyHex)` | AES-256-GCM decrypt |
-| `generateAesKey()` | Generate random 256-bit AES key (hex) |
-| `eciesEncrypt(dataHex, publicKey)` | ECIES encrypt with secp256k1 public key |
-| `eciesDecrypt(dataHex, privateKey)` | ECIES decrypt with secp256k1 private key |
-| `encryptPayload(payload, pubKey)` | One-shot: AES encrypt + ECIES wrap |
-| `decryptPayload(encrypted, privKey)` | One-shot: ECIES unwrap + AES decrypt |
-| `packAgentForPublish(payload, pubKey)` | Package agent for on-chain registration |
-| `publishAgent(config)` | Full pipeline: encrypt + IPFS upload |
-| `generateKeyPair()` | Generate secp256k1 key pair |
-| `getPublicKey(privateKey)` | Derive public key from private key |
-| `randomBytes(length)` | CSPRNG random bytes (cross-runtime) |
-
-### Sub-path Imports
-
-| Path | Description |
-|------|-------------|
-| `@actora/sdk` | All modules (main entry) |
-| `@actora/sdk/core` | Types, crypto (AES-256-GCM + ECIES) |
-| `@actora/sdk/react` | `useAgentRunner` React hook |
-| `@actora/sdk/agent-loop` | AgentLoop, executor, tool builder, A2A daemon |
-| `@actora/sdk/llm` | OpenAIProvider, GatewayProvider, factory |
-| `@actora/sdk/endpoint` | MultiEndpointClient |
-| `@actora/sdk/configuration` | ConfigurationClient |
-| `@actora/sdk/ipfs` | IPFSUploader (Pinata + custom endpoint upload) |
-| `@actora/sdk/memory` | MemoryProvider interface + types (v0.6.9) |
-| `@actora/sdk/traces` | TraceEmitter interface + types (v0.6.9) |
-| `@actora/sdk/skills` | Browser control skill utilities (v0.6.9) |
-| `@actora/sdk/conversation` | ConversationClient — remote Conversation Service client (v0.7.0) |
-
----
-
-## Encryption Pipeline
-
-```
-Publisher creates Agent:
-  AgentPayload → AES-256-GCM encrypt → IPFS (CID)
-  AES key → ECIES wrap → on-chain NFT metadata
-  Mint Agent NFT via IdentityRegistry
-
-Subscriber uses Agent:
-  Verify subscription (SubscriptionManager)
-  Fetch encrypted payload from IPFS
-  Read ECIES-wrapped key from on-chain NFT
-  Decrypt → { prompt, skills, mcp }
-  skills[n].execute() → Open (local) or MCP (remote with ECDSA auth)
-```
-
----
-
-## Supported Chains
-
-| Network | Chain ID | RPC | Gas Token | Status |
-|---------|----------|-----|-----------|--------|
-| **OxaChain L1** | **19505** | `https://rpc-oxa.0xainet.top` | OXA | 已开通 |
-| **BNB Smart Chain (BSC)** | **56** | `https://bsc-rpc.publicnode.com` | BNB | 已开通 |
-| **Ethereum Mainnet** | **1** | `https://ethereum-rpc.publicnode.com` | ETH | 已开通 |
-| **Base** | **8453** | `https://base-rpc.publicnode.com` | ETH | 已开通 |
-| Sepolia (Testnet) | 11155111 | `https://ethereum-sepolia-rpc.publicnode.com` | ETH | 测试网 |
-
-> **多链**：`KNOWN_CHAINS`（按 chainId 索引）与 `ChainKey`（`'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base'`）已覆盖上表全部网络。链上 wrapper（`SubscriptionManager` / `AgentRegistry`）通过 viem client + 合约地址工作，天然链无关 —— 用 `KNOWN_CHAINS[56].contracts` 取地址即可在 BSC 上铸造 / 订阅，链选择仅影响合约地址与 RPC，无需改调用代码。所有市场链（BSC/Ethereum/Base）合约地址均指向已部署实例；新增链沿用此模式（占位 `deployed: false` 条目，部署后填地址置 `deployed: true`）。
+### c. 创建订阅计划（SubscriptionManager）
 
 ```ts
-import { KNOWN_CHAINS, SubscriptionManager, AgentRegistry } from '@actora/sdk'
-import { createPublicClient, createWalletClient, http, custom } from 'viem'
-import { bsc } from 'viem/chains'
+import { SubscriptionManager } from '@actora/sdk'
+import { parseEther } from 'viem' // 价格单位工具来自 viem
 
-const chain = KNOWN_CHAINS[56] // BSC
-const publicClient = createPublicClient({ chain: bsc, transport: http(chain.rpcUrl) })
-const walletClient = createWalletClient({ chain: bsc, transport: custom(window.ethereum) })
-
-// BSC 上铸造 agent（gas 用 BNB；tokenURI 为 IPFS 元数据 URI）
-const registry = new AgentRegistry({ contractAddress: chain.contracts.identityRegistry, publicClient, walletClient })
-const { agentId } = await registry.register('ipfs://Qm...metadata.json', [])
-
-// BSC 上订阅（支付 BNB）
-const sm = new SubscriptionManager({ contractAddress: chain.contracts.subscriptionManager, publicClient, walletClient })
-await sm.subscribe(planId, { valueWei: planPriceWei })
-```
-
----
-
-## On-Chain Contracts
-
-### OxaChain L1 (Mainnet)
-
-| Contract | Address |
-|----------|---------|
-| IdentityRegistry | `0xbf5F9db266c8c97E3334466C88597Eb758AfE212` |
-| SubscriptionManager v3 | `0x019AC9d945467478Dd371CDbD70cb2f325800E6B` |
-| A2AProtocolRegistry v2 | `0x7F42a7dC4A0F3C107664C3750bE1B5B6fa6BEb86` |
-| ReputationRegistry | `0x6a18C2664E1b42063860d864b6448b824d7B843F` |
-| ConfigurationRegistry | `0x07280674ccc2898Fd038A9e3C22005CA83ffD2F8` |
-| MultiEndpointRegistry | `0xB361d04F49000013FC131D3C59C41c8486C64f8c` |
-
-### BSC Mainnet (BNB Smart Chain)
-
-| Contract | Address |
-|----------|---------|
-| IdentityRegistry | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` |
-| SubscriptionManager v3 | `0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b` |
-| A2AProtocolRegistry | `0x842F0B9E85f5aBd9752B5ea20Cc888b94dBb5E16` |
-| ReputationRegistry | `0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee` |
-| ConfigurationRegistry | `0xd9B984cF591dc1C3663991e7D75c44C2bDE1a9BB` |
-| MultiEndpointRegistry | `0x80Bc36634693d7935109f5cdbc95E64a9c1bdA6a` |
-
-### Sepolia (Testnet)
-
-| Contract | Address |
-|----------|---------|
-| IdentityRegistry | `0xe94ad380d3F8d08a7590eda0C84f354a93F96e5F` |
-| SubscriptionManager v3 | `0xC15fE80b9d800abb72121F353a6ae6d6E9077E63` |
-| A2AProtocolRegistry v2 | `0x309C7447d89f3087A9924BB686d88df020F7e9cB` |
-| ReputationRegistry | `0xeb6B410ea71b8d9dA0c96f6A91d35027CE143DC9` |
-| ConfigurationRegistry | `0x68DcE00e4C9077c94BC68016cD14B09557faEA6c` |
-| MultiEndpointRegistry | `0xEB5e866f186d4B73F97aa0d70B86f2C6e2e21Cb7` |
-
----
-
-## Gateway Integration
-
-For multi-tenant SaaS deployments, the Gateway package (`@actora/gateway`) provides:
-
-```
-npm install @actora/gateway@0.1.2
-```
-
-Features: wallet-based auth (EIP-191 + JWT), rate limiting (IP + tenant), LLM proxy (OpenAI/DeepSeek), MCP server, A2A background worker, admin dashboard API, PostgreSQL + Redis persistence.
-
-Configuration: 26 environment variables — see `gateway/.env.example`.
-
----
-
-## Payment Method Decision Guide (v0.11.7)
-
-Actora exposes several payment rails. Pick by **what is being paid for**, **who pays**, and **whether a wallet is present**:
-
-| Payment | What it pays for | Payer | Wallet? | Best for | SDK entry |
-|---|---|---|---|---|---|
-| `chain` | subscribing to a paid Agent (on-chain escrow) | end user | yes | crypto-native users; auditable on-chain subscription; publisher gets 97.5% | `SubscriptionPayments.pay({ method: 'chain' })` |
-| `fiat` | subscribing to a paid Agent (Stripe card) | end user | no | Web2 users without a wallet; credit-card checkout | `SubscriptionPayments.pay({ method: 'fiat' })` → `sessionUrl` |
-| `x402` | subscribing **or** pay-per-call (native-token balance) | end user (balance) | yes (only to fund) | frictionless per-call / auto-funding; server-side A2A pay-per-call (R19.7) | `X402Client` · `BillingClient` pre-check |
-| `tenant-plan` | platform subscription tier (daily quota / rate limits) | B-end tenant | yes (chain/x402) or no (fiat) | B-end buying platform capabilities, **not** Agent access | `TenantPlanPayments.buy()` |
-| `mpp` | high-frequency batched payments via a payment channel | payer | yes | repeated micro-payments without per-tx gas | `MPPClient` |
-| `period` | pre-authorized N periods, charged later without re-signing | payer | yes | recurring billing / subscription periods | `PeriodClient` |
-| `a2a` (on-chain) | auditable multi-agent delegation (task + gas) | user's wallet | yes | cross-org delegation, settlement, reputation | `A2AProtocol` + `onchain_approval_required` SSE |
-
-**Decision rules**
-
-- Subscribing to a paid Agent → `chain` (wallet) / `fiat` (no wallet) / `x402` (auto-funded); `hasAccess()` unifies the check (chain **OR** fiat/x402).
-- Buying platform quota/tier as a B-end tenant → `TenantPlanPayments`.
-- Pay-per-call delegation → pre-check with `BillingClient` (`endUserId` wallet), then let the Gateway auto-deduct from the x402 balance (server-side, R19.7 — zero caller changes).
-- Auditable / settled delegation → on-chain `A2AProtocol` (the user's wallet signs `createTask` and pays the gas; the platform never holds a signing key).
-
-**Frontend adaptation**
-
-- Connect a wallet via wagmi + viem (`oxaChain`, chainId 19505) for the `chain` / `x402` / `a2a` rails; `fiat` only needs a redirect (`window.location.assign(sessionUrl)`).
-- Renewal UI (three-rail picker): `SubscriptionPayments.pay({ method })` → `fiat` returns `sessionUrl` to redirect; `x402`/`chain` return a `txHash` to verify + refresh access.
-- Pay-per-call: `BillingClient.getBalance({ endUserId })` before delegating; if `balanceWei < priceWei`, prompt a top-up to `payTo`.
-- On-chain approval: on SSE `onchain_approval_required`, show a wallet modal so the **user** signs `createTask` (they pay gas) — see the frontend `OnchainApprovalModal`.
-- Runnable B-end examples (Chinese): [docs/sdk-integration-example.md](../docs/sdk-integration-example.md).
-
-## Multi-Rail Subscription Payments (v0.9.4)
-
-`SubscriptionPayments` is the single entry point for subscribing across every Actora payment rail — chain (on-chain escrow), fiat (Stripe card via the Gateway) and x402 (native-token period payment). `fiat` / `x402` / `hasAccess()` go through the unified `/api/v1/payments` endpoint (the `@0xinfrax/payments` engine); `chain` works fully off-Gateway.
-
-```ts
-import { SubscriptionManager, SubscriptionPayments } from '@actora/sdk'
-
-const sm = new SubscriptionManager({ contractAddress, publicClient, walletClient })
-const payments = new SubscriptionPayments({
-  gatewayUrl: 'https://gw.example.com', // required for fiat / x402 rails
-  subscriptionManager: sm,              // required for chain rail & x402 auto-funding
+const sub = new SubscriptionManager({
+  contractAddress: cfg.contracts.subscriptionManager,
+  publicClient,
   walletClient,
-  chain: 'oxachain',
 })
 
-await payments.pay({ method: 'chain', planId: 1, agentId: 3 })            // on-chain escrow
-const { sessionUrl } = await payments.pay({                               // Stripe redirect
-  method: 'fiat', planId: 1, agentId: 3, subscriber: '0xabc',
-})                                                                        // amount auto-priced from plan
-await payments.pay({ method: 'x402', planId: 1, agentId: 3, subscriber: '0xabc' }) // auto-funded native payment
-const ok = await payments.hasAccess(3, '0xabc')                           // unified chain-OR-fiat/x402 check
-```
-
-- `pay({ method })` returns a discriminated result: `{ method: 'chain', subscriptionId, txHash }` / `{ method: 'fiat', sessionUrl, sessionId, redirect: true }` / `{ method: 'x402', subscriptionId, txHash, creditedWei }`.
-- For `fiat`, `amountCents` is optional — the Gateway derives the USD amount from the on-chain plan price (`FIAT_TOKEN_USD_PRICE`). Supply `amountCents` to override.
-- For `x402` without `txHash`, the payment is sent automatically from `walletClient` (max of plan price / protocol price), then verified & registered by the Gateway.
-
-### TenantPlanPayments (v0.11.5) — platform subscription-tier purchases
-
-Since **0.11.5** (R19.3) integrators can purchase a platform subscription tier (tenant plan) through the same unified payments endpoint. The business binding is `purpose='tenant-plan'` + `tenantPlanId` — the Gateway verifies the on-chain payment (chain / x402 rails) or Stripe checkout (fiat), then binds the plan to the tenant (quota / rate limits / platform models).
-
-```ts
-import { TenantPlanPayments } from '@actora/sdk'
-
-const plans = new TenantPlanPayments({
-  gatewayUrl: 'https://gw.example.com', // required for fiat / x402 rails
-  chain: 'oxachain',
-})
-
-// chain / x402 rail — supply the on-chain payment tx, then the plan is bound
-const { tenantId, planId, planSlug, quotaDaily } = await plans.buy({
-  method: 'x402', tenantPlanId: '...', subscriber: '0xabc', txHash: '0x...',
-})
-
-// fiat rail — returns a Stripe checkout URL (webhook binds on completion)
-const { sessionUrl } = await plans.buy({
-  method: 'fiat', tenantPlanId: '...', subscriber: '0xabc',
-  successUrl: 'https://app.example.com/b/success', cancelUrl: 'https://app.example.com/b',
+const { planId, txHash } = await sub.createPlan({
+  agentId,
+  price: parseEther('0.01'),          // 原生币 wei；ERC20 计划则填代币最小单位
+  period: 'month',                     // 'day' | 'week' | 'month' | 'year'
+  // payToken: '0x...',                // 默认 address(0) = 原生币
+  // trialDays: 3,                     // 0–30，默认 0
 })
 ```
 
-- `buy({ method })` returns a discriminated result: `{ method: 'fiat', sessionUrl, sessionId, redirect: true }` / `{ method: 'chain' | 'x402', tenantId, planId, planSlug, quotaDaily, txHash }`.
-- **chain / x402 必须携带 `txHash`**（先由调用方发起链上支付再提交）；fiat 无需 `txHash`，返回 Stripe checkout 跳转链接。
-- `PaymentsClient.create({ purpose: 'tenant-plan', ... })` accepts the same `purpose` metadata for raw protocol-level purchases.
-- Insufficient funds → the Gateway rejects with HTTP **422** before binding the plan.
+### d. 订阅（SubscriptionManager.subscribe 或 SubscriptionPayments.pay）
 
-### BillingClient (v0.11.6) — B-end balance pre-check
-
-Since **0.11.6** (R19.7 companion) B-end integrators can query the x402 ledger balance **before** delegating to an unsubscribed agent — no more guessing whether the next pay-per-call will hit HTTP `403 AGENT_ACCESS_DENIED` (insufficient balance). Backed by `GET /api/v1/billing/balance` (read-only, idempotent, no side effects).
+链上原生币订阅（自动按 plan.price 支付；ERC20 计划自动 approve）：
 
 ```ts
-import { BillingClient } from '@actora/sdk'
-
-const billing = new BillingClient({
-  gatewayUrl: 'https://gw.example.com',
-  apiKey: 'actora_xxx', // or accessToken
-})
-
-// tenant balance (default)
-const { balance, balanceWei, currency, updatedAt, payTo, priceWei } = await billing.getBalance()
-
-// per-end-user balance (partner callers may proxy an end-user's 0x wallet)
-const userBalance = await billing.getBalance({ endUserId: '0xabc…' })
-
-// pre-check before a pay-per-call delegation (R19.7)
-if (priceWei && BigInt(balanceWei) < BigInt(priceWei)) {
-  // insufficient — show a top-up prompt: send native token to `payTo`
-}
+const result = await sub.subscribe(planId)
+// → { subscriptionId, txHash, subscriber, agentId, expiresAt }
 ```
 
-- `getBalance()` never throws on a zero / never-funded balance — `balance` is `"0"` (normal response).
-- `balance` is a high-precision OXA decimal string (`"1.500000000000000000"`); use `balanceWei` (raw wei string) for exact comparison against `priceWei`.
-- `payTo` / `priceWei` are present only when x402 is enabled (the optional enhancement), so callers can build a funding prompt directly.
-- Auth: same as `ConversationClient` — `X-Api-Key` (tenant key) or Bearer JWT. `401` on missing/invalid auth; `403` on a suspended account.
-- **Legacy partner tenants keyed by a logical name** (e.g. `partner-xxx`) hold no on-ledger balance — the pay-per-call ledger is keyed by the **end user's `0x` wallet** that signs the delegation. For these callers the default (tenant) query returns `"0"`; always pre-check with `getBalance({ endUserId })` (the wallet the delegation will charge).
-
-### CentralAgentClient (v0.11.12) — 中心化 Agent（C-6，链下市场）
-
-Since **0.11.10** the SDK can pay for **centralized-agent** subscriptions — `SubscriptionPayments.pay({ method: 'x402', agentId, planId, priceWei, period })` uses the off-chain `central_plans` price (negative agentIds live in the Gateway DB, not on-chain). Since **0.11.11** the read side is wrapped in `CentralAgentClient`; since **0.11.12** the authenticated **publish/manage** side too (tenant `apiKey` or user JWT `accessToken`):
+统一支付入口（三条支付轨道，B 端常用）：
 
 ```ts
-import { CentralAgentClient } from '@actora/sdk'
+import { SubscriptionPayments } from '@actora/sdk'
 
-// 公开只读（无需鉴权）
-const central = new CentralAgentClient({ baseUrl: 'https://actora.codes' })
-
-// 查询中心化 Agent 列表（固定 source='central'，公开）
-const { agents, total } = await central.list({ activeOnly: true, category: 'finance', page: 1, pageSize: 20 })
-
-// 单个 Agent 详情 + 订阅计划（与链上同一结构，可直接喂给 SubscriptionPayments.pay）
-const detail = await central.get(-3)
-const plan = detail.subscriptionPlans![0]
-
-// 订阅状态（resolveAccess 链下优先 —— 与 App 内订阅守卫同一判定）
-const { active } = await central.checkSubscription('0xabc…', -3)
-
-// 我的中心化订阅（fiat_subscriptions / x402 通道）
-const { subscriptions } = await central.mySubscriptions('0xabc…')
-```
-
-```ts
-// 发布 / 管理（v0.11.12，需 apiKey（租户）或 accessToken（注册用户））
-const owner = new CentralAgentClient({ baseUrl, apiKey: 'actora_sk_…' }) // 或 accessToken: 'jwt…'
-
-const { agent } = await owner.create({ name: '量化助手', description: '…', category: 'finance', capabilities: ['chat', 'trading'] })
-const { agents: mine } = await owner.listMine()               // 我的中心化 Agent（含计划）
-await owner.update(agent.id, { description: '新描述', isActive: true })
-await owner.activate(agent.id)                                // 上架
-await owner.createPlan(agent.id, { priceWei: '1000000000000000000', period: 'month' })
-await owner.deactivatePlan(agent.id, planId)                  // 停用计划
-await owner.deactivate(agent.id)                              // 下架（订阅访问随之失效）
-```
-
-```ts
-// 中心化 Agent 周期订阅 —— 同一付费通道，priceWei 覆盖链下计划价格
+// 轨道 1：chain —— 走链上 SubscriptionManager
 const payments = new SubscriptionPayments({
+  subscriptionManager: sub,
+  chain: 'base',                       // 验证链
+})
+const res = await payments.pay({ method: 'chain', planId, agentId })
+// → { method: 'chain', subscriptionId, txHash }
+
+// 轨道 2：fiat —— Stripe 卡支付，无需钱包（需 gatewayUrl）
+const payments2 = new SubscriptionPayments({ gatewayUrl: 'https://actora.codes' })
+const { sessionUrl } = await payments2.pay({
+  method: 'fiat',
+  planId,
+  agentId,
+  subscriber: '0x...',                // 买家钱包
+  successUrl: 'https://your-app.com/success',
+  cancelUrl: 'https://your-app.com/cancel',
+})
+
+// 轨道 3：x402 —— 原生币按期支付（自动代付需 walletClient + subscriptionManager 读价格；
+// 也可自己先发送原生币到平台 payTo 后传 txHash）
+const payments3 = new SubscriptionPayments({
   gatewayUrl: 'https://actora.codes',
-  subscriptionManager: sm, walletClient, chain: 'oxachain',
+  subscriptionManager: sub,          // 读取计划价格（priceWei）
+  walletClient,                      // 自动把原生币转到平台 payTo 钱包
+  chain: 'base',
 })
-const result = await payments.pay({
-  method: 'x402', subscriber: '0xabc…', agentId: -3, planId: plan.planId,
-  period: 'month', priceWei: BigInt(plan.price),
-})
+const res3 = await payments3.pay({ method: 'x402', planId, agentId, subscriber: '0x...', period: 'month' })
+// → { method: 'x402', subscriptionId, txHash, creditedWei }
 ```
 
-- 所有读端点公开（无需鉴权）；**发布/管理**（v0.11.12）需 `apiKey`（owner=`partner-<slug>`，适合平台为市场建 Agent）或 `accessToken`（owner=注册用户钱包）。
-- 订阅付费走与链上 Agent 相同的 x402 通道，支付写入 `fiat_subscriptions` 后 `resolveAccess` 无感放行。
-- **搜索与标签过滤（客户端侧）**：`GET /api/v1/agents` 服务端只做结构化过滤 + 分页（`source`/`category`/`capabilities`/`activeOnly`/`page`/`pageSize`，无 `query`/`tags` 参数）。关键字搜索（匹配 name/description/tags/ID，不区分大小写）与标签过滤（全含 AND）需在客户端基于 `list()` 结果实现——语义与 C 端市场一致，示例见 `docs/integration-callers.md` §「Agent 搜索与标签过滤」。
-- **前端发布交互（Studio，C-6）**：C 端 Studio 基础信息页以「链上发布 / 仅中心化」二选一卡片引导发布方式，选「仅中心化」可设默认订阅周期（day/week/month/year）。当前中心化发布为**两步交互**：首次点击「发布」先钱包签名换 `access_token`（提示「签名完成，请再次点击发布」），再次点击才真正提交。**交互建议**：合并为「签名后自动继续发布」、单次点击完成——纯前端体验优化，API 语义不变，集成方无需配合。
+### e. 与 Agent 对话（ConversationClient）
 
-### A2A Delegated Tasks & Session Key Auto-pay (v0.11.8)
-
-Since **0.11.8** (AItrader REQ-1/2/3) integrators can read the full **A2A delegated-task result** (incl. the `awaiting_payment` state + payment options), drive the **Session Key auto-pay** flow (user wallet authorizes an `x402-pay` session key against the engine; the Gateway auto-transfers from it when the x402 ledger balance is short), and query the Session Key authorization status — all through `ConversationClient`.
+B 端只需 **tenant API Key（`actora_...`）**，无需钱包：
 
 ```ts
-import { ConversationClient, A2A_STATUS } from '@actora/sdk'
+import { ConversationClient } from '@actora/sdk'
 
-const client = new ConversationClient({
-  gatewayUrl: 'https://gw.example.com',
-  apiKey: 'actora_xxx',               // or accessToken
-  endUserId: '0xuser…',               // = the delegation's payment_payer (for retry)
+const conv = new ConversationClient({
+  gatewayUrl: 'https://actora.codes',
+  apiKey: 'actora_your_tenant_key',    // X-Api-Key；与 accessToken(JWT) 二选一
+  endUserId: 'user-123',               // X-End-User-Id：租户内最终用户的记忆隔离维度
+  // llmApiKey: 'sk-...',              // BYOK：用自己的 LLM Key，不计入平台配额
+  // llmEndpoint: 'https://api.deepseek.com/v1',
+  // llmModel: 'deepseek-chat',
 })
 
-// 1) task result — status 4 = awaiting_payment, carries payment_pay_options
-const result = await client.getA2ATaskResult(7)
-if (result.status === A2A_STATUS.AWAITING_PAYMENT && result.payment_pay_options?.sessionKey) {
-  // render the "authorize Session Key" entry (prepay + sessionKey both offered)
+// 单轮对话（内部就是 stream 聚合）
+const res = await conv.chat({ agentId, message: '帮我分析这份合约' })
+console.log(res.text)
+
+// 流式（SSE，逐事件）
+for await (const ev of conv.stream({ agentId, message: '实时输出' })) {
+  if (ev.type === 'text') process.stdout.write(ev.content ?? '')
+  if (ev.type === 'done') console.log('\n[done]', ev.usage)
 }
-
-// 2) engine capability info — end-user frontend reaches the engine's public
-//    nonce / createSession endpoints directly (EIP-712-verified)
-const info = await client.getSessionKeyInfo() // { enabled, chain, chainId, baseUrl }
-
-// 3) after the user authorized + funded the session, re-activate the task
-const { retried } = await client.retryA2ATask(7) // no ledger deduction; worker re-pays via session key
-
-// 4) REQ-3: ledger balance + Session Key authorization status
-const bal = await client.getBalance()
-// bal.sessionKey = { enabled, authorized, sessionAddress?, maxTotal?, totalSpent?, validUntil? }
 ```
 
-- `getA2ATaskResult` / `retryA2ATask` / `getSessionKeyInfo` hit the Gateway's `/api/v1/a2a/…` routes; `getBalance` hits `/api/v1/billing/balance` (same auth as `BillingClient`, but via `ConversationClient`).
-- `retryA2ATask` requires the caller to be the task's `payment_payer` (`X-End-User-Id`) or an admin key — it re-activates a suspended task **without** deducting from the ledger; the worker re-runs and auto-pays through the session-key branch.
-- If the Session Key engine is not configured (or escrow is enabled), `getSessionKeyInfo()` returns `{ enabled: false, … }` and `getBalance().sessionKey = { enabled: false, authorized: false }` — the feature degrades cleanly to the existing prepay path.
+**鉴权 / 隔离语义**：
+- `X-Api-Key: actora_...` —— 租户级鉴权（注册后签发）；
+- `Authorization: Bearer <jwt>` —— 钱包签名登录的 JWT，与 apiKey 二选一；
+- `X-End-User-Id` —— 租户内**按最终用户隔离记忆**；若传 `0x<wallet>`，网关会额外做**订阅代理鉴权**（该钱包的订阅/所有权决定访问权）；
+- BYOK：`llmApiKey` / `llmEndpoint` / `llmModel` 三个头，运行时用自己的 Key（`llmSource: 'byok'` 不计费）。
 
-### Protocol Clients (v0.9.3)
+---
 
-Since **0.9.3** the SDK re-exports the generic engine's protocol clients from the root, so integrators can drive the P2-P4 rails directly against any Gateway deployment (Actora-hosted or your own):
+## 4. 多链指南
+
+### 如何切链
+
+所有链上模块（`AgentRegistry` / `SubscriptionManager` / `A2AProtocol`）都接收 `{ contractAddress, publicClient, walletClient }`——**换链 = 换一组配置**：
 
 ```ts
-import { MPPClient, A2AClient, PeriodClient, X402Client, PaymentsClient } from '@actora/sdk'
-
-const base = { baseUrl: 'https://gw.example.com', accessToken: 'jwt...' } // accessToken optional
-
-const mpp    = new MPPClient(base)      // payment channels
-const a2a    = new A2AClient(base)      // two-phase paymentId (create → settle)
-const period = new PeriodClient(base)   // period authorizations (charge / state)
-const x402   = new X402Client(base)     // x402 v2 protocol (quote / pay / verify / balance)
-const uni    = new PaymentsClient(base) // unified create / verify / access / info / quote
+function makeChainClients(chainId: number) {
+  const cfg = KNOWN_CHAINS[chainId]
+  if (!cfg) throw new Error(`unsupported chain ${chainId}`)
+  const publicClient = createPublicClient({ chain: chainById(chainId), transport: http(cfg.rpcUrl) })
+  const walletClient = createWalletClient({ account, chain: chainById(chainId), transport: http(cfg.rpcUrl) })
+  return { cfg, publicClient, walletClient }
+}
 ```
 
-| Client | Endpoints | Typical flow |
-|--------|-----------|--------------|
-| `MPPClient` | `/api/v1/payments/mpp/{open,voucher,topup,settle,close,session}` | open a channel → submit signed cumulative vouchers (`voucher`, idempotent `mode: 'reuse'`) → auto-settle / close |
-| `A2AClient` | `/api/v1/payments/a2a`, `/api/v1/payments/a2a/settle` | `create({ payer, amountWei })` → payer pays on-chain → `settle({ paymentId, txHash })` (idempotent) |
-| `PeriodClient` | `/api/v1/payments/period/charge`, `/period/authorization` | one-time pre-authorization for N periods, then `charge(authorizationId)` per period — no re-signing |
-| `X402Client` | `/api/v1/x402/{info,verify,balance}`, `quote`/`pay` (v2 headers) | `quote(url)` fetches the `PAYMENT-REQUIRED` challenge; `pay({ url, walletClient, account })` funds + signs + replays in one call |
-| `PaymentsClient` | `/api/v1/payments` + `/verify` `/access` `/info` `/quote` | `create({ method: 'fiat'|'x402'|... })`, `verify(txHash)`, `access(subscriber, agentId)`, `info()` rails discovery |
+### 价格单位
 
-> **Dependency note**: the clients come from [`@0xinfrax/payments`](https://www.npmjs.com/package/@0xinfrax/payments) `^0.1.3` (currently **0.1.3**, InfraX-maintained — the former Actora-maintained `@0xinfrax/payments` is deprecated), auto-installed as a dependency of `@actora/sdk`. `PAYMENT_VERSION` (`'0.1.3'` — the aligned engine API version) is also exported from the SDK root. **Browser/bundler safe**: the engine uses only the Web Crypto API — no Node built-ins (`node:crypto` / `Buffer`) — so webpack/Next.js builds no longer fail on `UnhandledSchemeError`. Endpoints must be exposed by the Gateway the client points at (MPP/period/a2a routes exist on Actora Gateway `/api/v1/payments/*`).
+- 原生币计划：`price` 为该链原生代币的 wei（OXA / BNB / ETH）；
+- ERC20 计划：`price` 为代币最小单位（如 USDT 的 1e6 分之一）；
+- 跨链比较价格时统一用 `getPlan(planId).price` + `plan.payToken` 判断计价币种；
+- 中心化 Agent 的价格以 `priceWei` 字符串返回（见 `CentralPlan`），避免 JS 精度丢失。
 
----
+### 合约地址获取（不要硬编码）
 
-## Multi-Agent Orchestration Layering (v0.10.0)
-
-Multi-agent delegation follows a **two-rail layering strategy** so integrators get real-time, zero-cost orchestration by default and only pay for on-chain guarantees when they need them:
-
-| Rail | When to use | Cost | Guarantees |
-|------|-------------|------|-----------|
-| **off-chain** (default) | same-platform, high-frequency, real-time conversational delegation | zero (no on-chain writes) | result returns synchronously in the conversation channel |
-| **on-chain** (opt-in) | cross-org, settlement / reconciliation, reputation accumulation, third-party verification | gas paid by the **user's wallet** + task tx | auditable A2A taskId, on-chain record, settlement & reputation hooks |
-
-> **v0.10.0 gas model (2026-08-08):** on-chain rail costs are **never paid by the platform**. When the user explicitly requests an auditable / settled delegation, the Conversation Service emits an `onchain_approval_required` SSE event and the **user's own wallet** submits `createTask` — they pay the gas and become the on-chain `clientAddress` (the contract records `clientAddress = msg.sender`). The Gateway no longer holds any signing key (`A2A_WORKER_PRIVATE_KEY` removed) and never writes to the chain; sub-tasks created by the a2a-worker run **off-chain inline** (local negative pseudo taskIds), so only the top-level task the user signs is on-chain.
-
-Inside a conversation run, the main agent is given two platform tools (injected by the Conversation Service, same access boundary as chat — only agents the caller owns or is subscribed to):
-
-- `actora_list_agents` — discover the agents the caller may delegate to (id / name / description / category).
-- `actora_delegate` — `{ targetAgentId, message, mode? }`. **Default `mode: "offchain"`**: the sub-agent runs synchronously inside the conversation channel and its final answer returns to the main agent in real time. **When the user explicitly requests an auditable / settled / on-chain delegation** (e.g. "上链", "可审计", "结算", "on-chain", "audit"), use `mode: "onchain"`: the service emits `onchain_approval_required` and the **user signs the A2A `createTask` in their own wallet** (they pay the gas); the returned `taskId` is the audit trail, picked up by the Gateway A2A worker and recorded in `a2a_task_results`.
-
-Platform configuration (Conversation Service env):
-
-```bash
-ORCHESTRATE_TOKEN=...                 # must match the Gateway's ORCHESTRATE_TOKEN
-ORCHESTRATE_DEFAULT_MODE=offchain     # default rail: offchain | onchain
-ORCHESTRATE_MAX_DEPTH=4               # max nested delegation depth
+```ts
+import { KNOWN_CHAINS } from '@actora/sdk'
+const base = KNOWN_CHAINS[8453]
+const registryAddr = base.contracts.identityRegistry
+const subManagerAddr = base.contracts.subscriptionManager
 ```
 
-> The SDK `A2AProtocol` / `A2ADaemon` remain the explicit on-chain rail for integrators who want settlement & reputation without the chat channel — same principle: the caller's own wallet signs `createTask`.
+---
+
+## 5. 模块参考
+
+### 5.1 AgentRegistry —— 链上铸造 / 查询
+
+- **用途**：封装 IdentityRegistry 合约，Agent NFT 的铸造与只读查询。
+- **构造**：`new AgentRegistry({ contractAddress, publicClient, walletClient })`
+- **关键方法**：
+
+| 方法 | 说明 |
+|------|------|
+| `register(tokenURI, metadata[], valueWei?)` | 铸造 + 链上元数据（key/value 对），返回 `{ agentId, txHash }` |
+| `registerSimple(tokenURI?, valueWei?)` | 仅 tokenURI 铸造，返回 `{ agentId, txHash }` |
+| `getAgentsByOwner(owner)` | 某地址拥有的全部 agentId |
+| `getCurrentAgentId()` / `totalAgents()` | 当前计数 / 总铸造数 |
+| `agentExists(agentId)` | 是否存在 |
+| `tokenURI(agentId)` / `getAttributes(agentId)` | 读 tokenURI / 元数据键值对 |
+| `getAgentMetadata(agentId)` | 结构化元数据（name/capabilities/encryptedPayloadCid 等） |
+| `getAllAgents(opts?)` | 批量扫描（`fromId`/`toId`/`activeOnly`/`capabilities`/`batchSize`），返回 `AgentSummary[]` |
+
+```ts
+const { agentId } = await registry.registerSimple('ipfs://QmX...')
+const owners = await registry.getAgentsByOwner(account.address)
+const meta = await registry.getAgentMetadata(agentId) // { name, description, capabilities, encryptedPayloadCid, ... }
+```
+
+### 5.2 SubscriptionManager —— 链上计划 / 订阅 / 退款
+
+- **用途**：封装 SubscriptionManager v2（托管 escrow、平台费、多币种）。
+- **构造**：`new SubscriptionManager({ contractAddress, publicClient, walletClient })`
+- **关键方法**：`getPlatformFeeBps()`、`isTokenWhitelisted(token)`、`getPlan(planId)`、`createPlan(CreatePlanParams)`、`createPlanAndSubscribe(params)`、`subscribe(planId, opts?)`、`releaseFunds(subscriptionId)`、`cancel(subscriptionId)`、`hasActiveSubscription(subscriber, agentId)`、`getSubscription(subscriber, agentId)`、`getSubscriptionDetail(subscriptionId)`、`getUserSubscriptions(user)`
+- **`CreatePlanParams`**：`{ agentId, price: bigint, period: 'day'|'week'|'month'|'year', payToken? = ZERO_ADDRESS, trialDays? = 0 }`（trialDays 0–30）
+- 常量：`ZERO_ADDRESS`（= 原生币）、`SUBSCRIPTION_PERIODS`
+
+```ts
+const { planId } = await sub.createPlan({ agentId, price: parseEther('0.005'), period: 'week' })
+const ok = await sub.hasActiveSubscription(buyer, agentId)  // 网关/服务端鉴权常用
+const detail = await sub.getSubscriptionDetail(subscriptionId)
+// status: 0=Inactive 1=Active 2=Expired 3=Cancelled（SDK 返回 pending/active/expired/cancelled）
+```
+
+### 5.3 SubscriptionPayments —— 统一支付（chain / fiat / x402）
+
+- **用途**：三条支付轨道统一入口。`chain` = 链上 SubscriptionManager；`fiat` = Stripe 卡；`x402` = 原生币按期支付（走网关统一端点）。
+- **构造**：`new SubscriptionPayments({ gatewayUrl?, accessToken?, subscriptionManager?, walletClient?, chain? })`
+  - `chain` 取值：`'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base'`（默认 `'oxachain'`）
+- **关键方法**：`pay(PaySubscriptionInput)`、`hasAccess(agentId, subscriber)`（跨轨道访问检查）、`fetchX402Info()`（x402 发现：price/payTo/network）
+- **`PaySubscriptionInput` 字段**（以源码为准）：`planId, agentId, method, subscriber?, valueWei?, approveTokenFirst?, amountCents?, currency?, successUrl?, cancelUrl?, txHash?, priceWei?, period?`
+  - `priceWei`：中心化 Agent（无链上计划）时直接指定价格；
+  - `amountCents` 省略时网关按链上计划自动计价。
+
+```ts
+const payments = new SubscriptionPayments({ gatewayUrl: 'https://actora.codes', chain: 'base' })
+const hasAccess = await payments.hasAccess(agentId, '0x...') // true / false
+const info = await payments.fetchX402Info()                  // { enabled, priceWei, payTo, network, chain }
+```
+
+### 5.4 ConversationClient —— 托管对话（REST/SSE）
+
+- **用途**：托管对话服务客户端（`POST /api/v1/agent/runs`，SSE 流式），支持会话、并行任务、A2A 委派、余额查询。
+- **构造**：`new ConversationClient({ gatewayUrl, apiKey?, accessToken?, endUserId?, llmApiKey?, llmEndpoint?, llmModel?, timeoutMs? })`
+- **关键方法**：
+  - 对话：`chat(params)` → `{ text, toolCalls, clarification?, usage? }`；`stream(params, { signal? })` → SSE 事件（`text | tool_call | tool_result | thinking | done | error | clarification | onchain_approval_required`）
+  - 会话/任务：`createSession(params)`、`createTask(params)`（立即返回 `status: 'queued'`，后台执行）、`getTask(taskId)`、`listTasks(sessionId)`、`cancelTask(taskId)`、`getCapabilities()`（`parallelTasks` 开关，关闭时 `createTask` 返回 403 `PARALLEL_TASKS_DISABLED`，应降级为 `chat()`）
+  - A2A/计费：`getA2ATaskResult(taskId)`、`retryA2ATask(taskId)`、`getSessionKeyInfo()`、`getBalance()`
+- 参数中的 `endUserId` 传 `0x<wallet>` 会触发网关订阅代理鉴权。
+
+```ts
+const conv = new ConversationClient({ gatewayUrl, apiKey: 'actora_...', endUserId: '0x...' })
+const session = await conv.createSession({ agentId })
+const task = await conv.createTask({ sessionId: session.id, agentId, message: '批量处理' })
+while (true) {
+  const t = await conv.getTask(task.id)
+  if (t.status === 'done' || t.status === 'error') break
+  await new Promise((r) => setTimeout(r, 1000))
+}
+```
+
+### 5.5 CentralAgentClient —— 中心化市场（C-6）
+
+- **用途**：中心化 Agent（`source='central'`，负 ID，不上链）的公开查询 + 鉴权管理。订阅计划存在网关 DB（`central_plans`），付费复用 x402 通道（`SubscriptionPayments.pay({ priceWei, period })`）。
+- **构造**：`new CentralAgentClient({ baseUrl, accessToken?, apiKey? })`
+- **关键方法**：`list(filters?)`、`get(agentId)`、`checkSubscription(subscriber, agentId)`、`mySubscriptions(subscriber)`、`create(input)`、`listMine()`、`update(agentId, input)`、`activate(agentId)` / `deactivate(agentId)`、`createPlan(agentId, input)`、`deactivatePlan(agentId, planId)`
+- **`CreateCentralAgentInput`**：`{ name, description?, tags?, capabilities?, skills?, category? }`
+- **`CreateCentralPlanInput`**：`{ priceWei: string, period?: 'day'|'week'|'month'|'year' }`（priceWei 为十进制字符串）
+
+```ts
+const central = new CentralAgentClient({ baseUrl: 'https://actora.codes', apiKey: 'actora_...' })
+const { agents, total } = await central.list({ activeOnly: true, page: 1, pageSize: 20 })
+const { agent } = await central.create({ name: '行情分析助手', description: '...', capabilities: ['market-data'] })
+const { plan } = await central.createPlan(agent.id, { priceWei: '10000000000000000', period: 'month' })
+```
+
+### 5.6 BillingClient / TenantPlanPayments / AgentWalletConfig / A2AClient / PeriodClient
+
+| 类 | 用途 | 构造 | 关键方法 |
+|----|------|------|----------|
+| `BillingClient` | B 端余额预检（x402 台账，委托前判断余额是否够按次付费） | `{ gatewayUrl, apiKey?, accessToken?, endUserId? }` | `getBalance({ endUserId? })` → `{ balance, balanceWei, currency: 'OXA', subject, payTo?, priceWei? }` |
+| `TenantPlanPayments` | 购买平台订阅档位（`purpose='tenant-plan'`，绑定租户配额） | `{ gatewayUrl, accessToken?, chain? }` | `buy({ tenantPlanId, subscriber, method, txHash?, successUrl?, cancelUrl? })` |
+| `AgentWalletConfig` | agent 自主 MPC 钱包管理（A2A 按次付费自动代付） | `{ baseUrl, adminKey? \| apiKey? }` | `bindWallet(...)`、`authorizePaymentSession(...)`、`status(agentId)`、`list()`、`unbind(agentId)` |
+| `A2AClient` | a2a-pay 支付意图两段式（create → pay → settle） | `{ baseUrl, accessToken? }`（`ClientOptions`） | `create({ payer, amountWei, payee?, chain?, metadata? })`、`settle({ paymentId, txHash, chain? })` |
+| `PeriodClient` | 周期授权（P4）：按周期扣款/读状态 | `{ baseUrl, accessToken? }`（`ClientOptions`） | `charge(authorizationId)`、`authorization(authorizationId)` |
+
+```ts
+// BillingClient —— 委托前预检
+const billing = new BillingClient({ gatewayUrl, apiKey: 'actora_...' })
+const { balanceWei, priceWei } = await billing.getBalance()
+if (priceWei && BigInt(balanceWei) < BigInt(priceWei)) {
+  // 提示充值：向 balance.payTo 转原生币
+}
+```
+
+### 5.7 A2AProtocol —— 链上 A2A（Agent Card / Task）
+
+- **用途**：封装 A2AProtocolRegistry：Agent Card（能力声明）、Skill 注册、Task 生命周期。
+- **构造**：`new A2AProtocol({ contractAddress, publicClient, walletClient })`
+- **关键方法**：`createAgentCard(agentId, card)`、`getAgentCard(agentId)`、`createTask(agentId, taskType, input)`、`completeTask(taskId, output, status?)`、`getTask(taskId)`、`getUserTasks(user)`、`getAgentTasks(agentId)`
+- 相关：`ConversationClient.getA2ATaskResult / retryA2ATask`（网关侧 A2A 委派结果）；`A2AClient`（a2a-pay 支付）。
+
+### 5.8 IPFSUploader —— IPFS 上传
+
+- **用途**：Pinata（JWT）/ 自定义端点上传 JSON / 文件 / 加密载荷。
+- **构造**：`new IPFSUploader({ pinataJwt?, customEndpoint?, customApiKey?, gatewayUrl?, timeoutMs?, pinataGroupId?, namePrefix? })`
+- **关键方法**：`uploadJSON(data, metadata?)`、`uploadFile(content, fileName?, mimeType?)`、`uploadEncryptedPayload(payload, agentName?)`、`uploadString(content, name?)`、`getUrl(cid)`、`isConfigured()`
+- 上传结果 `{ cid, url, raw }`。
+
+```ts
+const uploader = new IPFSUploader({ pinataJwt: process.env.PINATA_JWT })
+const { cid, url } = await uploader.uploadJSON({ name: 'my-agent', capabilities: ['web'] })
+```
+
+### 5.9 MCPConnector —— MCP 远程工具
+
+- **用途**：最小 MCP 客户端（HTTP/SSE），用于 Closed Skill 的远程执行。
+- **构造**：`new MCPConnector({ url, transport?, authHeader?, timeoutMs?, subscriberAddress?, signature?, timestamp? })`（或 `MCPConnector.fromAgent(mcp, opts?)`）
+- **关键方法**：`listTools()` → `MCPTool[]`、`callTool(name, args?)` → `MCPCallResult`、`listResources()`、`readResource(uri)`
+
+```ts
+const mcp = new MCPConnector({ url: 'https://mcp.example.com', authHeader: 'Bearer xxx' })
+const tools = await mcp.listTools()
+const out = await mcp.callTool('fetch_price', { symbol: 'ETH' })
+```
+
+### 5.10 AgentRunner + AgentLoop —— 本地运行 Agent
+
+- **`AgentRunner`**：加载 + 解密 Agent（订阅校验 → IPFS 拉取 → ECIES 解包 AES Key → AES-256-GCM 解包 prompt/skills）。构造 `new AgentRunner({ reader, wallet, ipfsFetcher?, ipfsGateways? })`，`reader` 实现 `OnChainReader`（getTokenURI/getAttributes/hasActiveSubscription），`wallet` 实现 `WalletSigner`（signMessage/getAddress/getPrivateKey?）。核心方法 `useAgent(agentId)` → `{ prompt, skills, mcp, subscriptionExpiry }`。
+- **`AgentLoop`**：ReAct 风格循环（Think → Tool Call → Execute → …）。构造 `new AgentLoop({ ctx, llmProvider, maxIterations?, timeoutMs?, memory?, trace?, contextBudget?, onTextDelta?, onToolCall?, onToolResult?, onThinking?, onComplete?, onError? })`，`llmProvider` 实现 `LLMProvider.chatStream(request, signal?)`。核心方法 `run(userMessage, history?)` → `AgentLoopResult`、`abort()`。
+
+```ts
+const runner = new AgentRunner({ reader, wallet })   // reader/wallet 由 viem/wagmi 实现
+const ctx = await runner.useAgent(agentId)           // 需当前钱包已订阅该 agent
+const loop = new AgentLoop({
+  ctx,
+  llmProvider,                                       // 任意 OpenAI 兼容 provider
+  maxIterations: 5,
+  onTextDelta: (d) => process.stdout.write(d),
+})
+const { finalText } = await loop.run('帮我做这件事')
+```
+
+> B 端通常不需要自建 Runner/Loop——托管对话（`ConversationClient`）已覆盖；Runner/Loop 适合自托管、完全掌控加密与执行的场景。
+
+### 5.11 加密核心（crypto）
+
+- **`aesEncrypt(plaintext, keyHex)` / `aesDecrypt(encryptedBase64, keyHex)`** —— AES-256-GCM（线格式 `base64(IV[12]||ct||tag[16])`）
+- **`eciesEncrypt(dataHex, publicKey)` / `eciesDecrypt(dataHex, privateKey)`** —— ECIES（secp256k1，与 eciesjs 兼容）
+- **`generateKeyPair()`** → `{ privateKey, publicKey }`；**`getPublicKey(privateKey)`**
+- **`generateAesKey()`**；高级封装：`encryptPayload / decryptPayload / packAgentForPublish / publishAgent / unpackAgent`
+
+```ts
+import { generateKeyPair, aesEncrypt, aesDecrypt, eciesEncrypt, eciesDecrypt } from '@actora/sdk'
+const { privateKey, publicKey } = generateKeyPair()
+const enc = eciesEncrypt('my-aes-key-hex', publicKey)
+const dec = eciesDecrypt(enc, privateKey) // 'my-aes-key-hex'
+const c = aesEncrypt('hello', '00'.repeat(32))
+aesDecrypt(c, '00'.repeat(32))            // 'hello'
+```
 
 ---
 
-## Version History
+## 6. 中心化（Central）vs 链上（On-chain）市场对比
 
-| Version | Date | Highlights |
-|---------|------|-----------|
-| **0.11.9** | 2026-08-29 | **租户作用域权限下放（SK-1）** — `AgentWalletConfig` 新增可选 `apiKey` 模式：`{ baseUrl, apiKey }` 用租户 API Key 管理**自有 agent**（`agents.owner = 租户钱包`）的 MPC 钱包（bind/unlock/status/list/delete），越权 403；`{ baseUrl, adminKey }` 平台全量（原行为不变），同时提供时优先 `adminKey`。配套 Gateway `/api/v1/admin/agent-payers` 双轨鉴权已部署。**No breaking changes**，纯附加 |
-| **0.11.8** | 2026-08-25 | **A2A 委派 Session Key 自动扣费（AItrader REQ-1/2/3）** — `ConversationClient` 新增 `getA2ATaskResult`（`a2a_task_results` 行，含 `status=4 awaiting_payment` + `payment_pay_options`）/ `retryA2ATask`（授权 Session Key 后重新激活挂起任务，不扣 ledger）/ `getSessionKeyInfo`（引擎能力信息）/ `getBalance`（x402 余额 + `sessionKey` 授权状态）；新增 `A2A_STATUS` 状态常量 + `A2ADelegatedTaskResult` / `SessionKeyInfo` / `SessionKeyAuthStatus` / `BillingBalance` 类型。端用户钱包 EIP-712 签名授权 `x402-pay` 会话后，Gateway 在余额不足时自动经引擎代签转账补足。**No breaking changes** |
-| **0.11.7** | 2026-08-18 | **Agent 自主钱包 API + `@0xinfrax/payments` `0.1.4`** — 新增 `AgentWalletConfig`（`bindWallet` / `authorizePaymentSession`（邮箱验证码解锁）/ `status` / `list` / `unbind`）：绑定 agent 与 InfraX MPC 钱包（Email 2-of-2 TSS），A2A 委派按次付费由 gateway 服务端自动代付（agent-payer）；依赖升级 `0.1.3 → 0.1.4`（escrow 透传 / ERC20 deposit / 402 结构化错误），HTTP 契约与既有客户端签名不变（补 0.11.6 遗漏的 npm 发布）。**No breaking changes** |
-| **0.11.6** | 2026-08-16 | **B 端余额预检（R19.7 companion）** — 新增 `BillingClient` + `GET /api/v1/billing/balance`：委派未订阅 agent 前程序化预检 x402 余额（租户维度默认，`endUserId` 0x 钱包透传返回端用户余额）；返回 `{ balance (OXA 高精度 decimal), balanceWei, currency, updatedAt, payTo?, priceWei? }`；余额 0 正常返回不报错；鉴权沿用 X-Api-Key / Bearer JWT。解决 aihunter-saas 提出的「先撞 403 再引导充值」体验问题。**No breaking changes** |
-| **0.11.5** | 2026-08-12 | **R19.3/R19.7 商业化闭环** — 新增 `TenantPlanPayments`（平台套餐购买：统一支付入口 `purpose=tenant-plan`，chain/fiat/x402 三轨，`buy()` 返回 `{ method, ... }` 判别结果，绑定租户套餐）；服务端 A2A 按次付费（R19.7）——未订阅 agent 时按次扣 x402 余额（服务端 deduct + 审计幂等），SDK 调用方零改动、对话自动触发；`PaymentsClient.create({ purpose: 'tenant-plan' })` 支持套餐购买元数据。**No breaking changes** |
-| **0.11.4** | 2026-08-11 | **B 端计费策略对齐（R18）** — 服务端「partner 任务强制 BYOK」已废除（2026-08-11 起不强制；未带 key 时走平台兜底 key，平台按 done 事件 usage 精确计费，扣套餐每日配额；`400 LLM_KEY_REQUIRED` 不再返回）；`ConversationSSEEvent` done 事件新增可选 `llmSource?: 'byok' | 'platform'`（计费来源标记，仅供观测）。SDK 调用方**零代码改动**（BYOK 参数仍可用），README/UPGRADE 文档同步。**No breaking changes** |
-| **0.11.3** | 2026-08-10 | **R17.6 a2a/period 回归模块 rails** — 跟随 infraX `@0xinfrax/payments` `^0.1.3`（0.1.3 在模块内置恢复 a2a/period rails，并新增 batch/invite/transfer）；Actora Gateway 自托管 a2a/period 迁移为模块委托，**HTTP 契约与客户端签名完全不变**，`PAYMENT_VERSION` 对齐 `0.1.3`。`A2AClient` 继续由 SDK 本地实现（修复 0.11.1 ESM 导入崩溃）。**No breaking changes** |
-| **0.11.2** | 2026-08-10 | **A2AClient ESM 修复** — `A2AClient` 从 `@0xinfrax/payments` 导入（0.1.2 已移除该导出 → ESM 构建 `Named export not found` 崩溃）改为 SDK 本地实现，签名不变；`PAYMENT_VERSION` 对齐 `0.1.2`。CJS 调用方不受影响。**No breaking changes** |
-| **0.11.1** | 2026-08-10 | **首次跟随演练（F2）** — 跟随 infraX `@0xinfrax/payments` `^0.1.1`（补丁版：新增 `createWebhookForwarder` 事件出站转发 + `ChainAdapter` `rpcHeaders`）；解耦回归 19 项断言通过（消费已安装 npm 包）、sdk 32/32 全绿；`PAYMENT_VERSION` 对齐 `0.1.1`。`SubscriptionPayments` + 协议客户端 API 不变。**No breaking changes** |
-| **0.11.0** | 2026-08-10 | **Payment engine migrated** — the underlying engine moved from the Actora-maintained `@0xinfrax/payments` (now **deprecated**) to the InfraX-maintained [`@0xinfrax/payments`](https://www.npmjs.com/package/@0xinfrax/payments) `^0.1.0`; capabilities identical (chain / Stripe fiat / x402 v1+v2 / MPP channels / stablecoin EIP-3009+Permit2 / period authorizations / a2a-pay), dependency-source only; `PAYMENT_VERSION` aligned to `0.1.0`. `SubscriptionPayments` + protocol clients (MPP/A2A/Period/X402/Payments) API unchanged. **No breaking changes** (see UPGRADE.md) |
-| **0.10.1** | 2026-08-08 | **Released** — per-request `endUserId` on `createTask` (body) / `stream` (header) for B-end subscription proxying; B-end key vs user JWT behavior documented (identical P9 capability bits; partner tasks **require BYOK** → `400 LLM_KEY_REQUIRED`; platform MCP & on-chain are JWT-only); MCP boundary note (platform `/mcp` vs self-hosted MCP). Non-breaking additive change (see UPGRADE.md) |
-| **0.10.0** | 2026-08-08 | **Complete feature release** — consolidates the 0.9.x line into a stable baseline: typed `onchain_approval_required` SSE event + `OnChainApprovalRequest` (user-wallet-signed on-chain delegation, no platform gas), agent categories, unified payments rails, sessions & parallel tasks, streaming tool_call fix. **No breaking changes** |
-| **0.9.6** | 2026-08-08 | **Typed on-chain approval event** — `ConversationSSEEvent` adds `'onchain_approval_required'` + `OnChainApprovalRequest { targetAgentId, taskType, inputData }` so consumers no longer need `as unknown as` narrowing when the agent requests an auditable on-chain A2A delegation (the user's wallet signs `createTask` and pays the gas). Frontend `useAgentChat` updated to the typed event (also resolves the pre-existing `AgentPayload.category` error). **No breaking changes** |
-| **0.9.5** | 2026-08-08 | **Fix: streaming tool_call arguments dropped** — DeepSeek/OpenAI argument-delta chunks carry only an `index` (no `id`); `GatewayProvider` / `OpenAIProvider` now keep an `index→id` map so accumulated tool arguments attach to the real call (previously silently discarded). **No breaking changes** (see UPGRADE.md) |
-| **0.9.4** | 2026-08-07 | **Agent application categories** — `AgentPayload.category` + `AGENT_CATEGORIES` / `AgentCategory` (13 enums); written to public metadata + on-chain attrs; `getAllAgents()` / `getAgentMetadata()` resolve `category`; Gateway `?category=` filter + byCategory aggregation; frontend Studio requires it, Marketplace categorizes by it. `@0xinfrax/payments` resolved to **0.2.2** (ownership metadata). **No breaking changes** (see UPGRADE.md) |
-| **0.9.3** | 2026-08-07 | **P2-P4 rails aligned** — `@0xinfrax/payments` bumped to `^0.2.0` (MPP payment channels / stablecoin EIP-3009+Permit2 / period authorizations / a2a-pay); re-exports `MPPClient` / `A2AClient` / `PeriodClient` / `X402Client` / `PaymentsClient` from the SDK root. **No breaking changes** — `SubscriptionPayments` API unchanged (see UPGRADE.md) |
-| **0.9.2** | 2026-08-07 | **Unified payments endpoint** — `SubscriptionPayments` fiat / x402 / `hasAccess()` now go through the Gateway's `/api/v1/payments` via the decoupled `@0xinfrax/payments` engine (`^0.1.0`, new dependency); `fetchX402Info()` reads the rails-discovery `/info`. **No breaking changes** — `pay()` / `hasAccess()` / result types unchanged (see UPGRADE.md) |
-| **0.9.0** | 2026-08-06 | Browser Control Skill extension: new actions `hover` / `press` / `select` (select+checkbox+radio) / `back` / `forward` / `getInfo` (url/title/viewport); `extractAccessibleDOM` now includes `name`/`role`/`aria-label`/input `value`/checkbox `checked`/anchor `target`; new `sleep(ms)` async pacing helper; `findElement` also matches `name` attr |
-| **0.8.11** | 2026-08-07 | **Multi-rail subscription payments** — new `SubscriptionPayments` class (`pay({ method })` for `chain` / `fiat` / `x402`, `hasAccess()` unified chain-OR-fiat/x402 check, `fetchX402Info()` discovery); fiat `amountCents` now optional (Gateway auto-prices from the on-chain plan); x402 auto-funding from a configured `walletClient` |
-| **0.8.10** | 2026-08-06 | Master-key crypto helpers `encryptWithKey()` / `decryptWithKey()` (AES-256-GCM, `base64(IV‖tag‖ciphertext)`, byte-compatible with Gateway at-rest key encryption); `parseTokenURIJSON` exported from the main entry; `A2AProtocol.createTask()` accepts raw string `input`; **subscription status mapping fix** (on-chain enum `0/1/2/3` → `pending/active/expired/cancelled`, previously shifted) |
-| **0.8.9** | 2026-08-06 | Docs sync — Installation section points at v0.8.8 ("just install to use the new capabilities"); same code as 0.8.8 |
-| **0.8.8** | 2026-08-06 | Docs sync — README updated for 0.8.7 (sessions & parallel tasks section) |
-| **0.8.7** | 2026-08-06 | `ConversationClient` gains sessions & parallel tasks: `createSession()` / `createTask()` (returns `taskId` immediately, background execution) / `getTask()` / `listTasks()` / `cancelTask()` / `getCapabilities()`. New `ConversationTaskError` (`.status` / `.code`) — `createTask()` on a P9-disabled tenant/plan rejects with HTTP 403 `PARALLEL_TASKS_DISABLED`; used by the frontend parallel-task chat UI |
-| **0.8.6** | 2026-08-06 | `ConversationChatParams` gains `tenantKeyId` — BYOK via a stored tenant-owned API key, resolved server-side by the Gateway (plaintext key never leaves the server); used by the new frontend own-key settings flow |
-| **0.8.5** | 2026-08-06 | Docs sync — re-published with updated README (same code as 0.8.4) |
-| **0.8.4** | 2026-08-06 | `ConversationClient` now supports Gateway JWT auth (`accessToken` → `Authorization: Bearer`, alternative to `apiKey`) and external abort (`stream(params, { signal })`); `tool_result` event gains optional `error` field. Frontend chat hook unified onto it (single SSE client implementation) |
-| **0.8.3** | 2026-08-05 | Install fix: `wagmi` promoted from optional to required peer dependency — the package is now directly usable via `npm install @actora/sdk@0.8.3` (no manual `wagmi` install); verified from a clean install (ESM + CJS, chain reads OK) |
-| **0.8.2** | 2026-08-05 | Write-op fix: `createPlan()` / `subscribe()` / `releaseFunds()` / `cancel()` resolve the full viem `walletClient.account` instead of a bare address string — local/private-key signers now work (`eth_sendRawTransaction`); browser wallets unchanged. Verified on-chain (OxaChain L1) |
-| **0.8.1** | 2026-08-04 | `parseTokenURIJSON()` fault-tolerant parsing aligned with Gateway indexer: base64 trailing garbage cleanup, unterminated JSON repair, regex fallback, explicit `ipfs://` handling |
-| **0.8.0** | 2026-08-04 | Chain-data capabilities: `getAllAgents()` / `totalAgents()` / `getAgentMetadata()` on IdentityRegistry; `createPlan()` (typed period `day|week|month|year`) / `subscribe()` (event-parsed result) / `createPlanAndSubscribe()`; `subscribeToEvents()` event stream |
-| **0.7.5** | 2026-08-04 | Fix AgentLoop forcing `ctx.model ?? 'gpt-4o'` over provider model — priority now `ctx.model ?? provider.model ?? default` |
-| **0.7.4** | 2026-08-04 | `ConversationClient` adds `llmModel` (forwarded as `X-Llm-Model`) — BYOK now covers key + endpoint + model (e.g. `deepseek-v4-pro`) |
-| **0.7.3** | 2026-08-04 | Stateless BYOK: `ConversationClient` adds `llmEndpoint` (forwarded as `X-Llm-Endpoint`) so callers supply their own LLM key + endpoint (e.g. DeepSeek) per request — no Actora-side key storage needed |
-| **0.7.2** | 2026-08-03 | Clarification interruption: `ConversationSSEEvent` adds `clarification` + `question`; `chat()` returns `result.clarification` when the service interrupts an ambiguous request |
-| **0.7.1** | 2026-08-03 | ConversationClient inline mode: `prompt` + `skills` params (inject MCP/HTTP tools e.g. RAG), `agentId` now optional; Gateway forwards `X-Llm-Api-Key` |
-| **0.7.0** | 2026-08-01 | **ConversationClient** (`@actora/sdk/conversation`) — remote Conversation Service client: SSE streaming via Gateway, auto `X-Api-Key` / `X-End-User-Id` / `X-Llm-Api-Key`; Gateway Agent-as-MCP `tools/call` now executes skills directly (no LLM second-pass) |
-| **0.6.9** | 2026-08-01 | Microservice Agent Conversation — 6-Phase Optimization: Conversation Service (Memory + Context + Sandbox), Observability (TraceEmitter), Skills Marketplace, Agent-as-MCP Export, Browser Control Skill, 3 new sub-path exports (memory/traces/skills) |
-| **0.6.8** | 2026-07-28 | Fixed import paths in platform-tools (definitions.ts, executor.ts, index.ts) after module split; Frontend: 3 God Components modularized (AgentCardManager→5 files, AgentRegistration→4 files, RevenueDisplay→5 files) |
-| **0.6.7** | 2026-07-27 | Code review: 22 fixes across contracts/gateway/frontend/sdk; Redis-backed auth; unified error handler; i18n agent dashboard; barrel exports; custom errors in SubscriptionManager; ValidationRegistry interface fix; TokenPriceOracle de-hardcoded |
-| **0.6.6** | 2026-07-22 | A2A Worker + Daemon multi-agent interop, A2A tenant isolation, i18n EN/繁體中文, completeTask ABI fix, getAgentTasks |
-| **0.6.5** | 2026-07-21 | Admin dashboard, A2A L1 redeploy, DeepSeek platform key, auth case-insensitive fix |
-| **0.6.4** | 2026-07-20 | IPFSUploader (Pinata + custom endpoint), publishAgent pipeline, IPFS platform tools |
-| 0.6.3 | 2026-07-19 | Production deploy, wallet auto-switch to OxaChain L1, MCP dual-chain fixes |
-| 0.6.1 | 2026-07-15 | AgentLoop ReAct, OpenAIProvider, GatewayProvider, ToolExecutor |
-| 0.5.4 | 2026-07-14 | MultiEndpointClient, ConfigurationClient, OxaChain L1 dual-chain |
-| 0.2.0 | 2026-07-13 | AgentRunner, SubscriptionManager v3, A2A Protocol, MCP Connector |
+| 维度 | 链上（On-chain） | 中心化（Central） |
+|------|------------------|-------------------|
+| Agent 载体 | 链上 NFT（`AgentRegistry` 铸造，正 ID） | 网关 DB 记录（`source='central'`，负 ID） |
+| 订阅计划 | `SubscriptionManager.createPlan`（链上合约） | `CentralAgentClient.createPlan`（`central_plans` 表） |
+| 付费 | `subscribe`（原生币/ERC20，托管 escrow） | `SubscriptionPayments.pay({ method: 'x402', priceWei })` 或 fiat |
+| 鉴权判定 | 链上 `hasActiveSubscription` | 网关 `checkSubscription`（`fiat_subscriptions`） |
+| 适用场景 | 需要公开可验证、用户自持钱包、跨平台互操作 | 平台自己建 Agent、快速上架、无需用户钱包的 B 端 |
+
+**流程差异**：链上 Agent 的用户必须「铸造者/订阅者」都有钱包且在同一链；中心化 Agent 的订阅方无需钱包（fiat 卡付），B 端拿到 `planId` + `priceWei` 直接调统一支付即可。
 
 ---
 
-## License
+## 7. B 端常见问题（FAQ）
 
-MIT
+### 鉴权方式对照表
+
+| 场景 | 头 | 适用客户端 |
+|------|-----|-----------|
+| 租户 API Key（推荐 B 端） | `X-Api-Key: actora_...` | `ConversationClient` / `BillingClient` / `CentralAgentClient`（发布管理） |
+| 钱包签名 JWT | `Authorization: Bearer <jwt>` | 同上（`accessToken` 字段） |
+| 平台管理员 | `X-Admin-Key: <ADMIN_KEY>` | `AgentWalletConfig`（平台全量作用域） |
+| 钱包/私钥（链上交易） | 无头，viem `WalletClient` 签名 | `AgentRegistry` / `SubscriptionManager` / `A2AProtocol` |
+
+> `ConversationClient` 必须二选一提供 `apiKey` 或 `accessToken`，否则构造后请求即抛错。
+
+### archive RPC 的坑
+
+- `eth_call`（读合约）与事件订阅用 publicnode 免费 RPC 即可；
+- `getTransactionReceipt`（历史交易收据 / archive 查询）在 publicnode 返回 **403**；
+- 换用：BSC → `https://1rpc.io/bnb`；Base → `https://mainnet.base.org`。
+
+### nonce 缓存 / 交易重试的坑
+
+- viem `WalletClient` 默认本地缓存 nonce，**并发或失败重试**时可能复用已用 nonce 导致 `nonce too low`；
+- 串行执行交易并等待 `waitForTransactionReceipt`；失败重试前调用 `publicClient.reset()` 或在 `sendTransaction`/`writeContract` 显式传 `nonce: await publicClient.getTransactionCount({ address })`。
+
+### 其他
+
+- `agentId` 是**链内 ID**：跨链不通用，切链后需重新铸造/订阅；
+- `SubscriptionPayments.hasAccess` 需要 `gatewayUrl`；`method: 'chain'` 需要 config 里的 `subscriptionManager`；
+- 中心化 Agent 的计划价格是 `priceWei` 字符串，传给 `pay({ priceWei })` 时保持字符串避免精度丢失；
+- `AgentRunner.useAgent` 需要钱包支持 `getPrivateKey()`（ECIES 解密用），浏览器环境可用 wagmi 封装。
+
+---
+
+## 8. 版本记录
+
+| 版本 | 要点 |
+|------|------|
+| 0.12.0+ | **BSC 多链**：`KNOWN_CHAINS` 增加 chainId 56（BSC 主网，Agent 市场开通），链上模块全链通用 |
+| 0.13.0 | **ETH / Base 预留**：`KNOWN_CHAINS` 增加 1 / 8453 占位条目（合约未部署） |
+| 0.14.0 | **ETH 开通**：Ethereum 主网合约部署（SubscriptionManager block 25992521） |
+| 0.15.0 | **Base 开通**：Base 主网合约部署（SubscriptionManager block 51401326） |
+| 0.15.1 | **Base 地址修正**：按 `broadcast/DeployBase.s.sol/8453/run-latest.json` 的 contractName 映射修正 Base 合约地址（SubscriptionManager 修正为 `0x0f129e...`） |
+| 0.15.2 | **B 端接入文档/样例**：README 彻底重写（多链市场、接入全流程、模块参考、FAQ）；`examples/` 随包发布（`mint-and-subscribe` / `conversation-bend` / `central-agent-bend`） |
+
+---
+
+## 附录：可运行示例
+
+见 [`examples/`](./examples/README.md)：
+
+- `examples/mint-and-subscribe.mjs` —— 链上完整流程（选链 → 铸造 → 建计划 → 订阅 → 验证）
+- `examples/conversation-bend.mjs` —— B 端托管对话（chat + stream，BYOK）
+- `examples/central-agent-bend.mjs` —— 中心化市场（list / create / createPlan）

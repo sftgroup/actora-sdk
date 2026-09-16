@@ -1,6 +1,6 @@
 {
   "name": "@actora/sdk",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "description": "Actora — Decentralized AI Agent SDK with ReAct AgentLoop + Multi-Tenant LLM Providers",
   "main": "dist/index.js",
   "types": "dist/index.d.mts",
@@ -70,7 +70,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "examples"
   ],
   "scripts": {
     "build": "tsup src/index.ts src/core/index.ts src/react/index.ts src/endpoint/index.ts src/configuration/index.ts src/agent-loop/index.ts src/llm/index.ts src/ipfs/index.ts src/memory/index.ts src/traces/index.ts src/skills/index.ts src/conversation/index.ts --format cjs,esm --dts --clean --sourcemap --splitting false --out-dir dist",
