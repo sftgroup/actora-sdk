@@ -21,7 +21,7 @@ import { SubscriptionManager } from '../subscription/subscription'
 
 export type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402'
 export type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year'
-export type ChainKey = 'oxachain' | 'sepolia'
+export type ChainKey = 'oxachain' | 'sepolia' | 'bsc'
 
 export interface SubscriptionPaymentsConfig {
   /** Actora Gateway base URL (required for fiat / x402 rails). */
@@ -112,7 +112,7 @@ export class SubscriptionPayments {
     if (!this.client) {
       throw new Error('hasAccess() requires a gatewayUrl')
     }
-    const res = await this.client.access(subscriber, agentId, this.config.chain ?? 'oxachain')
+    const res = await this.client.access(subscriber, agentId, (this.config.chain ?? 'oxachain') as PaymentsChainKey)
     return res.active === true
   }
 

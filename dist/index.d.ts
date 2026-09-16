@@ -83,7 +83,7 @@ declare const SUBSCRIPTION_VERSION = "0.3.0";
 
 type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402';
 type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year';
-type ChainKey = 'oxachain' | 'sepolia';
+type ChainKey = 'oxachain' | 'sepolia' | 'bsc';
 interface SubscriptionPaymentsConfig {
     /** Actora Gateway base URL (required for fiat / x402 rails). */
     gatewayUrl?: string;

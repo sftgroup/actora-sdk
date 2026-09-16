@@ -611,7 +611,28 @@ Subscriber uses Agent:
 | Network | Chain ID | RPC | Gas Token |
 |---------|----------|-----|-----------|
 | **OxaChain L1** | **19505** | `https://rpc-oxa.0xainet.top` | OXA |
+| **BNB Smart Chain (BSC)** | **56** | `https://bsc-rpc.publicnode.com` | BNB |
 | Sepolia (Testnet) | 11155111 | `https://ethereum-sepolia-rpc.publicnode.com` | ETH |
+
+> **多链**：`KNOWN_CHAINS`（按 chainId 索引）与 `ChainKey`（`'oxachain' | 'sepolia' | 'bsc'`）已覆盖上表全部网络。链上 wrapper（`SubscriptionManager` / `AgentRegistry`）通过 viem client + 合约地址工作，天然链无关 —— 用 `KNOWN_CHAINS[56].contracts` 取地址即可在 BSC 上铸造 / 订阅，链选择仅影响合约地址与 RPC，无需改调用代码。
+
+```ts
+import { KNOWN_CHAINS, SubscriptionManager, AgentRegistry } from '@actora/sdk'
+import { createPublicClient, createWalletClient, http, custom } from 'viem'
+import { bsc } from 'viem/chains'
+
+const chain = KNOWN_CHAINS[56] // BSC
+const publicClient = createPublicClient({ chain: bsc, transport: http(chain.rpcUrl) })
+const walletClient = createWalletClient({ chain: bsc, transport: custom(window.ethereum) })
+
+// BSC 上铸造 agent（gas 用 BNB；tokenURI 为 IPFS 元数据 URI）
+const registry = new AgentRegistry({ contractAddress: chain.contracts.identityRegistry, publicClient, walletClient })
+const { agentId } = await registry.register('ipfs://Qm...metadata.json', [])
+
+// BSC 上订阅（支付 BNB）
+const sm = new SubscriptionManager({ contractAddress: chain.contracts.subscriptionManager, publicClient, walletClient })
+await sm.subscribe(planId, { valueWei: planPriceWei })
+```
 
 ---
 
@@ -627,6 +648,17 @@ Subscriber uses Agent:
 | ReputationRegistry | `0x6a18C2664E1b42063860d864b6448b824d7B843F` |
 | ConfigurationRegistry | `0x07280674ccc2898Fd038A9e3C22005CA83ffD2F8` |
 | MultiEndpointRegistry | `0xB361d04F49000013FC131D3C59C41c8486C64f8c` |
+
+### BSC Mainnet (BNB Smart Chain)
+
+| Contract | Address |
+|----------|---------|
+| IdentityRegistry | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` |
+| SubscriptionManager v3 | `0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b` |
+| A2AProtocolRegistry | `0x842F0B9E85f5aBd9752B5ea20Cc888b94dBb5E16` |
+| ReputationRegistry | `0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee` |
+| ConfigurationRegistry | `0xd9B984cF591dc1C3663991e7D75c44C2bDE1a9BB` |
+| MultiEndpointRegistry | `0x80Bc36634693d7935109f5cdbc95E64a9c1bdA6a` |
 
 ### Sepolia (Testnet)
 

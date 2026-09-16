@@ -6513,6 +6513,23 @@ var KNOWN_CHAINS = {
     },
     ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"],
     rpcUrl: "https://rpc-oxa.0xainet.top"
+  },
+  // BNB Smart Chain (BSC) Mainnet
+  // Chain ID 56, EIP-1559, gas token BNB
+  // Agent 市场开通 2026-09-17（DeployBsc.s.sol，部署者 0x8017925F7eEcA3713F03983113788321891F7D1f）
+  // Explorer: https://bscscan.com
+  56: {
+    chainId: 56,
+    contracts: {
+      identityRegistry: "0xeF96D883e1082E3e102d925c8190A13EEC1ffF33",
+      subscriptionManager: "0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b",
+      a2aProtocolRegistry: "0x842F0B9E85f5aBd9752B5ea20Cc888b94dBb5E16",
+      reputationRegistry: "0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee",
+      configurationRegistry: "0xd9B984cF591dc1C3663991e7D75c44C2bDE1a9BB",
+      multiEndpointRegistry: "0x80Bc36634693d7935109f5cdbc95E64a9c1bdA6a"
+    },
+    ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"],
+    rpcUrl: "https://bsc-rpc.publicnode.com"
   }
 };
 var ConfigurationRegistry = class {
