@@ -580,12 +580,30 @@ new AgentRunner({ reader, wallet, aesKeyHex: sessionAesKey })
 #### 隐私边界：托管对话读的是什么
 
 托管对话（`ConversationClient`，`agentId` 模式）由 Conversation Service 组装上下文，其 **system prompt 取公开
-metadata 的 `description`（回退 `name`）**，skills 取公开 `metadata_json.skills` —— **不会**读取加密 payload
-（见 conversation-service `agent-context-loader`）。因此：
+metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skills` —— **不会**读取加密 payload
+（见 conversation-service `agent-context-loader`）。
+
+`metadata_json` 的**来源**需要注意：它由网关索引器写入，内容等于 **`tokenURI` 解析出的 JSON**，而解析器
+`parseTokenURIJSON()` 只认 `data:application/json;base64,<base64>`（`ipfs://` 与普通 https URL 一律返回 `null`）。
+链上属性（`registerWithMetadata` 的 key/value）**不参与** `metadata_json` 组装，只有 `name` / `description` /
+`category` / `tags` 会作为**列**的兜底值。由此有三条容易踩空的结论：
+
+- 托管对话取 skills 的顺序是 `metadata_json.skills` → `metadata_json.attributes.skills`（前者存在即用前者，**不合并**），
+  且必须是**真数组**（JSON 字符串会被判为非数组而丢弃）；
+- 写链上属性 `key='skills'` 对托管对话**无效**，只影响 `skills` 列（市场展示，类型为 `string[]`）；
+- `metadata_json` 非空的前提是 `tokenURI` 为 base64 data URI，而官方 Studio 发布用的是
+  `https://…/ipfs/<cid>` ⇒ **现状下 `metadata_json` 恒为 `{}`，托管对话的 skills 实际恒为空**；`description`
+  因有链上属性兜底可用。
+- `agentId` 模式取上下文走 `GET /api/v1/agents/:id` 且**不带 `chain`**，只命中 `oxachain` 与 `central` 的 ID；
+  BSC / Ethereum / Base 的 agent 在该路径下会 404。
+
+因此：
 
 - 「密文存放于 IPFS、平台与 B 端都无法解密」成立，平台侧没有任何 Agent 内容解密实现；
 - 但**不要把敏感内容写进 `description`**：它以明文入库，并会作为托管对话的 system prompt 被使用；
-- 真 prompt 要参与托管对话，目前只有两条路：inline 模式（调用方自备 `prompt`/`skills`）或自托管 Runner（持派生密钥那一侧）；
+- 真 prompt/skills 要参与托管对话，目前实际只有两条路：inline 模式（调用方自备 `prompt`/`skills`）或自托管
+  Runner（持派生密钥那一侧）；把可执行 skills 放进 base64 data URI 形式的 `tokenURI` 是理论上的第三条，
+  但受 gas 与链范围限制（见上）；
 - `ConversationClient.getSessionKeyInfo()` 是 A2A **代付**的会话密钥（EIP-712 授权派生，私钥不出端侧），**与内容解密无关**。
 
 ---
