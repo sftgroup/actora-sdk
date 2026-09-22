@@ -679,7 +679,7 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
   系统就会命中那条链。只读的 `GET /api/v1/agents/:id` 支持 `?chain=` 精确指定；不带时按上述优先序跨链解析
   （历史行为：只命中 `oxachain` / `central`，BSC / Base 会 404 —— 已修复）。
 
-#### `skills[].execution`：可选，三种类型与调用约定
+#### `skills[].execution`：可选，托管对话支持的类型与调用约定
 
 `execution` **是可选字段**。**不写不影响工具被列出**——工具列表只判断「是否为带非空 `name` 的对象」，
 `execution` 完全不参与过滤；但调用时固定返回一个 **`error` 对象**（不抛异常），用于「先让工具出现在列表里」：
@@ -688,12 +688,19 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
 { "error": "Skill \"<name>\" has no remote execution configured. Add execution.type=\"mcp\" with an endpoint." }
 ```
 
+> ⚠️ 三条路径支持的写法**不完全相同**：
+> - **托管对话（`agentId` 模式）**：读链上公开属性，`execution.type` 支持 `mcp` / `http` / `a2a`（下表）；
+> - **inline 注入**（`ConversationClient` 传 `prompt` + `skills`）：走 SDK 的 `ConversationSkillDef`，
+>   同样已声明 `mcp` / `http` / `a2a`（有完整类型提示）；
+> - **SDK 加密发布类型**（`Skill.execution`，写入加密 payload、由本地 `AgentRunner` 解密执行）：
+>   只声明 `mcp` / `a2a`。注意 **`open` 不是 `execution.type` 的取值**，它是「未配置 `execution` 时本地执行器的默认模式」。
+
 | `execution.type` | 字段 | 平台（托管对话）侧行为 |
 |---|---|---|
 | `mcp` | `endpoint?`（缺省 `<gateway>/mcp`）、`toolName?`（缺省技能名） | 真实发起 JSON-RPC 2.0：`POST <endpoint>`，body `{"jsonrpc":"2.0","id":<ts>,"method":"tools/call","params":{"name":"<toolName>","arguments":<入参>}}`，取 `result.content[0].text` |
 | `http` | `endpoint`（**必填**） | 真实发起 `POST <endpoint>`，`Content-Type: application/json`，**body = 模型按 `inputSchema` 产出的入参 JSON 原样**，响应按 JSON 解析后作为工具结果 |
 | `a2a` | `targetAgentId?`、`skillFilter?`、`promptOverride?` | **不发起 HTTP**：返回 `{ type: 'a2a_delegation', targetAgentId, skillFilter, promptOverride, callerInput }` 作为工具结果，由上层决定是否走 A2A |
-| 不写 `execution` | — | 进工具列表；调用返回上面的 `error` 对象 |
+| 其他 / 不写 `execution` | — | 进工具列表；调用返回上面的 `error` 对象 |
 
 **`http` 类型的边界（当前实现实测）**：
 
