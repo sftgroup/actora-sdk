@@ -296,3 +296,36 @@ describe('AgentRunner decryption key sources', () => {
     expect((err as Error).cause).toBeInstanceOf(Error)
   })
 })
+
+// ── Private-key input normalisation (`0x` prefix) ──────────────────────────
+// Regression: noble's `hexToBytes` rejects a leading `0x`, so keys copied out
+// of a wallet / `.env` used to fail with an opaque error.
+
+describe('private key accepts an optional 0x prefix', () => {
+  const bare = WALLET_PRIVATE_KEY
+  const prefixed = `0x${WALLET_PRIVATE_KEY}`
+
+  it('eciesDecrypt yields the same AES key for bare and 0x-prefixed input', () => {
+    const { eciesEncryptedKey, aesKeyHex } = encryptedFixture()
+    expect(eciesDecrypt(eciesEncryptedKey, bare)).toBe(aesKeyHex)
+    expect(eciesDecrypt(eciesEncryptedKey, prefixed)).toBe(aesKeyHex)
+  })
+
+  it('unpackAgent round-trips with a 0x-prefixed private key', () => {
+    const { encryptedPayload, eciesEncryptedKey } = encryptedFixture()
+    expect(unpackAgent(encryptedPayload, eciesEncryptedKey, prefixed)).toMatchObject({
+      prompt: AGENT.prompt,
+    })
+  })
+
+  it('getPublicKey accepts both forms', () => {
+    expect(getPublicKey(prefixed)).toBe(getPublicKey(bare))
+  })
+
+  it('rejects a malformed key with an actionable message', () => {
+    const { eciesEncryptedKey } = encryptedFixture()
+    for (const bad of ['0xabc', 'zz'.repeat(32), prefixed + '00']) {
+      expect(() => eciesDecrypt(eciesEncryptedKey, bad)).toThrow(/32-byte hex/)
+    }
+  })
+})

@@ -1,5 +1,53 @@
 # @actora/sdk Upgrade Guide
 
+## v0.17.0 → v0.17.1（2026-09-23，可选升级）
+
+> 两处 DX 修复：解密入口放宽私钥格式；`UPGRADE.md` 随包发布（此前只在仓库里，`npm` 包内没有）。
+> **无 API 破坏**（一处行为放宽，其余为包内容变化）。
+
+### 变更点
+
+- **`eciesDecrypt()` / `unpackAgent()` / `getPublicKey()` 的 `privateKey` 参数现在接受可选的 `0x` 前缀**
+  —— 此前会把钱包 / `.env` 里直接复制出来的 `0x...` 私钥交给 noble 的 `hexToBytes`，
+  抛出含义不清的 `hex string expected` 一类错误；现在两种写法等价。
+- **私钥格式非法时报错改为可操作**：`Invalid private key: expected 32-byte hex (64 hex chars; "0x" prefix is optional)`
+  （长度不足 / 超长 / 含非 hex 字符都会命中，不再静默透出底层库错误）。
+- **`UPGRADE.md` 加入 npm 包 `files` 白名单** —— 此前文档里多处指引「见 sdk/UPGRADE.md」，
+  但 `npm install` 后包内没有该文件，只能回仓库看。
+- 顺带修正 `package-lock.json` 里残留的旧包名 `@agentxv2/sdk` → `@actora/sdk`。
+
+### 迁移动作
+
+- `npm install @actora/sdk@0.17.1`。**既有代码零改动**：裸 hex 私钥行为完全不变（已加回归测试）。
+
+---
+
+## v0.16.0 → v0.17.0（2026-09-23，可选升级）
+
+> 新增链上属性写入助手：补写公开 `skills` 属性不再需要手写合约调用。**无 API 破坏**（纯附加）。
+> 平台侧的「托管对话多链（BSC / Ethereum / Base）」是服务端修复，**不随 SDK 发版**，用旧 SDK 也会生效。
+
+### 变更点
+
+- **新增 `registry.setAttributes(agentId, patch)`** —— 读回现有链上属性 → 合并 → 整组写回
+  （`IdentityRegistry.updateMetadata`），未提及的键保持原值。**推荐入口**。
+- **新增 `registry.overwriteAttributes(agentId, attrs[])`** —— 整组覆盖；只在需要「删掉某个属性键」时用，
+  必须自行带上全部原有属性，否则会把 `name` / `description` / `category` 等一起抹掉。
+- **新增 `toAttributes(patch)`（根导出）** —— `{ key: value }` → 链上属性数组（字符串原样；
+  数字 / 布尔 `String()`；数组 / 对象 `JSON.stringify`；`undefined` / `null` 跳过）。
+
+### 迁移动作
+
+- `npm install @actora/sdk@0.17.0`。既有代码零改动；自行实现「读回 → 合并 → 整组写回」的集成
+  可直接换成 `setAttributes`，语义一致。
+- 需要让托管对话把 Agent 的 `skills` 当**可执行工具**时，必须用链上**公开** `skills` 属性补写
+  （托管对话不读加密 payload）；公开属性**无长度 / 条数硬限制**，但每条是一次 SSTORE，建议只放
+  托管对话真正需要的那几条。生效链路：网关全量同步（`AGENTS_SYNC_INTERVAL_SEC`，默认 120s，或手动
+  `POST /api/v1/agents-sync`）→ Conversation Service 上下文缓存 TTL（`CONTEXT_CACHE_TTL_SEC`，默认 300s）。
+- `execution` 的三种类型与写法见 [README §5.12 隐私边界](README.md)。
+
+---
+
 ## v0.15.3 → v0.16.0（2026-09-23，建议升级）
 
 > 浏览器钱包（EIP-1193）在发布与运行两侧都可用了：解密密钥来源可注入，`personal_sign + HKDF-SHA256` 派生成为官方路径。

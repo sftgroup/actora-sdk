@@ -278,13 +278,32 @@ export function eciesEncrypt(dataHex: string, publicKey: string): string {
 }
 
 /**
+ * Normalize a secp256k1 private key to bare 32-byte hex.
+ *
+ * Noble's `hexToBytes` rejects a `0x` prefix outright, which used to surface as
+ * an opaque "hex string expected" error for keys copied straight out of a
+ * wallet / `.env`. Accept both forms and fail with an actionable message.
+ */
+function normalizePrivateKey(privateKey: string): string {
+  const hex = typeof privateKey === 'string' && privateKey.startsWith('0x')
+    ? privateKey.slice(2)
+    : privateKey
+  if (typeof hex !== 'string' || !/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error(
+      'Invalid private key: expected 32-byte hex (64 hex chars; "0x" prefix is optional)'
+    )
+  }
+  return hex
+}
+
+/**
  * Decrypt ECIES ciphertext with recipient's secp256k1 private key.
  */
 export function eciesDecrypt(dataHex: string, privateKey: string): string {
   const { ephemeralPub, iv, ciphertext, mac } = eciesDecode(dataHex)
 
   // 1. ECDH
-  const privBytes = hexToBytes(privateKey)
+  const privBytes = hexToBytes(normalizePrivateKey(privateKey))
   const shared = secp256k1.getSharedSecret(privBytes, ephemeralPub)
   const sharedX = shared.subarray(1, 33)
   const sharedKey = sha256(sharedX)
@@ -490,10 +509,10 @@ export function generateKeyPair(): { privateKey: string; publicKey: string } {
 }
 
 /**
- * Derive public key from private key (hex).
+ * Derive public key from private key (hex; `0x` prefix optional).
  */
 export function getPublicKey(privateKey: string): string {
-  return bytesToHex(secp256k1.getPublicKey(hexToBytes(privateKey), false))
+  return bytesToHex(secp256k1.getPublicKey(hexToBytes(normalizePrivateKey(privateKey)), false))
 }
 
 // ── Wallet-derived key pair (personal_sign + HKDF-SHA256) ──────────────────

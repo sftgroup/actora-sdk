@@ -1,4 +1,4 @@
-# @actora/sdk v0.17.0
+# @actora/sdk v0.17.1
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
@@ -100,10 +100,11 @@ const { planId } = await sub.createPlan({
 ```bash
 npm install @actora/sdk
 # 或锁定版本
-npm install @actora/sdk@0.17.0
+npm install @actora/sdk@0.17.1
 ```
 
-> 包内含 `examples/`（B 端可运行样例），安装后可从 `node_modules/@actora/sdk/examples/` 查看。
+> 包内含 `examples/`（B 端可运行样例）与 `UPGRADE.md`（逐版本迁移指南），安装后可从
+> `node_modules/@actora/sdk/` 查看。
 
 ### Peer Dependencies（均为 optional）
 
@@ -624,22 +625,42 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
 
 `metadata_json` 的**来源**需要注意：它由网关索引器写入，基底是 **`tokenURI` 解析出的 JSON**（解析器
 `parseTokenURIJSON()` 只认 `data:application/json;base64,<base64>`，`ipfs://` 与普通 https URL 一律返回 `null`），
-再叠加**链上 `skills` 属性**。链上其他属性只有 `name` / `description` / `category` / `tags` 会作为**列**的兜底值。
+再叠加**链上 `skills` 属性**。
+
+#### 托管对话各字段的真实来源与优先级
+
+| 托管对话要用的字段 | 来源（前者优先） | 说明 |
+|---|---|---|
+| system prompt | `description` → `name` | 索引侧：`tokenURI` JSON 的 `description` → **链上 `description` 属性兜底**；都空则用 `Agent <id>`。**只取这两者，不读链上 `prompt` 属性** |
+| 工具列表（skills） | `metadata_json.skills` → `metadata_json.attributes.skills` | **first hit wins，两者不合并**。顶层 `skills` 来自 `tokenURI` JSON；`attributes.skills` 来自**链上 `skills` 属性**（`SkillDef[]` 形态） |
+| 市场展示（`skills` 列） | `tokenURI` JSON 的 `skills` → 链上 `skills` 属性（`string[]` 形态） | 只喂列表页，**不参与**工具构建 |
+
+> **`tokenURI` 指向密文（`ipfs://<encryptedCid>`）既不会报错、也不会 404**：`parseTokenURIJSON()` 只是解析不到
+> ⇒ `metadata_json` 基底为空，此时 `name` / `description` / `skills` **全部回落到链上属性**。
+> 所以「`tokenURI` 指密文 + 明文 metadata 走链上属性」是**被正式支持**的形态（Studio 发布流程正是如此）。
+>
+> 若想让 `tokenURI` 改指公开 CID：生产 `IdentityRegistry` 的对外方法只有
+> `register` / `registerWithMetadata` / `updateMetadata` / `getCurrentAgentId` / `agentExists` / `getAgentOwner` /
+> `getAgentsByOwner` / `getAgentMetadata` / `totalAgents` —— **没有 `updateTokenURI` / `setTokenURI`** ⇒
+> `tokenURI` **只在铸造时写入、之后不可改**，要换只能**重新铸造（换新 agentId）**。
+> 因此**不推荐**为了读 metadata 去重铸：把 `name` / `description` 当**链上属性**补写即可，
+> 与 `skills` **同一笔 `updateMetadata`** 一起写（省 gas，也不用动 tokenURI）。
+
 可执行 skills 的公开约定如下：
 
 | 发布方写什么 | 落到哪里 | 谁消费 |
 |---|---|---|
-| 链上属性 `skills` = JSON **`SkillDef[]`**（`[{ name, description, inputSchema, execution? }]`） | `metadata_json.attributes.skills` | 托管对话 → 可执行工具（`execution.type='mcp'` 会**真实调用**） |
+| 链上属性 `skills` = JSON **`SkillDef[]`**（`[{ name, description, inputSchema, execution? }]`） | `metadata_json.attributes.skills` | 托管对话 → 可执行工具（`execution.type='mcp'` / `'http'` 会**真实调用**） |
 | 链上属性 `skills` = JSON **`string[]`**（技能名列表） | `skills` 列（`tokenURI` JSON 里已有 `skills` 时不覆盖） | 市场展示 |
 | `tokenURI` 为 base64 data URI JSON 且含 `skills` | `metadata_json.skills` | 托管对话（**优先于** `attributes.skills`，两者不合并） |
 
 - 托管对话取值顺序：`metadata_json.skills` → `metadata_json.attributes.skills`；只有**带非空 `name` 的对象**才算技能
   定义，纯字符串数组会被跳过（不会再因 `inputSchema` 缺失而在建工具时抛错）；
-- `execution` 缺失的技能**仍会进工具列表**，但调用固定返回 `{"error":"Skill \"x\" has no remote execution configured…"}`；
-  `execution.type='mcp'` 真实发起 JSON-RPC `tools/call`（`endpoint` 缺省 `<gateway>/mcp`、`toolName` 缺省技能名，
-  **不注入任何鉴权头** —— 需要鉴权请把凭证放进 endpoint URL）；
+- ⚠️ **链上 `skills` 属性值必须是合法 JSON 数组，且整体必须是同一种形态**：要么全是**带非空 `name` 的对象**
+  （`SkillDef[]`），要么全是**非空字符串**（`string[]`）。**混入一个字符串、或有一个对象缺 `name`，整组会被判为无效并
+  静默丢弃**（不会报错，表现为「工具一个都不出现」）；
 - 链上属性**无长度/条数限制**，但每条是一次 SSTORE ⇒ skills 序列化到数 KB 会显著抬高 gas；建议只公开托管对话真正
-  需要的那几条（例如单个 MCP 入口），展示用的名字列表可另走 `string[]` 形态；
+  需要的那几条（例如单个 MCP/HTTP 入口），展示用的名字列表可另走 `string[]` 形态；
 - **存量 Agent 补写属性**：链上属性只能**整组覆盖**写入 —— 所有者调
   `IdentityRegistry.updateMetadata(agentId, [{ key, value }…])`（合约**没有** `setMetadata(agentId,key,bytes)` 单键方法；
   实现里会先 `delete _agentMetadataKeys[agentId]` 再写入传入数组），因此**必须把原有 `name` / `description` /
@@ -657,6 +678,35 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
   因此同 ID 跨链冲突（各链独立编号，实测 oxachain 与 bsc 都存在 id=2）不会被取错：只要你在其中一条链上有权，
   系统就会命中那条链。只读的 `GET /api/v1/agents/:id` 支持 `?chain=` 精确指定；不带时按上述优先序跨链解析
   （历史行为：只命中 `oxachain` / `central`，BSC / Base 会 404 —— 已修复）。
+
+#### `skills[].execution`：可选，三种类型与调用约定
+
+`execution` **是可选字段**。**不写不影响工具被列出**——工具列表只判断「是否为带非空 `name` 的对象」，
+`execution` 完全不参与过滤；但调用时固定返回一个 **`error` 对象**（不抛异常），用于「先让工具出现在列表里」：
+
+```json
+{ "error": "Skill \"<name>\" has no remote execution configured. Add execution.type=\"mcp\" with an endpoint." }
+```
+
+| `execution.type` | 字段 | 平台（托管对话）侧行为 |
+|---|---|---|
+| `mcp` | `endpoint?`（缺省 `<gateway>/mcp`）、`toolName?`（缺省技能名） | 真实发起 JSON-RPC 2.0：`POST <endpoint>`，body `{"jsonrpc":"2.0","id":<ts>,"method":"tools/call","params":{"name":"<toolName>","arguments":<入参>}}`，取 `result.content[0].text` |
+| `http` | `endpoint`（**必填**） | 真实发起 `POST <endpoint>`，`Content-Type: application/json`，**body = 模型按 `inputSchema` 产出的入参 JSON 原样**，响应按 JSON 解析后作为工具结果 |
+| `a2a` | `targetAgentId?`、`skillFilter?`、`promptOverride?` | **不发起 HTTP**：返回 `{ type: 'a2a_delegation', targetAgentId, skillFilter, promptOverride, callerInput }` 作为工具结果，由上层决定是否走 A2A |
+| 不写 `execution` | — | 进工具列表；调用返回上面的 `error` 对象 |
+
+**`http` 类型的边界（当前实现实测）**：
+
+- **没有入参映射、没有包装**：body 就是模型给出的工具参数。要让 body 对上你 endpoint 的形状，请把
+  `inputSchema.properties` **直接写成你 endpoint 期望的字段**（例：`{ question, history }`）——模型会按 schema 产出参数；
+- **不注入任何鉴权头**（只有 `Content-Type: application/json`）：无签名 / JWT / 共享密钥，平台**不代理**你的鉴权，
+  多轮长期接口请自备限流（平台侧无额外白名单机制，也无需登记密钥）。若要鉴权，只能把凭证放进 `endpoint` URL，
+  或改用 `execution.type='mcp'` 让你的 MCP server 自行校验调用者；
+- **方法固定 `POST`**，无 `method` / `headers` / 重试 / 超时的配置项；
+- **超时 30 秒**（硬编码 `AbortSignal.timeout(30_000)`，`mcp` 相同）；
+- **失败语义**：HTTP 非 2xx ⇒ 抛 `HTTP skill "<name>" failed: HTTP <status>`；超时 / 网络错误 ⇒ 底层 fetch 抛错。
+  错误作为工具结果回给模型，**不会中断整轮对话**；
+- **响应约定**：无强制结构，返回的 JSON 原样交给模型。建议返回对象而非超长文本。
 
 因此：
 
@@ -734,6 +784,23 @@ partner 租户注册时**不带套餐**（`quota_daily=0`），平台模型列�
 发布方用 `registry.setAttributes(agentId, { skills: [...] })` 补写（SDK `0.17.0+`，见 §5.1），随后等网关同步
 （`AGENTS_SYNC_INTERVAL_SEC` 默认 120s，或手动 `POST /api/v1/agents-sync`）+ Conversation Service 上下文缓存
 TTL（`CONTEXT_CACHE_TTL_SEC` 默认 300s）过期。
+
+两个最常见的「工具不出现」原因：
+
+- 链上 `skills` 属性值**不是合法 JSON 数组**，或**混了形态**（既有对象又有字符串 / 有对象缺 `name`）⇒ 整组被静默丢弃；
+- 写成了 `string[]`（技能名列表）——那只会进市场展示的 `skills` 列，**不会**变成可执行工具。
+
+### 托管对话的 system prompt（人格）从哪儿取？需要把 tokenURI 改成公开 CID 吗？
+
+**不需要动 tokenURI。** system prompt 由索引器按 `description` → `name` 组装（见 §5.12「各字段的真实来源与优先级」）：
+
+- `tokenURI` 解析出的 JSON 里的 `description` 优先，**链上 `description` 属性兜底**；
+- 都为空时退到 `name`（再空则 `Agent <id>`）；**不会读链上 `prompt` 属性**（想公开人格就写 `description`）。
+
+`tokenURI` 指向密文（`ipfs://<encryptedCid>`）是**受支持**的形态，不会报错。且生产 `IdentityRegistry`
+**没有 `updateTokenURI` / `setTokenURI`** ⇒ `tokenURI` 铸造后不可改，换内容只能重新铸造（换新 `agentId`）。
+因此推荐做法：**不要重铸**，直接把 `name` / `description` / `skills` 一起用 `setAttributes` 写成链上公开属性——
+与 `skills` 同一笔 `updateMetadata`，省 gas。
 
 ### 其他
 
@@ -889,6 +956,7 @@ POST /api/v1/payments
 | 0.15.3 | **USDT/USDC 计价**：BSC/ETH/Base 三链 `SubscriptionManager` 登记 USDT/USDC 白名单；README 补稳定币地址表、精度差异（BSC 18 / ETH·Base 6）与 ERC20 订阅要点；`mint-and-subscribe` 支持 `PAY_TOKEN=usdt/usdc` |
 | 0.16.0 | **浏览器钱包（EIP-1193）发布/运行打通**：`derivePrivateKeyFromSignature` / `deriveKeyPairFromWallet`（personal_sign + HKDF-SHA256）、`useAgentRunner` 的 `encryptionKeyDerivation` opt-in、`AgentRunnerConfig.unpack?/aesKeyHex?` 与 `WalletSigner.deriveEncryptionKey?()` 密钥注入；错误语义修正（`WALLET_NOT_CONNECTED` 不再降级为 `DECRYPTION_FAILED`，`DECRYPTION_FAILED` 携带 `cause`）；README 新增 §5.12 与托管链路隐私边界说明 |
 | 0.17.0 | **链上属性写入助手**：`registry.setAttributes()`（读回合并后整组写回，补写公开 `skills` 不必手写合约调用）/ `overwriteAttributes()` / `toAttributes()`；配套**托管对话多链修复**（`agentId` 模式的 BSC / Ethereum / Base 404 与 403，见 §5.12） |
+| 0.17.1 | **DX 修复**：`eciesDecrypt()` / `unpackAgent()` / `getPublicKey()` 的 `privateKey` 接受可选 `0x` 前缀（此前抛底层库的模糊错误），非法格式时报 `Invalid private key: expected 32-byte hex…`；`UPGRADE.md` 加入 npm 包 `files`（此前包内缺失）；修正 `package-lock.json` 残留旧包名 `@agentxv2/sdk`。**无 API 破坏** |
 
 ---
 
