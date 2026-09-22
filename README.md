@@ -1,4 +1,4 @@
-# @actora/sdk v0.15.3
+# @actora/sdk v0.17.0
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
@@ -324,6 +324,24 @@ const registryAddr = base.contracts.identityRegistry
 const subManagerAddr = base.contracts.subscriptionManager
 ```
 
+### 托管对话：链由平台解析，调用方**不需要**声明（0.17.0 起）
+
+链上模块（`AgentRegistry` / `SubscriptionManager`）是「哪条链的合约就读哪条链」，但**托管对话（`ConversationClient`,
+`agentId` 模式）相反**：你只要给出 `agentId`，平台会自己判断该 Agent 在哪条链、以及你在哪条链上有权。
+
+- 平台从 `agents` 表列出该 `agentId` 存在的**全部候选链**（按 `oxachain → central → bsc → ethereum → base`
+  排序），逐链判定你（`X-End-User-Id` 或租户钱包）**是否拥有 / 已订阅**，取**第一条放行的链**；
+- 这条链会一路贯穿「访问判定 → 取 Agent 上下文 → 组装工具」，所以不会出现「按 A 链判权、按 B 链取到别人的同名 Agent」；
+- **为什么必须这样**：各链**独立编号**，同一个数字 ID 可同时在多条链存在（实测 oxachain 与 bsc 都有 `id=2`，
+  且是**两个不同的 Agent**）。只看「优先序第一条」会取错，故按「你在哪条链有权」来锚定；
+- 该判定发生在平台侧，**托管对话请求里不接受调用方指定链**（`chat` / `stream` / `createTask` 均无需、
+  也无法传 `chain`）；只有只读的 `GET /api/v1/agents/:id?chain=` 可以显式指定链；
+- 历史行为（`0.16.0` 及以前）：该路径只认 `oxachain` / `central`，Agent 发在 BSC / Ethereum / Base 时
+  详情接口直接 **404**、或判权失败 **403** —— 已在 `0.17.0` 随平台侧修复。
+
+> 实践建议：集成时**不要猜链、也不要声明链**，直接给出 `agentId` 调 `POST /api/v1/agent/runs` 或
+> `POST /api/v1/sessions/:id/tasks` 即可；平台会按「你在哪条链有权」自动锚定。
+
 ---
 
 ## 5. 模块参考
@@ -409,6 +427,9 @@ const info = await payments.fetchX402Info()                  // { enabled, price
   - 会话/任务：`createSession(params)`、`createTask(params)`（立即返回 `status: 'queued'`，后台执行）、`getTask(taskId)`、`listTasks(sessionId)`、`cancelTask(taskId)`、`getCapabilities()`（`parallelTasks` 开关，关闭时 `createTask` 返回 403 `PARALLEL_TASKS_DISABLED`，应降级为 `chat()`）
   - A2A/计费：`getA2ATaskResult(taskId)`、`retryA2ATask(taskId)`、`getSessionKeyInfo()`、`getBalance()`
 - 参数中的 `endUserId` 传 `0x<wallet>` 会触发网关订阅代理鉴权。
+- **多链（0.17.0 起）**：`chat()` / `stream()` / `createTask()` **不需要传链**，也无法传链 —— 平台按
+  「你在这条 `agentId` 的哪条链上有权」自动解析并全链路沿用（详见 §4「托管对话：链由平台解析」）。
+  因此 **BSC / Ethereum / Base 上的 Agent 直接可用，不会再 404**。
 
 ```ts
 const conv = new ConversationClient({ gatewayUrl, apiKey: 'actora_...', endUserId: '0x...' })
@@ -629,13 +650,13 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
   写入后等网关 fallback 全量同步（`AGENTS_SYNC_INTERVAL_SEC`，默认 120s；或直接 `POST /api/v1/agents-sync`），
   再等 Conversation Service 上下文缓存 TTL（`CONTEXT_CACHE_TTL_SEC`，默认 300s）过期。
   注意：网关**未监听** `MetadataUpdated` 事件（只监听 `AgentRegistered` / `Transfer`）⇒ 属性变更只能靠上述轮询或手动触发；
-- **多链（0.17.0 起）**：托管对话的 `agentId` 模式已支持 OxaChain / BSC / Ethereum / Base 全链。调用方**不需要**
-  声明链：网关从 `agents` 表列出该 `agentId` 存在的候选链（按 `oxachain → central → bsc → ethereum → base`
-  排序），逐链判定调用方是否拥有 / 已订阅，取**第一条放行的链**，并把它一路下传到 Conversation Service
-  （SSE 单轮与后台任务两条路径都下传，后台任务在 `chat_tasks.chain` 落库）。
+- **多链（0.17.0 起）**：托管对话的 `agentId` 模式已支持 OxaChain / BSC / Ethereum / Base 全链。调用方**不需要、
+  也无法**声明链（详见 §4「托管对话：链由平台解析」）：网关从 `agents` 表列出该 `agentId` 存在的候选链
+  （按 `oxachain → central → bsc → ethereum → base` 排序），逐链判定调用方是否拥有 / 已订阅，取**第一条放行的链**，
+  并把它一路下传到 Conversation Service（SSE 单轮与后台任务两条路径都下传，后台任务在 `chat_tasks.chain` 落库）。
   因此同 ID 跨链冲突（各链独立编号，实测 oxachain 与 bsc 都存在 id=2）不会被取错：只要你在其中一条链上有权，
-  系统就会命中那条链。若显式传 `chain` 则只判该链。`GET /api/v1/agents/:id` 亦支持 `?chain=`；不带时按上述
-  优先序跨链解析（历史行为：只命中 `oxachain` / `central`，BSC / Base 会 404 —— 已修复）。
+  系统就会命中那条链。只读的 `GET /api/v1/agents/:id` 支持 `?chain=` 精确指定；不带时按上述优先序跨链解析
+  （历史行为：只命中 `oxachain` / `central`，BSC / Base 会 404 —— 已修复）。
 
 因此：
 
@@ -693,9 +714,32 @@ partner 租户注册时**不带套餐**（`quota_daily=0`），平台模型列�
 - viem `WalletClient` 默认本地缓存 nonce，**并发或失败重试**时可能复用已用 nonce 导致 `nonce too low`；
 - 串行执行交易并等待 `waitForTransactionReceipt`；失败重试前调用 `publicClient.reset()` 或在 `sendTransaction`/`writeContract` 显式传 `nonce: await publicClient.getTransactionCount({ address })`。
 
+### Agent 发在 BSC / Ethereum / Base，托管对话会 404 吗？需要我传链吗？
+
+**不需要传链，也不会再 404**（`0.17.0` 起）。平台侧会列出该 `agentId` 存在的候选链，逐链判定你在哪条链上有权，
+取第一条放行的链并全链路沿用（详见 §4「托管对话：链由平台解析」）。
+
+注意两条**限制**与**易混点**：
+
+- **托管对话请求里没有 `chain` 参数**（`chat` / `stream` / `createTask` 都一样）——链是平台解析的，不是调用方声明的。
+  只有只读的 `GET /api/v1/agents/:id?chain=` 可以显式指定链；
+- **链上操作仍然必须明确链**：`AgentRegistry` / `SubscriptionManager` / `A2AProtocol` 都是「哪条链的合约就读哪条链」，
+  而 `agentId` 是**链内编号**（各链独立，实测 oxachain 与 bsc 都有 `id=2` 且是不同 Agent）⇒ 换链 = 换 ID，需重新铸造 / 订阅。
+
+### 托管对话里 Agent 的工具（skills）是空的？
+
+托管对话**不读加密 payload**，技能集取自公开 metadata：`metadata_json.skills` → `metadata_json.attributes.skills`
+（见 §5.12「隐私边界」）。链上**没写公开 `skills` 属性**时，工具列表必然为空 —— 这是发布方动作，不是调用方的 bug。
+
+发布方用 `registry.setAttributes(agentId, { skills: [...] })` 补写（SDK `0.17.0+`，见 §5.1），随后等网关同步
+（`AGENTS_SYNC_INTERVAL_SEC` 默认 120s，或手动 `POST /api/v1/agents-sync`）+ Conversation Service 上下文缓存
+TTL（`CONTEXT_CACHE_TTL_SEC` 默认 300s）过期。
+
 ### 其他
 
-- `agentId` 是**链内 ID**：跨链不通用，切链后需重新铸造/订阅；
+- `agentId` 是**链内 ID**：各链独立编号（同一个数字在多条链可能是**不同的 Agent**）⇒ **链上操作**（铸造 / 订阅 / 退款 / A2A）
+  必须明确链，换链 = 换 ID，需重新铸造 / 订阅；
+  **托管对话是例外**：`agentId` 模式不用声明链，平台按「你在哪条链有权」自动解析（§4）；
 - `SubscriptionPayments.hasAccess` 需要 `gatewayUrl`；`method: 'chain'` 需要 config 里的 `subscriptionManager`；
 - 中心化 Agent 的计划价格是 `priceWei` 字符串，传给 `pay({ priceWei })` 时保持字符串避免精度丢失；
 - `AgentRunner.useAgent` 需要一条**可用的解密密钥来源**：`config.unpack` / `config.aesKeyHex` / `wallet.deriveEncryptionKey()` / `wallet.getPrivateKey()`。
@@ -794,6 +838,11 @@ POST /api/v1/payments
 | `GET` | `/api/v1/a2a/session-key/info` | Session Key 授权状态（`balanceReturnEnabled` 等） |
 | `POST` | `/api/v1/a2a/session-key/create` · `/revoke` | 创建 / 撤销 Session Key（自动代付） |
 
+**链不用你传**：`POST /api/v1/agent/runs` 与 `POST /api/v1/sessions/:id/tasks` 都**不接受**调用方指定链，
+平台自行按上文的多链解析判定（列出该 `agentId` 的候选链 → 取你在其中**有权的那条**），并把该链下传给执行侧
+取 Agent 上下文；后台任务会把判权链落库（`chat_tasks.chain`）以保证后台执行时刻用同一条链。
+只读的 `GET /api/v1/agents/:id` 支持 `?chain=` 显式指定链（用于展示 / 调试）。
+
 ### 8.6 计费与配额语义
 
 - **两条 Key 来源**：`platform`（平台 LLM，按 `quota_daily` 扣 token，超出后消耗 token 包）/ `byok`（自带 Key，不计费）；用量日志按 `key_source` 分组。
@@ -807,8 +856,8 @@ POST /api/v1/payments
 |------|------|----------|
 | 401 | Key / JWT 缺失或失效 | 检查 `X-Api-Key`；若被轮换需换新 Key |
 | 402 | 额度耗尽 / 订阅过期 | 购档位或加油包；x402 任务等待充值 |
-| 403 | 租户被 suspend / 能力未开通 | 查 `GET /tenant/me` 的 `status`；`PARALLEL_TASKS_DISABLED` 时降级为 `chat()` |
-| 404 | 路径或资源不存在（含 Key 摘要不可读回） | 核对端点；Key 丢失只能轮换 |
+| 403 | 租户被 suspend / 能力未开通；或**对目标 Agent 无归属 / 无有效订阅**（`AGENT_ACCESS_DENIED`） | 查 `GET /tenant/me` 的 `status`；`PARALLEL_TASKS_DISABLED` 时降级为 `chat()`；`AGENT_ACCESS_DENIED` 则确认该钱包在 Agent **所在链**上确实拥有 / 已订阅（多链下无需自己判断是哪条链，平台会逐链判定） |
+| 404 | 路径或资源不存在（含 Key 摘要不可读回）；`GET /agents/:id` 时表示**该 ID 在你指定的链上不存在**（`?chain=` 指定时），或不带 `chain` 时**所有候选链都没有该 ID** | 核对端点；Key 丢失只能轮换；Agent 详情可先不带 `?chain=` 让平台跨链解析 |
 | 429 | 触发限流 | 指数退避重试 |
 | 503 | 链未开通 / 索引不可用 | 先调 `GET /api/v1/chain/health?chain=`，`pending` 表示该链未部署 |
 
@@ -819,7 +868,11 @@ POST /api/v1/payments
 3. 需要平台 LLM → 购档位（`GET /tenant/plans` + `POST /api/v1/payments`，`purpose='tenant-plan'`）；
 4. 需要链上 Agent → 选链（`GET /api/v1/chain/health` 探活）→ 订阅（`SubscriptionManager` / `SubscriptionPayments`）；
 5. 服务端调用一律带 `X-Api-Key` + `X-End-User-Id`，并实现 401/402/429/503 的重试与降级；
-6. 监控 `GET /api/v1/tenant/usage` 与 `GET /api/v1/billing/balance`，避免线上断供。
+6. 监控 `GET /api/v1/tenant/usage` 与 `GET /api/v1/billing/balance`，避免线上断供；
+7. 托管对话**不要传链**（也没有该参数）：传 `agentId` 即可，BSC / Ethereum / Base 的 Agent 由平台自动解析
+   （§4）；若收到 403 `AGENT_ACCESS_DENIED`，先确认该钱包在 Agent 所在链上确实拥有 / 已订阅；
+8. 若需 Agent 的可执行工具生效，确认发布方已用 `registry.setAttributes(agentId, { skills: [...] })`
+   补写公开 `skills` 属性（§5.12 / FAQ），否则技能集恒为空。
 
 ---
 
