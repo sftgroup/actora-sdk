@@ -599,9 +599,16 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
 - `execution` 缺失的技能**仍会进工具列表**，但调用固定返回 `{"error":"Skill \"x\" has no remote execution configured…"}`；
   `execution.type='mcp'` 真实发起 JSON-RPC `tools/call`（`endpoint` 缺省 `<gateway>/mcp`、`toolName` 缺省技能名，
   **不注入任何鉴权头** —— 需要鉴权请把凭证放进 endpoint URL）；
-- **存量 Agent 补写属性**：所有者调 `IdentityRegistry.setMetadata(agentId, 'skills', hex(utf8(json)))`，等网关 fallback
-  全量同步（`AGENTS_SYNC_INTERVAL_SEC`，默认 120s；或直接 `POST /api/v1/agents-sync`），再等 Conversation Service
-  上下文缓存 TTL（`CONTEXT_CACHE_TTL_SEC`，默认 300s）过期；
+- 链上属性**无长度/条数限制**，但每条是一次 SSTORE ⇒ skills 序列化到数 KB 会显著抬高 gas；建议只公开托管对话真正
+  需要的那几条（例如单个 MCP 入口），展示用的名字列表可另走 `string[]` 形态；
+- **存量 Agent 补写属性**：链上属性只能**整组覆盖**写入 —— 所有者调
+  `IdentityRegistry.updateMetadata(agentId, [{ key, value }…])`（合约**没有** `setMetadata(agentId,key,bytes)` 单键方法；
+  实现里会先 `delete _agentMetadataKeys[agentId]` 再写入传入数组），因此**必须把原有 `name` / `description` /
+  `category` / `pricing_type` / … 全部一起重传**，只传 `skills` 会抹掉其余属性。`value` 为 `bytes`，SDK 侧可用
+  `stringToHex(jsonString)` 编码（SDK 目前只提供注册时的 `registerWithMetadata`，**后置更新无封装**，需自行调合约）；
+  然后等网关 fallback 全量同步（`AGENTS_SYNC_INTERVAL_SEC`，默认 120s；或直接 `POST /api/v1/agents-sync`），
+  再等 Conversation Service 上下文缓存 TTL（`CONTEXT_CACHE_TTL_SEC`，默认 300s）过期。
+  注意：网关**未监听** `MetadataUpdated` 事件（只监听 `AgentRegistered` / `Transfer`）⇒ 属性变更只能靠上述轮询或手动触发；
 - `agentId` 模式取上下文走 `GET /api/v1/agents/:id` 且**不带 `chain`**，只命中 `oxachain` 与 `central` 的 ID；
   BSC / Ethereum / Base 的 agent 在该路径下会 404。
 
