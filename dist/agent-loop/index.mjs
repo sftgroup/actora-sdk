@@ -190,9 +190,18 @@ function eciesEncrypt(dataHex, publicKey) {
   const mac = hmac(sha256, macKey, macInput);
   return eciesEncode(ephPub, iv, ciphertext, mac);
 }
+function normalizePrivateKey(privateKey) {
+  const hex = typeof privateKey === "string" && privateKey.startsWith("0x") ? privateKey.slice(2) : privateKey;
+  if (typeof hex !== "string" || !/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error(
+      'Invalid private key: expected 32-byte hex (64 hex chars; "0x" prefix is optional)'
+    );
+  }
+  return hex;
+}
 function eciesDecrypt(dataHex, privateKey) {
   const { ephemeralPub, iv, ciphertext, mac } = eciesDecode(dataHex);
-  const privBytes = hexToBytes(privateKey);
+  const privBytes = hexToBytes(normalizePrivateKey(privateKey));
   const shared = secp256k1.getSharedSecret(privBytes, ephemeralPub);
   const sharedX = shared.subarray(1, 33);
   const sharedKey = sha256(sharedX);
@@ -294,7 +303,7 @@ function generateKeyPair() {
   return { privateKey: bytesToHex(priv), publicKey: bytesToHex(pub) };
 }
 function getPublicKey(privateKey) {
-  return bytesToHex(secp256k1.getPublicKey(hexToBytes(privateKey), false));
+  return bytesToHex(secp256k1.getPublicKey(hexToBytes(normalizePrivateKey(privateKey)), false));
 }
 function utf8(text) {
   return new TextEncoder().encode(text);

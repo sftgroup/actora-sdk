@@ -296,6 +296,19 @@ interface StructuredAgentMetadata {
  * regex extraction of the name field.
  */
 declare function parseTokenURIJSON(tokenURI: string): Record<string, unknown> | null;
+/** 单条链上属性；`value` 为明文文本，写入合约时编码为 bytes。 */
+interface MetadataAttribute {
+    key: string;
+    value: string;
+}
+/**
+ * 把 `{ key: value }` 规范化为链上属性数组：
+ *   - 字符串原样；
+ *   - 数字 / 布尔 → String()；
+ *   - 数组 / 对象 → JSON.stringify（`skills` 等属性的链上约定是「UTF-8 文本 + JSON」）。
+ * `undefined` / `null` 的键会被跳过。
+ */
+declare function toAttributes(patch: Record<string, unknown>): MetadataAttribute[];
 declare class AgentRegistry {
     private address;
     private publicClient;
@@ -316,6 +329,23 @@ declare class AgentRegistry {
         agentId: number;
         txHash: Hash;
     }>;
+    /**
+     * 整组覆盖写入链上属性（合约 `updateMetadata`）。
+     *
+     * ⚠️ 合约实现会先清空该 agent 的**全部属性键**（`delete _agentMetadataKeys`），
+     * 再写入传入数组 ⇒ **只传部分键会抹掉其余属性**（如 name/description/category/…）。
+     * 增量场景请用 `setAttributes()`。
+     */
+    overwriteAttributes(agentId: number, attributes: MetadataAttribute[]): Promise<Hash>;
+    /**
+     * 增量更新链上属性：读回现有属性 → 合并 patch → 整组写回。
+     * 未在 `patch` 中出现的键保持原值（规避合约「整组覆盖」的破坏性语义）。
+     *
+     * 例（公开托管对话可读的技能集）：
+     *   await registry.setAttributes(agentId, { skills: [{ name, description, inputSchema,
+     *     execution: { type: 'mcp', endpoint, toolName } }] })
+     */
+    setAttributes(agentId: number, patch: Record<string, unknown>): Promise<Hash>;
     /**
      * Simple register — just a tokenURI, no extra metadata.
      */
@@ -453,4 +483,4 @@ declare class A2ADaemon extends EventEmitter {
     private processPendingTask;
 }
 
-export { type A2AConfig as A, parseTokenURIJSON as B, ContextCompactor as C, wrapPlatformToolsAsSkills as D, FactExtractor as F, type GetAllAgentsOptions as G, LoopTraceEmitter as L, type PlanDetail as P, SubscriptionManager as S, ToolExecutor as T, ZERO_ADDRESS as Z, A2ADaemon as a, type A2ADaemonConfig as b, A2AProtocol as c, type A2ATaskResult as d, AgentLoop as e, AgentRegistry as f, type AgentRegistryConfig as g, type AgentSummary as h, type AgentSummaryMetadata as i, type CreatePlanParams as j, type CreatePlanResult as k, type PlatformToolContext as l, type PlatformToolDef as m, SUBSCRIPTION_PERIODS as n, type StructuredAgentMetadata as o, type SubscribeResult as p, type SubscriptionConfig as q, type SubscriptionDetail as r, type SubscriptionPeriod as s, buildPlatformTools as t, buildSystemPrompt as u, buildTools as v, cidFromURI as w, executePlatformTool as x, getAllPlatformToolNames as y, guardSubscription as z };
+export { type A2AConfig as A, parseTokenURIJSON as B, ContextCompactor as C, toAttributes as D, wrapPlatformToolsAsSkills as E, FactExtractor as F, type GetAllAgentsOptions as G, LoopTraceEmitter as L, type MetadataAttribute as M, type PlanDetail as P, SubscriptionManager as S, ToolExecutor as T, ZERO_ADDRESS as Z, A2ADaemon as a, type A2ADaemonConfig as b, A2AProtocol as c, type A2ATaskResult as d, AgentLoop as e, AgentRegistry as f, type AgentRegistryConfig as g, type AgentSummary as h, type AgentSummaryMetadata as i, type CreatePlanParams as j, type CreatePlanResult as k, type PlatformToolContext as l, type PlatformToolDef as m, SUBSCRIPTION_PERIODS as n, type StructuredAgentMetadata as o, type SubscribeResult as p, type SubscriptionConfig as q, type SubscriptionDetail as r, type SubscriptionPeriod as s, buildPlatformTools as t, buildSystemPrompt as u, buildTools as v, cidFromURI as w, executePlatformTool as x, getAllPlatformToolNames as y, guardSubscription as z };

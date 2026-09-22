@@ -190,9 +190,18 @@ function eciesEncrypt(dataHex, publicKey) {
   const mac = (0, import_hmac.hmac)(import_sha2.sha256, macKey, macInput);
   return eciesEncode(ephPub, iv, ciphertext, mac);
 }
+function normalizePrivateKey(privateKey) {
+  const hex = typeof privateKey === "string" && privateKey.startsWith("0x") ? privateKey.slice(2) : privateKey;
+  if (typeof hex !== "string" || !/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error(
+      'Invalid private key: expected 32-byte hex (64 hex chars; "0x" prefix is optional)'
+    );
+  }
+  return hex;
+}
 function eciesDecrypt(dataHex, privateKey) {
   const { ephemeralPub, iv, ciphertext, mac } = eciesDecode(dataHex);
-  const privBytes = (0, import_utils.hexToBytes)(privateKey);
+  const privBytes = (0, import_utils.hexToBytes)(normalizePrivateKey(privateKey));
   const shared = import_secp256k1.secp256k1.getSharedSecret(privBytes, ephemeralPub);
   const sharedX = shared.subarray(1, 33);
   const sharedKey = (0, import_sha2.sha256)(sharedX);
@@ -294,7 +303,7 @@ function generateKeyPair() {
   return { privateKey: (0, import_utils.bytesToHex)(priv), publicKey: (0, import_utils.bytesToHex)(pub) };
 }
 function getPublicKey(privateKey) {
-  return (0, import_utils.bytesToHex)(import_secp256k1.secp256k1.getPublicKey((0, import_utils.hexToBytes)(privateKey), false));
+  return (0, import_utils.bytesToHex)(import_secp256k1.secp256k1.getPublicKey((0, import_utils.hexToBytes)(normalizePrivateKey(privateKey)), false));
 }
 function utf8(text) {
   return new TextEncoder().encode(text);
@@ -2612,6 +2621,7 @@ __export(index_exports, {
   randomBytes: () => randomBytes,
   sleep: () => sleep,
   subscribeToEvents: () => subscribeToEvents,
+  toAttributes: () => toAttributes,
   unpackAgent: () => unpackAgent,
   wrapPlatformToolsAsSkills: () => wrapPlatformToolsAsSkills
 });
@@ -5314,6 +5324,23 @@ var IDENTITY_REGISTRY_ABI = {
     stateMutability: "payable",
     type: "function"
   },
+  updateMetadata: {
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      {
+        name: "metadata",
+        type: "tuple[]",
+        components: [
+          { name: "key", type: "string" },
+          { name: "value", type: "bytes" }
+        ]
+      }
+    ],
+    name: "updateMetadata",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
+  },
   // Queries
   getAgentsByOwner: {
     inputs: [{ name: "owner", type: "address" }],
@@ -5414,6 +5441,12 @@ function parseCreatedAt(parsed) {
   }
   return 0;
 }
+function toAttributes(patch) {
+  return Object.entries(patch).filter(([, v]) => v !== void 0 && v !== null).map(([key, v]) => ({
+    key,
+    value: typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(v)
+  }));
+}
 var AgentRegistry = class {
   address;
   publicClient;
@@ -5451,6 +5484,46 @@ var AgentRegistry = class {
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash: hash2 });
     const agentId = this._parseAgentIdFromReceipt(receipt);
     return { agentId, txHash: hash2 };
+  }
+  // ── Write: Update Attributes ────────────────────────────────────────────
+  /**
+   * 整组覆盖写入链上属性（合约 `updateMetadata`）。
+   *
+   * ⚠️ 合约实现会先清空该 agent 的**全部属性键**（`delete _agentMetadataKeys`），
+   * 再写入传入数组 ⇒ **只传部分键会抹掉其余属性**（如 name/description/category/…）。
+   * 增量场景请用 `setAttributes()`。
+   */
+  async overwriteAttributes(agentId, attributes) {
+    const [account] = await this.walletClient.getAddresses();
+    if (!account) throw new Error("Wallet not connected");
+    const encoded = attributes.map((a) => ({ key: a.key, value: stringToHex(a.value) }));
+    const { request: request2 } = await this.publicClient.simulateContract({
+      account,
+      address: this.address,
+      abi: [IDENTITY_REGISTRY_ABI.updateMetadata],
+      functionName: "updateMetadata",
+      args: [BigInt(agentId), encoded]
+    });
+    const hash2 = await this.walletClient.writeContract(request2);
+    await this.publicClient.waitForTransactionReceipt({ hash: hash2 });
+    return hash2;
+  }
+  /**
+   * 增量更新链上属性：读回现有属性 → 合并 patch → 整组写回。
+   * 未在 `patch` 中出现的键保持原值（规避合约「整组覆盖」的破坏性语义）。
+   *
+   * 例（公开托管对话可读的技能集）：
+   *   await registry.setAttributes(agentId, { skills: [{ name, description, inputSchema,
+   *     execution: { type: 'mcp', endpoint, toolName } }] })
+   */
+  async setAttributes(agentId, patch) {
+    const current = await this.getAttributes(agentId);
+    const merged = { ...current };
+    for (const { key, value } of toAttributes(patch)) merged[key] = value;
+    return this.overwriteAttributes(
+      agentId,
+      Object.entries(merged).map(([key, value]) => ({ key, value }))
+    );
   }
   /**
    * Simple register — just a tokenURI, no extra metadata.
@@ -7909,6 +7982,7 @@ var CentralAgentClient = class {
   randomBytes,
   sleep,
   subscribeToEvents,
+  toAttributes,
   unpackAgent,
   wrapPlatformToolsAsSkills
 });

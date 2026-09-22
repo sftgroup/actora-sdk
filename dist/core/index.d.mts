@@ -115,7 +115,7 @@ declare function generateKeyPair(): {
     publicKey: string;
 };
 /**
- * Derive public key from private key (hex).
+ * Derive public key from private key (hex; `0x` prefix optional).
  */
 declare function getPublicKey(privateKey: string): string;
 /** Default frozen message signed by the wallet (byte-exact; never localize). */
