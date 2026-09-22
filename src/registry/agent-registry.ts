@@ -50,6 +50,23 @@ const IDENTITY_REGISTRY_ABI = {
     stateMutability: 'payable' as const,
     type: 'function' as const,
   },
+  updateMetadata: {
+    inputs: [
+      { name: 'agentId', type: 'uint256' },
+      {
+        name: 'metadata',
+        type: 'tuple[]',
+        components: [
+          { name: 'key', type: 'string' },
+          { name: 'value', type: 'bytes' },
+        ],
+      },
+    ] as const,
+    name: 'updateMetadata' as const,
+    outputs: [] as const,
+    stateMutability: 'nonpayable' as const,
+    type: 'function' as const,
+  },
   // Queries
   getAgentsByOwner: {
     inputs: [{ name: 'owner', type: 'address' }] as const,
@@ -231,6 +248,33 @@ function parseCreatedAt(parsed: Record<string, unknown> | null): number {
 
 // ── Agent Registry ─────────────────────────────────────────────────────────
 
+/** 单条链上属性；`value` 为明文文本，写入合约时编码为 bytes。 */
+export interface MetadataAttribute {
+  key: string
+  value: string
+}
+
+/**
+ * 把 `{ key: value }` 规范化为链上属性数组：
+ *   - 字符串原样；
+ *   - 数字 / 布尔 → String()；
+ *   - 数组 / 对象 → JSON.stringify（`skills` 等属性的链上约定是「UTF-8 文本 + JSON」）。
+ * `undefined` / `null` 的键会被跳过。
+ */
+export function toAttributes(patch: Record<string, unknown>): MetadataAttribute[] {
+  return Object.entries(patch)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([key, v]) => ({
+      key,
+      value:
+        typeof v === 'string'
+          ? v
+          : typeof v === 'number' || typeof v === 'boolean'
+            ? String(v)
+            : JSON.stringify(v),
+    }))
+}
+
 export class AgentRegistry {
   private address: Address
   private publicClient: PublicClient
@@ -280,6 +324,52 @@ export class AgentRegistry {
     // Parse agentId from Transfer event (ERC-721)
     const agentId = this._parseAgentIdFromReceipt(receipt)
     return { agentId, txHash: hash }
+  }
+
+  // ── Write: Update Attributes ────────────────────────────────────────────
+
+  /**
+   * 整组覆盖写入链上属性（合约 `updateMetadata`）。
+   *
+   * ⚠️ 合约实现会先清空该 agent 的**全部属性键**（`delete _agentMetadataKeys`），
+   * 再写入传入数组 ⇒ **只传部分键会抹掉其余属性**（如 name/description/category/…）。
+   * 增量场景请用 `setAttributes()`。
+   */
+  async overwriteAttributes(agentId: number, attributes: MetadataAttribute[]): Promise<Hash> {
+    const [account] = await this.walletClient.getAddresses()
+    if (!account) throw new Error('Wallet not connected')
+
+    const encoded = attributes.map(a => ({ key: a.key, value: stringToHex(a.value) }))
+
+    const { request } = await this.publicClient.simulateContract({
+      account,
+      address: this.address,
+      abi: [IDENTITY_REGISTRY_ABI.updateMetadata],
+      functionName: 'updateMetadata',
+      args: [BigInt(agentId), encoded],
+    })
+
+    const hash = await this.walletClient.writeContract(request)
+    await this.publicClient.waitForTransactionReceipt({ hash })
+    return hash
+  }
+
+  /**
+   * 增量更新链上属性：读回现有属性 → 合并 patch → 整组写回。
+   * 未在 `patch` 中出现的键保持原值（规避合约「整组覆盖」的破坏性语义）。
+   *
+   * 例（公开托管对话可读的技能集）：
+   *   await registry.setAttributes(agentId, { skills: [{ name, description, inputSchema,
+   *     execution: { type: 'mcp', endpoint, toolName } }] })
+   */
+  async setAttributes(agentId: number, patch: Record<string, unknown>): Promise<Hash> {
+    const current = await this.getAttributes(agentId)
+    const merged = { ...current }
+    for (const { key, value } of toAttributes(patch)) merged[key] = value
+    return this.overwriteAttributes(
+      agentId,
+      Object.entries(merged).map(([key, value]) => ({ key, value }))
+    )
   }
 
   /**

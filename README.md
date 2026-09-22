@@ -100,7 +100,7 @@ const { planId } = await sub.createPlan({
 ```bash
 npm install @actora/sdk
 # 或锁定版本
-npm install @actora/sdk@0.16.0
+npm install @actora/sdk@0.17.0
 ```
 
 > 包内含 `examples/`（B 端可运行样例），安装后可从 `node_modules/@actora/sdk/examples/` 查看。
@@ -341,7 +341,9 @@ const subManagerAddr = base.contracts.subscriptionManager
 | `getAgentsByOwner(owner)` | 某地址拥有的全部 agentId |
 | `getCurrentAgentId()` / `totalAgents()` | 当前计数 / 总铸造数 |
 | `agentExists(agentId)` | 是否存在 |
-| `tokenURI(agentId)` / `getAttributes(agentId)` | 读 tokenURI / 元数据键值对 |
+| `getAttributes(agentId)` / `tokenURI(agentId)` | 读元数据键值对 / tokenURI |
+| `overwriteAttributes(agentId, attrs[])` | **整组覆盖**链上属性（`updateMetadata`），返回 txHash |
+| `setAttributes(agentId, patch)` | **增量**更新链上属性：读回现有 → 合并 → 整组写回，返回 txHash |
 | `getAgentMetadata(agentId)` | 结构化元数据（name/capabilities/encryptedPayloadCid 等） |
 | `getAllAgents(opts?)` | 批量扫描（`fromId`/`toId`/`activeOnly`/`capabilities`/`batchSize`），返回 `AgentSummary[]` |
 
@@ -349,7 +351,23 @@ const subManagerAddr = base.contracts.subscriptionManager
 const { agentId } = await registry.registerSimple('ipfs://QmX...')
 const owners = await registry.getAgentsByOwner(account.address)
 const meta = await registry.getAgentMetadata(agentId) // { name, description, capabilities, encryptedPayloadCid, ... }
+
+// 存量 Agent 补写公开 skills（只改 skills，其余属性自动保留）
+await registry.setAttributes(agentId, {
+  skills: [{ name: 'consult', description: '向该专家发起咨询', inputSchema: { type: 'object' } }],
+})
+// 整组覆盖（只在需要「删掉某个属性键」时用；先读回原有属性，否则会被抹掉）
+const current = await registry.getAttributes(agentId) // { name: '…', description: '…', … }
+await registry.overwriteAttributes(agentId, [
+  ...Object.entries(current).map(([key, value]) => ({ key, value })),
+  { key: 'skills', value: '[]' },
+])
 ```
+
+> ⚠️ 生产合约的 `updateMetadata` 是**整组覆盖**语义（先清空全部属性键再写入传入数组），所以优先用
+> `setAttributes()`（自动读回合并）；`overwriteAttributes()` 必须把原有 `name` / `description` /
+> `category` / `pricing_type` / … 全部一起传，否则会被抹掉。辅助函数 `toAttributes(patch)` 可把
+> `{ key: value }`（字符串 / 数字 / 布尔 / 数组 / 对象）规范化为链上属性数组。
 
 ### 5.2 SubscriptionManager —— 链上计划 / 订阅 / 退款
 
@@ -604,13 +622,20 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
 - **存量 Agent 补写属性**：链上属性只能**整组覆盖**写入 —— 所有者调
   `IdentityRegistry.updateMetadata(agentId, [{ key, value }…])`（合约**没有** `setMetadata(agentId,key,bytes)` 单键方法；
   实现里会先 `delete _agentMetadataKeys[agentId]` 再写入传入数组），因此**必须把原有 `name` / `description` /
-  `category` / `pricing_type` / … 全部一起重传**，只传 `skills` 会抹掉其余属性。`value` 为 `bytes`，SDK 侧可用
-  `stringToHex(jsonString)` 编码（SDK 目前只提供注册时的 `registerWithMetadata`，**后置更新无封装**，需自行调合约）；
-  然后等网关 fallback 全量同步（`AGENTS_SYNC_INTERVAL_SEC`，默认 120s；或直接 `POST /api/v1/agents-sync`），
+  `category` / `pricing_type` / … 全部一起重传**，只传 `skills` 会抹掉其余属性。`value` 为 `bytes`，写入时用
+  `stringToHex(text)` 编码；
+  **SDK 0.17.0+ 已封装**：`registry.setAttributes(agentId, { skills: [...] })` 自动读回现有属性、合并后整组写回
+  （未提及的键保持原值）；需要删键时用 `registry.overwriteAttributes(agentId, attrs[])`（整组覆盖，须自行带上全部属性）。
+  写入后等网关 fallback 全量同步（`AGENTS_SYNC_INTERVAL_SEC`，默认 120s；或直接 `POST /api/v1/agents-sync`），
   再等 Conversation Service 上下文缓存 TTL（`CONTEXT_CACHE_TTL_SEC`，默认 300s）过期。
   注意：网关**未监听** `MetadataUpdated` 事件（只监听 `AgentRegistered` / `Transfer`）⇒ 属性变更只能靠上述轮询或手动触发；
-- `agentId` 模式取上下文走 `GET /api/v1/agents/:id` 且**不带 `chain`**，只命中 `oxachain` 与 `central` 的 ID；
-  BSC / Ethereum / Base 的 agent 在该路径下会 404。
+- **多链（0.17.0 起）**：托管对话的 `agentId` 模式已支持 OxaChain / BSC / Ethereum / Base 全链。调用方**不需要**
+  声明链：网关从 `agents` 表列出该 `agentId` 存在的候选链（按 `oxachain → central → bsc → ethereum → base`
+  排序），逐链判定调用方是否拥有 / 已订阅，取**第一条放行的链**，并把它一路下传到 Conversation Service
+  （SSE 单轮与后台任务两条路径都下传，后台任务在 `chat_tasks.chain` 落库）。
+  因此同 ID 跨链冲突（各链独立编号，实测 oxachain 与 bsc 都存在 id=2）不会被取错：只要你在其中一条链上有权，
+  系统就会命中那条链。若显式传 `chain` 则只判该链。`GET /api/v1/agents/:id` 亦支持 `?chain=`；不带时按上述
+  优先序跨链解析（历史行为：只命中 `oxachain` / `central`，BSC / Base 会 404 —— 已修复）。
 
 因此：
 
@@ -718,7 +743,7 @@ BYOK（自带模型 Key）另用三个头逐请求覆盖：`X-LLM-Api-Key` / `X-
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/api/v1/agents` | 市场列表，支持 `?chain=oxachain\|bsc\|ethereum\|base`、分页 / 标签过滤 |
-| `GET` | `/api/v1/agents/:id` | 详情（默认 `chain IN ('oxachain','central')`；BSC/ETH/Base 需显式 `?chain=`） |
+| `GET` | `/api/v1/agents/:id` | 详情。缺省**跨链解析**该 ID 所属链（`oxachain → central → bsc → ethereum → base` 优先序）；`?chain=` 可精确指定 |
 | `GET` | `/api/v1/agents/check-subscription` | 校验订阅态（`subscriber` + `agentId`，可选 `chain`） |
 | `GET` | `/api/v1/chain/health?chain=bsc` | 链索引健康（`status: ok \| degraded \| pending`） |
 | `GET` | `/api/v1/chain/plans/:planId` · `/chain/total` · `/chain/agents` | 实时链上读（SDK 直读合约） |
@@ -810,6 +835,7 @@ POST /api/v1/payments
 | 0.15.2 | **B 端接入文档/样例**：README 彻底重写（多链市场、接入全流程、模块参考、FAQ）；`examples/` 随包发布（`mint-and-subscribe` / `conversation-bend` / `central-agent-bend`） |
 | 0.15.3 | **USDT/USDC 计价**：BSC/ETH/Base 三链 `SubscriptionManager` 登记 USDT/USDC 白名单；README 补稳定币地址表、精度差异（BSC 18 / ETH·Base 6）与 ERC20 订阅要点；`mint-and-subscribe` 支持 `PAY_TOKEN=usdt/usdc` |
 | 0.16.0 | **浏览器钱包（EIP-1193）发布/运行打通**：`derivePrivateKeyFromSignature` / `deriveKeyPairFromWallet`（personal_sign + HKDF-SHA256）、`useAgentRunner` 的 `encryptionKeyDerivation` opt-in、`AgentRunnerConfig.unpack?/aesKeyHex?` 与 `WalletSigner.deriveEncryptionKey?()` 密钥注入；错误语义修正（`WALLET_NOT_CONNECTED` 不再降级为 `DECRYPTION_FAILED`，`DECRYPTION_FAILED` 携带 `cause`）；README 新增 §5.12 与托管链路隐私边界说明 |
+| 0.17.0 | **链上属性写入助手**：`registry.setAttributes()`（读回合并后整组写回，补写公开 `skills` 不必手写合约调用）/ `overwriteAttributes()` / `toAttributes()`；配套**托管对话多链修复**（`agentId` 模式的 BSC / Ethereum / Base 404 与 403，见 §5.12） |
 
 ---
 
