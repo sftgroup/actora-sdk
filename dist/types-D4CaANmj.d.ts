@@ -284,7 +284,9 @@ declare class ActoraError extends Error {
     code: ActoraErrorCode;
     /** If NOT_SUBSCRIBED, carry enough info for wallet/X402 auto-payment */
     paymentInfo?: SubscriptionRequired;
-    constructor(code: ActoraErrorCode, message: string);
+    constructor(code: ActoraErrorCode, message: string, options?: {
+        cause?: unknown;
+    });
 }
 /**
  * Structured info for wallet/X402 auto-subscription.
@@ -303,4 +305,4 @@ interface SubscriptionRequired {
     }[];
 }
 
-export { type AgentPayload as A, type EncryptedPayload as E, type JSONSchema as J, type McpConnection as M, type OnChainAgentMetadata as O, type PackResult as P, type RegisteredAgent as R, type SkillDef as S, type UnpackResult as U, type AgentReview as a, type AgentReputation as b, type A2AAgentCard as c, type A2ASkillExecution as d, type A2ATask as e, type A2ATaskStatus as f, AGENT_CATEGORIES as g, type ActoraConfig as h, type ActoraContracts as i, ActoraError as j, ActoraErrorCode as k, type AgentCategory as l, type AgentPricing as m, type AgentPrivatePayload as n, type AgentPublicPayload as o, type AgentSearchQuery as p, type AgentSearchResult as q, type AgentSubscription as r, type JSONSchemaProperty as s, type McpTransport as t, type PricingType as u, type SkillExecutionMode as v, type SkillExecutionRemote as w, type SubscriptionRequired as x, type SubscriptionStatus as y };
+export { type AgentPrivatePayload as A, type EncryptedPayload as E, type JSONSchema as J, type McpConnection as M, type OnChainAgentMetadata as O, type PackResult as P, type RegisteredAgent as R, type SkillDef as S, type UnpackResult as U, type AgentPayload as a, type AgentReview as b, type AgentReputation as c, type A2AAgentCard as d, type A2ASkillExecution as e, type A2ATask as f, type A2ATaskStatus as g, AGENT_CATEGORIES as h, type ActoraConfig as i, type ActoraContracts as j, ActoraError as k, ActoraErrorCode as l, type AgentCategory as m, type AgentPricing as n, type AgentPublicPayload as o, type AgentSearchQuery as p, type AgentSearchResult as q, type AgentSubscription as r, type JSONSchemaProperty as s, type McpTransport as t, type PricingType as u, type SkillExecutionMode as v, type SkillExecutionRemote as w, type SubscriptionRequired as x, type SubscriptionStatus as y };

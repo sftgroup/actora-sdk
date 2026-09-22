@@ -384,8 +384,8 @@ export class ActoraError extends Error {
   code: ActoraErrorCode
   /** If NOT_SUBSCRIBED, carry enough info for wallet/X402 auto-payment */
   paymentInfo?: SubscriptionRequired
-  constructor(code: ActoraErrorCode, message: string) {
-    super(message)
+  constructor(code: ActoraErrorCode, message: string, options?: { cause?: unknown }) {
+    super(message, options)
     this.code = code
     this.name = 'ActoraError'
   }

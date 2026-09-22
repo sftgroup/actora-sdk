@@ -1,5 +1,5 @@
-import { A as AgentPayload, P as PackResult, E as EncryptedPayload, n as AgentPrivatePayload } from '../types-mZ3W6woU.js';
-export { c as A2AAgentCard, d as A2ASkillExecution, e as A2ATask, f as A2ATaskStatus, g as AGENT_CATEGORIES, h as ActoraConfig, i as ActoraContracts, j as ActoraError, k as ActoraErrorCode, l as AgentCategory, m as AgentPricing, o as AgentPublicPayload, b as AgentReputation, a as AgentReview, p as AgentSearchQuery, q as AgentSearchResult, r as AgentSubscription, J as JSONSchema, s as JSONSchemaProperty, M as McpConnection, t as McpTransport, O as OnChainAgentMetadata, u as PricingType, R as RegisteredAgent, S as SkillDef, v as SkillExecutionMode, w as SkillExecutionRemote, x as SubscriptionRequired, y as SubscriptionStatus, U as UnpackResult } from '../types-mZ3W6woU.js';
+import { a as AgentPayload, P as PackResult, E as EncryptedPayload, A as AgentPrivatePayload } from '../types-D4CaANmj.js';
+export { d as A2AAgentCard, e as A2ASkillExecution, f as A2ATask, g as A2ATaskStatus, h as AGENT_CATEGORIES, i as ActoraConfig, j as ActoraContracts, k as ActoraError, l as ActoraErrorCode, m as AgentCategory, n as AgentPricing, o as AgentPublicPayload, c as AgentReputation, b as AgentReview, p as AgentSearchQuery, q as AgentSearchResult, r as AgentSubscription, J as JSONSchema, s as JSONSchemaProperty, M as McpConnection, t as McpTransport, O as OnChainAgentMetadata, u as PricingType, R as RegisteredAgent, S as SkillDef, v as SkillExecutionMode, w as SkillExecutionRemote, x as SubscriptionRequired, y as SubscriptionStatus, U as UnpackResult } from '../types-D4CaANmj.js';
 import { IPFSUploader, IPFSUploadResult } from '../ipfs/index.js';
 export { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 
@@ -118,5 +118,50 @@ declare function generateKeyPair(): {
  * Derive public key from private key (hex).
  */
 declare function getPublicKey(privateKey: string): string;
+/** Default frozen message signed by the wallet (byte-exact; never localize). */
+declare const DEFAULT_DERIVATION_MESSAGE: string;
+declare const DEFAULT_DERIVATION_SALT = "actora/expert-enc";
+declare const DEFAULT_DERIVATION_INFO_PREFIX = "agent-payload-encryption/v1";
+interface WalletKeyDerivationParams {
+    /** Frozen message to sign. Defaults to `DEFAULT_DERIVATION_MESSAGE`. */
+    message?: string;
+    /** HKDF salt (domain separation). Defaults to `DEFAULT_DERIVATION_SALT`. */
+    salt?: string;
+    /** HKDF info prefix; `/<lowercased address>` is appended. */
+    infoPrefix?: string;
+    /** Max HKDF attempts when the candidate scalar is out of range (default 8). */
+    maxAttempts?: number;
+}
+/**
+ * Derive a secp256k1 private key (32-byte hex) from a wallet signature.
+ *
+ * Deterministic: same signature + same address + same params ⇒ same key.
+ * Throws when the signature is unusable or no valid scalar is found.
+ */
+declare function derivePrivateKeyFromSignature(signature: string, address: string, params?: WalletKeyDerivationParams): string;
+interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
+    /** Wallet message signer (wagmi `signMessage` / viem `WalletClient.signMessage`). */
+    signMessage(message: string): Promise<string>;
+    /** Signer address (any case) — bound into the HKDF info string. */
+    address: string;
+    /**
+     * Opt-in safety check: sign the message twice and require identical
+     * signatures. Catches non-deterministic (non-RFC-6979) wallets, whose
+     * published agents could never be decrypted again. Costs one extra prompt —
+     * recommended for the publishing path, unnecessary for decryption.
+     */
+    assertDeterministic?: boolean;
+}
+/**
+ * Derive the payload key pair from a browser wallet.
+ *
+ * Publishing: `publishAgent({ agent, publicKey, uploader })` with the returned
+ * `publicKey`. Decrypting: pass the returned `privateKey` to `AgentRunner` via
+ * `WalletSigner.deriveEncryptionKey()` (or `unpackAgent()` directly).
+ */
+declare function deriveKeyPairFromWallet(args: DeriveKeyPairFromWalletArgs): Promise<{
+    privateKey: string;
+    publicKey: string;
+}>;
 
-export { AgentPayload, AgentPrivatePayload, EncryptedPayload, PackResult, type PublishAgentConfig, type PublishAgentResult, aesDecrypt, aesEncrypt, decryptPayload, decryptWithKey, eciesDecrypt, eciesEncrypt, encryptPayload, encryptWithKey, generateAesKey, generateKeyPair, getPublicKey, packAgentForPublish, publishAgent, randomBytes, unpackAgent };
+export { AgentPayload, AgentPrivatePayload, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, type DeriveKeyPairFromWalletArgs, EncryptedPayload, PackResult, type PublishAgentConfig, type PublishAgentResult, type WalletKeyDerivationParams, aesDecrypt, aesEncrypt, decryptPayload, decryptWithKey, deriveKeyPairFromWallet, derivePrivateKeyFromSignature, eciesDecrypt, eciesEncrypt, encryptPayload, encryptWithKey, generateAesKey, generateKeyPair, getPublicKey, packAgentForPublish, publishAgent, randomBytes, unpackAgent };

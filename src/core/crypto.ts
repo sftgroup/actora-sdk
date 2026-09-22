@@ -495,3 +495,134 @@ export function generateKeyPair(): { privateKey: string; publicKey: string } {
 export function getPublicKey(privateKey: string): string {
   return bytesToHex(secp256k1.getPublicKey(hexToBytes(privateKey), false))
 }
+
+// ── Wallet-derived key pair (personal_sign + HKDF-SHA256) ──────────────────
+//
+// Browser wallets (EIP-1193: MetaMask / OKX / Rabby / Trust / Coinbase) can
+// never hand over the account private key, and `eth_getEncryptionPublicKey`
+// (EIP-1024) is deprecated and MetaMask-only. The portable alternative is to
+// derive a *separate* secp256k1 payload key from a deterministic signature:
+//
+//   signature = personal_sign(frozen message)   ← 65 bytes, RFC 6979
+//   privateKey = HKDF-SHA256(IKM=signature, salt, info || address)[retry:i]
+//
+// The account key never leaves the wallet; the derived key never leaves the
+// browser. Decryption replays the same signature.
+//
+// FROZEN CONTRACT — once agents are published with these values, changing any
+// of `message` / `salt` / `infoPrefix` (or the publishing address) makes every
+// already-published payload permanently undecryptable. Bump `infoPrefix`
+// version only together with a migration story.
+//
+// REQUIREMENT: the wallet must sign deterministically (RFC 6979 — MetaMask /
+// Ledger / Trezor do; some MPC / custodial wallets do not). Use
+// `assertDeterministic` when deriving a *publishing* key.
+
+/** Default frozen message signed by the wallet (byte-exact; never localize). */
+export const DEFAULT_DERIVATION_MESSAGE =
+  'Actora: derive agent payload encryption key (v1). ' +
+  'This signature authorizes no transaction and no payment.'
+
+export const DEFAULT_DERIVATION_SALT = 'actora/expert-enc'
+export const DEFAULT_DERIVATION_INFO_PREFIX = 'agent-payload-encryption/v1'
+
+/** Stop after this many HKDF attempts to find a valid secp256k1 scalar. */
+const DEFAULT_DERIVATION_MAX_ATTEMPTS = 8
+
+export interface WalletKeyDerivationParams {
+  /** Frozen message to sign. Defaults to `DEFAULT_DERIVATION_MESSAGE`. */
+  message?: string
+  /** HKDF salt (domain separation). Defaults to `DEFAULT_DERIVATION_SALT`. */
+  salt?: string
+  /** HKDF info prefix; `/<lowercased address>` is appended. */
+  infoPrefix?: string
+  /** Max HKDF attempts when the candidate scalar is out of range (default 8). */
+  maxAttempts?: number
+}
+
+function utf8(text: string): Uint8Array {
+  return new TextEncoder().encode(text)
+}
+
+function bytesToBigInt(bytes: Uint8Array): bigint {
+  let out = 0n
+  for (const b of bytes) out = (out << 8n) | BigInt(b)
+  return out
+}
+
+/**
+ * Derive a secp256k1 private key (32-byte hex) from a wallet signature.
+ *
+ * Deterministic: same signature + same address + same params ⇒ same key.
+ * Throws when the signature is unusable or no valid scalar is found.
+ */
+export function derivePrivateKeyFromSignature(
+  signature: string,
+  address: string,
+  params: WalletKeyDerivationParams = {}
+): string {
+  const hex = signature.startsWith('0x') ? signature.slice(2) : signature
+  const ikm = hexToBytes(hex)
+  if (ikm.length < 32) {
+    throw new Error(`Signature too short for key derivation (${ikm.length} bytes, need >= 32)`)
+  }
+  if (!address) throw new Error('Address is required for key derivation (bound into HKDF info)')
+
+  const salt = utf8(params.salt ?? DEFAULT_DERIVATION_SALT)
+  const infoBase = `${params.infoPrefix ?? DEFAULT_DERIVATION_INFO_PREFIX}/${address.toLowerCase()}`
+  const maxAttempts = Math.max(1, params.maxAttempts ?? DEFAULT_DERIVATION_MAX_ATTEMPTS)
+  const n = secp256k1.CURVE.n
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Attempt 0 uses the frozen info string verbatim; retries only append a
+    // suffix, so the primary path stays byte-stable across releases.
+    const info = utf8(attempt === 0 ? infoBase : `${infoBase}/retry:${attempt}`)
+    const candidate = hkdf(sha256, ikm, salt, info, 32)
+    const scalar = bytesToBigInt(candidate)
+    if (scalar > 0n && scalar < n) return bytesToHex(candidate)
+  }
+  throw new Error(`HKDF produced no valid secp256k1 scalar in ${maxAttempts} attempts`)
+}
+
+export interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
+  /** Wallet message signer (wagmi `signMessage` / viem `WalletClient.signMessage`). */
+  signMessage(message: string): Promise<string>
+  /** Signer address (any case) — bound into the HKDF info string. */
+  address: string
+  /**
+   * Opt-in safety check: sign the message twice and require identical
+   * signatures. Catches non-deterministic (non-RFC-6979) wallets, whose
+   * published agents could never be decrypted again. Costs one extra prompt —
+   * recommended for the publishing path, unnecessary for decryption.
+   */
+  assertDeterministic?: boolean
+}
+
+/**
+ * Derive the payload key pair from a browser wallet.
+ *
+ * Publishing: `publishAgent({ agent, publicKey, uploader })` with the returned
+ * `publicKey`. Decrypting: pass the returned `privateKey` to `AgentRunner` via
+ * `WalletSigner.deriveEncryptionKey()` (or `unpackAgent()` directly).
+ */
+export async function deriveKeyPairFromWallet(
+  args: DeriveKeyPairFromWalletArgs
+): Promise<{ privateKey: string; publicKey: string }> {
+  const message = args.message ?? DEFAULT_DERIVATION_MESSAGE
+  const signature = await args.signMessage(message)
+
+  if (args.assertDeterministic) {
+    const second = await args.signMessage(message)
+    if (second.toLowerCase() !== signature.toLowerCase()) {
+      throw new Error(
+        'Wallet returned different signatures for the same message — it is not RFC 6979 ' +
+        'deterministic, so a derived key cannot be reproduced and the agent would be ' +
+        'permanently undecryptable. Use a deterministic wallet (MetaMask / Ledger / Trezor) ' +
+        'or inject the key via WalletSigner.getPrivateKey() / AgentRunnerConfig.unpack.'
+      )
+    }
+  }
+
+  const privateKey = derivePrivateKeyFromSignature(signature, args.address, args)
+  return { privateKey, publicKey: getPublicKey(privateKey) }
+}

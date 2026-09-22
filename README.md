@@ -100,7 +100,7 @@ const { planId } = await sub.createPlan({
 ```bash
 npm install @actora/sdk
 # 或锁定版本
-npm install @actora/sdk@0.15.3
+npm install @actora/sdk@0.16.0
 ```
 
 > 包内含 `examples/`（B 端可运行样例），安装后可从 `node_modules/@actora/sdk/examples/` 查看。
@@ -470,7 +470,7 @@ const out = await mcp.callTool('fetch_price', { symbol: 'ETH' })
 
 ### 5.10 AgentRunner + AgentLoop —— 本地运行 Agent
 
-- **`AgentRunner`**：加载 + 解密 Agent（订阅校验 → IPFS 拉取 → ECIES 解包 AES Key → AES-256-GCM 解包 prompt/skills）。构造 `new AgentRunner({ reader, wallet, ipfsFetcher?, ipfsGateways? })`，`reader` 实现 `OnChainReader`（getTokenURI/getAttributes/hasActiveSubscription），`wallet` 实现 `WalletSigner`（signMessage/getAddress/getPrivateKey?）。核心方法 `useAgent(agentId)` → `{ prompt, skills, mcp, subscriptionExpiry }`。
+- **`AgentRunner`**：加载 + 解密 Agent（订阅校验 → IPFS 拉取 → 解包 AES Key → AES-256-GCM 解包 prompt/skills）。构造 `new AgentRunner({ reader, wallet, ipfsFetcher?, ipfsGateways?, unpack?, aesKeyHex? })`，`reader` 实现 `OnChainReader`（getTokenURI/getAttributes/hasActiveSubscription），`wallet` 实现 `WalletSigner`（signMessage/getAddress/deriveEncryptionKey?/getPrivateKey?）。核心方法 `useAgent(agentId)` → `{ prompt, skills, mcp, subscriptionExpiry }`。密钥来源优先级：`config.unpack` → `config.aesKeyHex` → `wallet.deriveEncryptionKey()` → `wallet.getPrivateKey()`（**浏览器钱包见 §5.12**）。
 - **`AgentLoop`**：ReAct 风格循环（Think → Tool Call → Execute → …）。构造 `new AgentLoop({ ctx, llmProvider, maxIterations?, timeoutMs?, memory?, trace?, contextBudget?, onTextDelta?, onToolCall?, onToolResult?, onThinking?, onComplete?, onError? })`，`llmProvider` 实现 `LLMProvider.chatStream(request, signal?)`。核心方法 `run(userMessage, history?)` → `AgentLoopResult`、`abort()`。
 
 ```ts
@@ -492,6 +492,7 @@ const { finalText } = await loop.run('帮我做这件事')
 - **`aesEncrypt(plaintext, keyHex)` / `aesDecrypt(encryptedBase64, keyHex)`** —— AES-256-GCM（线格式 `base64(IV[12]||ct||tag[16])`）
 - **`eciesEncrypt(dataHex, publicKey)` / `eciesDecrypt(dataHex, privateKey)`** —— ECIES（secp256k1，与 eciesjs 兼容）
 - **`generateKeyPair()`** → `{ privateKey, publicKey }`；**`getPublicKey(privateKey)`**
+- **`derivePrivateKeyFromSignature(signature, address, params?)`** / **`deriveKeyPairFromWallet({ signMessage, address, … })`** —— 浏览器钱包密钥派生（personal_sign + HKDF-SHA256，见 §5.12）
 - **`generateAesKey()`**；高级封装：`encryptPayload / decryptPayload / packAgentForPublish / publishAgent / unpackAgent`
 
 ```ts
@@ -502,6 +503,90 @@ const dec = eciesDecrypt(enc, privateKey) // 'my-aes-key-hex'
 const c = aesEncrypt('hello', '00'.repeat(32))
 aesDecrypt(c, '00'.repeat(32))            // 'hello'
 ```
+
+### 5.12 浏览器钱包（EIP-1193）—— 发布与运行
+
+> **结论先讲**：MetaMask / OKX / Rabby / Trust / Coinbase 等注入式钱包**无法导出账户私钥**，
+> 所以 `AgentRunner.useAgent()` 不能靠账户私钥做 ECIES 解密；而 `eth_getEncryptionPublicKey`
+> （EIP-1024）已废弃且仅 MetaMask 实现。浏览器端的可行路径是**从确定性签名派生一把独立的 payload 密钥**。
+
+#### 派生规则（冻结契约）
+
+```
+signature  = personal_sign(message)                       // 65 字节，要求 RFC 6979 确定性
+privateKey = HKDF-SHA256(IKM = signature,
+                         salt = "actora/expert-enc",
+                         info = "agent-payload-encryption/v1/<地址小写>")[retry:i]
+publicKey  = 未压缩公钥（0x04 + 128 hex）→ 传给 publishAgent
+```
+
+- 账户私钥**永不离开钱包**；派生私钥只存在于内存，不落盘、不上传；解密时用同一钱包对同一文案再签一次即可重现；
+- `message` / `salt` / `infoPrefix` / 发布地址**任一变化都会让已发布的 payload 永久解不开**——上线前冻结这四项，
+  文案按**字节**冻结（不要本地化、不要改空格）；
+- 越界（HKDF 输出非合法 secp256k1 标量）时按 `info + "/retry:<i>"` 重试，首次命中的方案即冻结方案。
+
+#### 发布（浏览器）
+
+```ts
+import { deriveKeyPairFromWallet, publishAgent } from '@actora/sdk'
+
+const { publicKey } = await deriveKeyPairFromWallet({
+  signMessage: (message) => walletClient.signMessage({ account, message }),
+  address: account.address,
+  assertDeterministic: true,   // 发布路径建议开启：多签一次即可拦下非确定性钱包
+})
+
+const result = await publishAgent({ agent, publicKey, uploader })
+// result.encryptedCid → 链上 tokenURI；result.eciesEncryptedKeyHex → 元数据属性
+```
+
+#### 运行 / 解密（浏览器）
+
+```tsx
+const { ctx, error } = useAgentRunner({
+  agentId,
+  encryptionKeyDerivation: { mode: 'personal-sign-hkdf' },   // 显式 opt-in
+})
+```
+
+非 React 场景：自行实现 `WalletSigner.deriveEncryptionKey()`（返回派生私钥）；或由宿主完全接管密钥来源
+（网关下发 / 会话密钥 / HSM 等），优先级最高的两种注入方式：
+
+```ts
+const runner = new AgentRunner({
+  reader,
+  wallet,                       // deriveEncryptionKey() / getPrivateKey() 二选一，见 WalletSigner
+  // ① 完全自定义解包
+  unpack: async (encryptedPayload, eciesEncryptedKey) => {
+    const aesKeyHex = await myKeyService.resolve(agentId)
+    return decryptPayload(encryptedPayload, aesKeyHex)
+  },
+})
+// ② 或直接给已解出的 AES key（跳过 ECIES）
+new AgentRunner({ reader, wallet, aesKeyHex: sessionAesKey })
+```
+
+密钥来源优先级：`config.unpack` → `config.aesKeyHex` → `wallet.deriveEncryptionKey()` → `wallet.getPrivateKey()`。
+
+#### 前置条件与失败语义
+
+| 项 | 说明 |
+|---|---|
+| 确定性签名 | 必须满足 RFC 6979（MetaMask / Ledger / Trezor 满足；部分 MPC / 托管钱包不满足）。非确定性钱包一旦发布，Agent 就再也解不开，故发布路径务必开 `assertDeterministic` |
+| 域隔离 | 派生文案只在 Actora 使用：任何能让同一地址对**同一字符串**签名的场景都等价于拿到内容密钥；换地址即失效 |
+| 错误码 | 钱包不提供任何密钥来源 → `WALLET_NOT_CONNECTED`（**不再**被包成 `DECRYPTION_FAILED`）；密钥不对/密文损坏 → `DECRYPTION_FAILED`，原始错误见 `error.cause` |
+| 订阅者能否解密 | **不能**。payload 的 AES key 由**发布时的公钥**包裹，只有持有对应私钥的发布方解得开。订阅者侧要拿到明文 prompt/skills，需走托管对话，或由发布方经 MCP 下发 |
+
+#### 隐私边界：托管对话读的是什么
+
+托管对话（`ConversationClient`，`agentId` 模式）由 Conversation Service 组装上下文，其 **system prompt 取公开
+metadata 的 `description`（回退 `name`）**，skills 取公开 `metadata_json.skills` —— **不会**读取加密 payload
+（见 conversation-service `agent-context-loader`）。因此：
+
+- 「密文存放于 IPFS、平台与 B 端都无法解密」成立，平台侧没有任何 Agent 内容解密实现；
+- 但**不要把敏感内容写进 `description`**：它以明文入库，并会作为托管对话的 system prompt 被使用；
+- 真 prompt 要参与托管对话，目前只有两条路：inline 模式（调用方自备 `prompt`/`skills`）或自托管 Runner（持派生密钥那一侧）；
+- `ConversationClient.getSessionKeyInfo()` 是 A2A **代付**的会话密钥（EIP-712 授权派生，私钥不出端侧），**与内容解密无关**。
 
 ---
 
@@ -556,7 +641,9 @@ partner 租户注册时**不带套餐**（`quota_daily=0`），平台模型列�
 - `agentId` 是**链内 ID**：跨链不通用，切链后需重新铸造/订阅；
 - `SubscriptionPayments.hasAccess` 需要 `gatewayUrl`；`method: 'chain'` 需要 config 里的 `subscriptionManager`；
 - 中心化 Agent 的计划价格是 `priceWei` 字符串，传给 `pay({ priceWei })` 时保持字符串避免精度丢失；
-- `AgentRunner.useAgent` 需要钱包支持 `getPrivateKey()`（ECIES 解密用），浏览器环境可用 wagmi 封装。
+- `AgentRunner.useAgent` 需要一条**可用的解密密钥来源**：`config.unpack` / `config.aesKeyHex` / `wallet.deriveEncryptionKey()` / `wallet.getPrivateKey()`。
+  **EIP-1193 注入式钱包无法导出账户私钥**，因此浏览器里必须用派生密钥路径（`useAgentRunner` 的 `encryptionKeyDerivation` opt-in，或自行实现 `deriveEncryptionKey`）——详见 §5.12；
+- 密钥来源全部缺失时抛 `WALLET_NOT_CONNECTED`；密钥不匹配时抛 `DECRYPTION_FAILED`，原始错误保留在 `error.cause` 中。
 
 ---
 
@@ -690,6 +777,7 @@ POST /api/v1/payments
 | 0.15.1 | **Base 地址修正**：按 `broadcast/DeployBase.s.sol/8453/run-latest.json` 的 contractName 映射修正 Base 合约地址（SubscriptionManager 修正为 `0x0f129e...`） |
 | 0.15.2 | **B 端接入文档/样例**：README 彻底重写（多链市场、接入全流程、模块参考、FAQ）；`examples/` 随包发布（`mint-and-subscribe` / `conversation-bend` / `central-agent-bend`） |
 | 0.15.3 | **USDT/USDC 计价**：BSC/ETH/Base 三链 `SubscriptionManager` 登记 USDT/USDC 白名单；README 补稳定币地址表、精度差异（BSC 18 / ETH·Base 6）与 ERC20 订阅要点；`mint-and-subscribe` 支持 `PAY_TOKEN=usdt/usdc` |
+| 0.16.0 | **浏览器钱包（EIP-1193）发布/运行打通**：`derivePrivateKeyFromSignature` / `deriveKeyPairFromWallet`（personal_sign + HKDF-SHA256）、`useAgentRunner` 的 `encryptionKeyDerivation` opt-in、`AgentRunnerConfig.unpack?/aesKeyHex?` 与 `WalletSigner.deriveEncryptionKey?()` 密钥注入；错误语义修正（`WALLET_NOT_CONNECTED` 不再降级为 `DECRYPTION_FAILED`，`DECRYPTION_FAILED` 携带 `cause`）；README 新增 §5.12 与托管链路隐私边界说明 |
 
 ---
 

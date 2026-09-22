@@ -171,6 +171,37 @@ function unpackAgent(encryptedPayload, eciesEncryptedKey, privateKey) {
   const aesKeyHex = eciesDecrypt(eciesEncryptedKey, privateKey);
   return decryptPayload(encryptedPayload, aesKeyHex);
 }
+var DEFAULT_DERIVATION_MESSAGE = "Actora: derive agent payload encryption key (v1). This signature authorizes no transaction and no payment.";
+var DEFAULT_DERIVATION_SALT = "actora/expert-enc";
+var DEFAULT_DERIVATION_INFO_PREFIX = "agent-payload-encryption/v1";
+var DEFAULT_DERIVATION_MAX_ATTEMPTS = 8;
+function utf8(text) {
+  return new TextEncoder().encode(text);
+}
+function bytesToBigInt(bytes) {
+  let out = 0n;
+  for (const b of bytes) out = out << 8n | BigInt(b);
+  return out;
+}
+function derivePrivateKeyFromSignature(signature, address, params = {}) {
+  const hex = signature.startsWith("0x") ? signature.slice(2) : signature;
+  const ikm = (0, import_utils.hexToBytes)(hex);
+  if (ikm.length < 32) {
+    throw new Error(`Signature too short for key derivation (${ikm.length} bytes, need >= 32)`);
+  }
+  if (!address) throw new Error("Address is required for key derivation (bound into HKDF info)");
+  const salt = utf8(params.salt ?? DEFAULT_DERIVATION_SALT);
+  const infoBase = `${params.infoPrefix ?? DEFAULT_DERIVATION_INFO_PREFIX}/${address.toLowerCase()}`;
+  const maxAttempts = Math.max(1, params.maxAttempts ?? DEFAULT_DERIVATION_MAX_ATTEMPTS);
+  const n = import_secp256k1.secp256k1.CURVE.n;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const info = utf8(attempt === 0 ? infoBase : `${infoBase}/retry:${attempt}`);
+    const candidate = (0, import_hkdf.hkdf)(import_sha2.sha256, ikm, salt, info, 32);
+    const scalar = bytesToBigInt(candidate);
+    if (scalar > 0n && scalar < n) return (0, import_utils.bytesToHex)(candidate);
+  }
+  throw new Error(`HKDF produced no valid secp256k1 scalar in ${maxAttempts} attempts`);
+}
 
 // src/registry/ipfs-fetcher.ts
 var IPFSFetcher = class {
@@ -296,8 +327,8 @@ var ActoraError = class extends Error {
   code;
   /** If NOT_SUBSCRIBED, carry enough info for wallet/X402 auto-payment */
   paymentInfo;
-  constructor(code, message) {
-    super(message);
+  constructor(code, message, options) {
+    super(message, options);
     this.code = code;
     this.name = "ActoraError";
   }
@@ -308,9 +339,13 @@ var AgentRunner = class {
   reader;
   wallet;
   ipfs;
+  unpackOverride;
+  aesKeyHex;
   constructor(config) {
     this.reader = config.reader;
     this.wallet = config.wallet;
+    this.unpackOverride = config.unpack;
+    this.aesKeyHex = config.aesKeyHex;
     this.ipfs = config.ipfsFetcher ?? new IPFSFetcher({
       fallbackGateways: config.ipfsGateways ?? [
         "gateway.pinata.cloud",
@@ -328,7 +363,8 @@ var AgentRunner = class {
    *   1. Verify on-chain subscription (frontend check)
    *   2. Fetch metadata → get encryptedPayloadCid + eciesEncryptedKey
    *   3. IPFS fetch encrypted payload
-   *   4. ECIES decrypt AES key (using wallet private key)
+   *   4. Unpack the AES key (config.unpack / config.aesKeyHex /
+   *      wallet.deriveEncryptionKey() / wallet.getPrivateKey())
    *   5. AES-256-GCM decrypt payload → { prompt, skills, mcp }
    *   6. Build RunnableSkill wrappers (Open: local stub, Closed: MCP remote)
    */
@@ -365,12 +401,13 @@ var AgentRunner = class {
     }
     let privatePayload;
     try {
-      const privKey = await this._getPrivateKey();
-      privatePayload = unpackAgent(encryptedPayload, eciesEncryptedKey, privKey);
+      privatePayload = await this._unpack(encryptedPayload, eciesEncryptedKey);
     } catch (e) {
+      if (e instanceof ActoraError) throw e;
       throw new ActoraError(
         "DECRYPTION_FAILED" /* DECRYPTION_FAILED */,
-        `Failed to decrypt agent #${agentId}: ${e}`
+        `Failed to decrypt agent #${agentId}: ${e}`,
+        { cause: e }
       );
     }
     const skills = privatePayload.skills.map((s) => this._wrapSkill(s));
@@ -540,11 +577,29 @@ var AgentRunner = class {
       callerInput: input
     };
   }
-  async _getPrivateKey() {
+  /**
+   * Decrypt the private payload using the first available key source:
+   *   1. `config.unpack` — host-controlled key source
+   *   2. `config.aesKeyHex` — already-resolved AES key (no ECIES)
+   *   3. `wallet.deriveEncryptionKey()` — browser wallet (personal_sign + HKDF)
+   *   4. `wallet.getPrivateKey()` — self-custodied key material
+   */
+  async _unpack(encryptedPayload, eciesEncryptedKey) {
+    if (this.unpackOverride) {
+      return await this.unpackOverride(encryptedPayload, eciesEncryptedKey);
+    }
+    if (this.aesKeyHex) {
+      return decryptPayload(encryptedPayload, this.aesKeyHex);
+    }
+    const privKey = await this._resolvePrivateKey();
+    return unpackAgent(encryptedPayload, eciesEncryptedKey, privKey);
+  }
+  async _resolvePrivateKey() {
+    if (this.wallet.deriveEncryptionKey) return this.wallet.deriveEncryptionKey();
     if (this.wallet.getPrivateKey) return this.wallet.getPrivateKey();
     throw new ActoraError(
       "WALLET_NOT_CONNECTED" /* WALLET_NOT_CONNECTED */,
-      "Wallet must support getPrivateKey() for ECIES decryption."
+      "No payload decryption key available. EIP-1193 browser wallets cannot export the account private key \u2014 implement WalletSigner.deriveEncryptionKey() (see deriveKeyPairFromWallet), or pass AgentRunnerConfig.aesKeyHex / .unpack."
     );
   }
 };
@@ -723,7 +778,7 @@ function hexToStringUTF8(hex) {
   }
 }
 function useAgentRunner(config) {
-  const { agentId, chainConfig: chainConfigOverride, ipfsGateways } = config;
+  const { agentId, chainConfig: chainConfigOverride, ipfsGateways, encryptionKeyDerivation } = config;
   const publicClient = (0, import_wagmi.usePublicClient)();
   const { data: walletClient } = (0, import_wagmi.useWalletClient)();
   const [ctx, setCtx] = (0, import_react.useState)(null);
@@ -732,6 +787,12 @@ function useAgentRunner(config) {
   const [refetchKey, setRefetchKey] = (0, import_react.useState)(0);
   const runnerRef = (0, import_react.useRef)(null);
   const mountedRef = (0, import_react.useRef)(true);
+  const derivedKeyRef = (0, import_react.useRef)(null);
+  const derivationCacheKey = encryptionKeyDerivation ? [
+    encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE,
+    encryptionKeyDerivation.salt ?? "",
+    encryptionKeyDerivation.infoPrefix ?? ""
+  ].join("|") : "";
   (0, import_react.useEffect)(() => {
     mountedRef.current = true;
     return () => {
@@ -758,9 +819,31 @@ function useAgentRunner(config) {
         if (!walletClient.account) throw new Error("Wallet not connected");
         return walletClient.account.address;
       },
+      ...encryptionKeyDerivation ? {
+        async deriveEncryptionKey() {
+          if (!walletClient.account) throw new Error("Wallet not connected");
+          const address = walletClient.account.address.toLowerCase();
+          const cacheKey = `${address}|${derivationCacheKey}`;
+          if (derivedKeyRef.current?.cacheKey === cacheKey) {
+            return derivedKeyRef.current.privateKey;
+          }
+          const message = encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE;
+          const signature = await walletClient.signMessage({
+            account: walletClient.account,
+            message
+          });
+          const privateKey = derivePrivateKeyFromSignature(
+            signature,
+            address,
+            encryptionKeyDerivation
+          );
+          derivedKeyRef.current = { cacheKey, privateKey };
+          return privateKey;
+        }
+      } : {},
       async getPrivateKey() {
         throw new Error(
-          'Private key not available via wagmi. Use window.ethereum.request({ method: "eth_private_key" }) or inject getPrivateKey via custom WalletSigner.'
+          'EIP-1193 wallets cannot export the account private key. Pass `encryptionKeyDerivation: { mode: "personal-sign-hkdf" }` to useAgentRunner to derive a separate payload key from a deterministic wallet signature.'
         );
       }
     };
@@ -792,7 +875,7 @@ function useAgentRunner(config) {
     return () => {
       mountedRef.current = false;
     };
-  }, [agentId, publicClient?.chain?.id, publicClient, walletClient, refetchKey]);
+  }, [agentId, publicClient?.chain?.id, publicClient, walletClient, refetchKey, derivationCacheKey]);
   const refetch = () => setRefetchKey((k) => k + 1);
   return { ctx, isLoading, error, refetch };
 }

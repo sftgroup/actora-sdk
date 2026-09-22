@@ -1,4 +1,4 @@
-import { E as EncryptedPayload, A as AgentPayload, P as PackResult } from './types-mZ3W6woU.js';
+import { E as EncryptedPayload, A as AgentPrivatePayload, a as AgentPayload, P as PackResult } from './types-D4CaANmj.js';
 
 interface IPFSFetcherConfig {
     /** Primary IPFS gateway (default: ipfs.io) */
@@ -53,7 +53,18 @@ interface WalletSigner {
     signMessage(message: string): Promise<string>;
     /** Get the current wallet address. */
     getAddress(): Promise<string>;
-    /** Get the wallet's ECDSA private key (required for ECIES decryption). */
+    /**
+     * OPTIONAL — derive an ECIES-decryptable secp256k1 private key (hex) WITHOUT
+     * exporting the account key. This is the only browser-compatible path for
+     * EIP-1193 injected wallets: derive it from a deterministic `personal_sign`
+     * signature (see `deriveKeyPairFromWallet`).
+     */
+    deriveEncryptionKey?(): Promise<string>;
+    /**
+     * OPTIONAL — export the account's raw private key. Only key material the
+     * process already holds can satisfy this (Node / CLI / keystore / MPC);
+     * injected browser wallets cannot.
+     */
     getPrivateKey?(): Promise<string>;
 }
 interface AgentRunnerConfig {
@@ -65,6 +76,16 @@ interface AgentRunnerConfig {
     ipfsFetcher?: IPFSFetcher;
     /** IPFS gateway list (overrides IPFSFetcher defaults). */
     ipfsGateways?: string[];
+    /**
+     * OPTIONAL — host-supplied unpacker: the host decides where the content key
+     * comes from (gateway-mediated key, session key, HSM, …). Highest priority.
+     */
+    unpack?: (encryptedPayload: EncryptedPayload, eciesEncryptedKey: string) => AgentPrivatePayload | Promise<AgentPrivatePayload>;
+    /**
+     * OPTIONAL — already-resolved AES key (hex): skips the ECIES step entirely.
+     * Useful when the key was delivered out-of-band for this session.
+     */
+    aesKeyHex?: string;
 }
 interface AgentRunContext {
     /** Agent NFT token ID */
@@ -122,6 +143,8 @@ declare class AgentRunner {
     private reader;
     private wallet;
     private ipfs;
+    private unpackOverride?;
+    private aesKeyHex?;
     constructor(config: AgentRunnerConfig);
     /**
      * Load and decrypt an Agent, returning a run context ready to inject
@@ -131,7 +154,8 @@ declare class AgentRunner {
      *   1. Verify on-chain subscription (frontend check)
      *   2. Fetch metadata → get encryptedPayloadCid + eciesEncryptedKey
      *   3. IPFS fetch encrypted payload
-     *   4. ECIES decrypt AES key (using wallet private key)
+     *   4. Unpack the AES key (config.unpack / config.aesKeyHex /
+     *      wallet.deriveEncryptionKey() / wallet.getPrivateKey())
      *   5. AES-256-GCM decrypt payload → { prompt, skills, mcp }
      *   6. Build RunnableSkill wrappers (Open: local stub, Closed: MCP remote)
      */
@@ -157,7 +181,15 @@ declare class AgentRunner {
      * injecting the sub-Agent's system prompt and calling its skills.
      */
     private _executeA2ASkill;
-    private _getPrivateKey;
+    /**
+     * Decrypt the private payload using the first available key source:
+     *   1. `config.unpack` — host-controlled key source
+     *   2. `config.aesKeyHex` — already-resolved AES key (no ECIES)
+     *   3. `wallet.deriveEncryptionKey()` — browser wallet (personal_sign + HKDF)
+     *   4. `wallet.getPrivateKey()` — self-custodied key material
+     */
+    private _unpack;
+    private _resolvePrivateKey;
 }
 
 export { type AgentRunContext as A, IPFSFetcher as I, type OnChainReader as O, type RunnableSkill as R, type WalletSigner as W, type A2ASkillResult as a, AgentRunner as b, type AgentRunnerConfig as c, type IPFSFetcherConfig as d, defaultIPFSFetcher as e };

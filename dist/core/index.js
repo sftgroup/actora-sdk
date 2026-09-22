@@ -23,11 +23,16 @@ __export(core_exports, {
   AGENT_CATEGORIES: () => AGENT_CATEGORIES,
   ActoraError: () => ActoraError,
   ActoraErrorCode: () => ActoraErrorCode,
+  DEFAULT_DERIVATION_INFO_PREFIX: () => DEFAULT_DERIVATION_INFO_PREFIX,
+  DEFAULT_DERIVATION_MESSAGE: () => DEFAULT_DERIVATION_MESSAGE,
+  DEFAULT_DERIVATION_SALT: () => DEFAULT_DERIVATION_SALT,
   aesDecrypt: () => aesDecrypt,
   aesEncrypt: () => aesEncrypt,
   bytesToHex: () => import_utils.bytesToHex,
   decryptPayload: () => decryptPayload,
   decryptWithKey: () => decryptWithKey,
+  deriveKeyPairFromWallet: () => deriveKeyPairFromWallet,
+  derivePrivateKeyFromSignature: () => derivePrivateKeyFromSignature,
   eciesDecrypt: () => eciesDecrypt,
   eciesEncrypt: () => eciesEncrypt,
   encryptPayload: () => encryptPayload,
@@ -87,8 +92,8 @@ var ActoraError = class extends Error {
   code;
   /** If NOT_SUBSCRIBED, carry enough info for wallet/X402 auto-payment */
   paymentInfo;
-  constructor(code, message) {
-    super(message);
+  constructor(code, message, options) {
+    super(message, options);
     this.code = code;
     this.name = "ActoraError";
   }
@@ -354,16 +359,66 @@ function generateKeyPair() {
 function getPublicKey(privateKey) {
   return (0, import_utils.bytesToHex)(import_secp256k1.secp256k1.getPublicKey((0, import_utils.hexToBytes)(privateKey), false));
 }
+var DEFAULT_DERIVATION_MESSAGE = "Actora: derive agent payload encryption key (v1). This signature authorizes no transaction and no payment.";
+var DEFAULT_DERIVATION_SALT = "actora/expert-enc";
+var DEFAULT_DERIVATION_INFO_PREFIX = "agent-payload-encryption/v1";
+var DEFAULT_DERIVATION_MAX_ATTEMPTS = 8;
+function utf8(text) {
+  return new TextEncoder().encode(text);
+}
+function bytesToBigInt(bytes) {
+  let out = 0n;
+  for (const b of bytes) out = out << 8n | BigInt(b);
+  return out;
+}
+function derivePrivateKeyFromSignature(signature, address, params = {}) {
+  const hex = signature.startsWith("0x") ? signature.slice(2) : signature;
+  const ikm = (0, import_utils.hexToBytes)(hex);
+  if (ikm.length < 32) {
+    throw new Error(`Signature too short for key derivation (${ikm.length} bytes, need >= 32)`);
+  }
+  if (!address) throw new Error("Address is required for key derivation (bound into HKDF info)");
+  const salt = utf8(params.salt ?? DEFAULT_DERIVATION_SALT);
+  const infoBase = `${params.infoPrefix ?? DEFAULT_DERIVATION_INFO_PREFIX}/${address.toLowerCase()}`;
+  const maxAttempts = Math.max(1, params.maxAttempts ?? DEFAULT_DERIVATION_MAX_ATTEMPTS);
+  const n = import_secp256k1.secp256k1.CURVE.n;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const info = utf8(attempt === 0 ? infoBase : `${infoBase}/retry:${attempt}`);
+    const candidate = (0, import_hkdf.hkdf)(import_sha2.sha256, ikm, salt, info, 32);
+    const scalar = bytesToBigInt(candidate);
+    if (scalar > 0n && scalar < n) return (0, import_utils.bytesToHex)(candidate);
+  }
+  throw new Error(`HKDF produced no valid secp256k1 scalar in ${maxAttempts} attempts`);
+}
+async function deriveKeyPairFromWallet(args) {
+  const message = args.message ?? DEFAULT_DERIVATION_MESSAGE;
+  const signature = await args.signMessage(message);
+  if (args.assertDeterministic) {
+    const second = await args.signMessage(message);
+    if (second.toLowerCase() !== signature.toLowerCase()) {
+      throw new Error(
+        "Wallet returned different signatures for the same message \u2014 it is not RFC 6979 deterministic, so a derived key cannot be reproduced and the agent would be permanently undecryptable. Use a deterministic wallet (MetaMask / Ledger / Trezor) or inject the key via WalletSigner.getPrivateKey() / AgentRunnerConfig.unpack."
+      );
+    }
+  }
+  const privateKey = derivePrivateKeyFromSignature(signature, args.address, args);
+  return { privateKey, publicKey: getPublicKey(privateKey) };
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   AGENT_CATEGORIES,
   ActoraError,
   ActoraErrorCode,
+  DEFAULT_DERIVATION_INFO_PREFIX,
+  DEFAULT_DERIVATION_MESSAGE,
+  DEFAULT_DERIVATION_SALT,
   aesDecrypt,
   aesEncrypt,
   bytesToHex,
   decryptPayload,
   decryptWithKey,
+  deriveKeyPairFromWallet,
+  derivePrivateKeyFromSignature,
   eciesDecrypt,
   eciesEncrypt,
   encryptPayload,

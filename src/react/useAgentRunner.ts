@@ -20,6 +20,8 @@ import type { AgentRunContext, OnChainReader } from '../agent/agent-runner'
 import { IPFSFetcher } from '../registry/ipfs-fetcher'
 import { KNOWN_CHAINS } from '../config/config'
 import type { ChainConfig } from '../config/config'
+import { DEFAULT_DERIVATION_MESSAGE, derivePrivateKeyFromSignature } from '../core/crypto'
+import type { WalletKeyDerivationParams } from '../core/crypto'
 
 // ── IdentityRegistry ABI (minimal — only what useAgent needs) ──────────────
 
@@ -60,10 +62,29 @@ const SUBSCRIPTION_MANAGER_ABI = [
 
 // ── Hook Config ────────────────────────────────────────────────────────────
 
+/**
+ * OPT-IN browser-wallet decryption. EIP-1193 wallets cannot export the account
+ * private key, so the payload key is derived from a deterministic
+ * `personal_sign` signature instead (personal_sign + HKDF-SHA256).
+ *
+ * The derived key never leaves the browser and the account key is untouched.
+ * `message` / `salt` / `infoPrefix` must stay byte-frozen once agents are
+ * published with them — changing any of them makes existing payloads
+ * undecryptable.
+ */
+export interface WalletKeyDerivationConfig extends WalletKeyDerivationParams {
+  mode: 'personal-sign-hkdf'
+}
+
 export interface UseAgentRunnerConfig {
   agentId: number
   chainConfig?: ChainConfig
   ipfsGateways?: string[]
+  /**
+   * Enable payload decryption with an injected browser wallet. Without this,
+   * `useAgentRunner` can only work with wallets that export a private key.
+   */
+  encryptionKeyDerivation?: WalletKeyDerivationConfig
 }
 
 export interface UseAgentRunnerResult {
@@ -147,7 +168,7 @@ function hexToStringUTF8(hex: string): string {
 // ── Hook ───────────────────────────────────────────────────────────────────
 
 export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResult {
-  const { agentId, chainConfig: chainConfigOverride, ipfsGateways } = config
+  const { agentId, chainConfig: chainConfigOverride, ipfsGateways, encryptionKeyDerivation } = config
 
   const publicClient = usePublicClient()
   const { data: walletClient } = useWalletClient()
@@ -159,6 +180,17 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
 
   const runnerRef = useRef<AgentRunner | null>(null)
   const mountedRef = useRef(true)
+  // Cache the derived payload key per (address + frozen params) so switching
+  // agents or re-running the effect does not re-prompt the wallet.
+  const derivedKeyRef = useRef<{ cacheKey: string; privateKey: string } | null>(null)
+
+  const derivationCacheKey = encryptionKeyDerivation
+    ? [
+        encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE,
+        encryptionKeyDerivation.salt ?? '',
+        encryptionKeyDerivation.infoPrefix ?? '',
+      ].join('|')
+    : ''
 
   useEffect(() => {
     mountedRef.current = true
@@ -194,12 +226,36 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
         if (!walletClient.account) throw new Error('Wallet not connected')
         return walletClient.account.address
       },
+      ...(encryptionKeyDerivation
+        ? {
+            async deriveEncryptionKey(): Promise<string> {
+              if (!walletClient.account) throw new Error('Wallet not connected')
+              const address = walletClient.account.address.toLowerCase()
+              const cacheKey = `${address}|${derivationCacheKey}`
+              if (derivedKeyRef.current?.cacheKey === cacheKey) {
+                return derivedKeyRef.current.privateKey
+              }
+              const message = encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE
+              const signature = await walletClient.signMessage({
+                account: walletClient.account,
+                message,
+              })
+              const privateKey = derivePrivateKeyFromSignature(
+                signature,
+                address,
+                encryptionKeyDerivation
+              )
+              derivedKeyRef.current = { cacheKey, privateKey }
+              return privateKey
+            },
+          }
+        : {}),
       async getPrivateKey(): Promise<string> {
-        // wagmi walletClient doesn't expose private key
-        // ECIES decryption requires private key — must be injected from wallet provider
+        // wagmi walletClient never exposes the account private key (EIP-1193).
         throw new Error(
-          'Private key not available via wagmi. ' +
-          'Use window.ethereum.request({ method: "eth_private_key" }) or inject getPrivateKey via custom WalletSigner.'
+          'EIP-1193 wallets cannot export the account private key. Pass ' +
+          '`encryptionKeyDerivation: { mode: "personal-sign-hkdf" }` to useAgentRunner to derive ' +
+          'a separate payload key from a deterministic wallet signature.'
         )
       },
     }
@@ -241,7 +297,7 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
       mountedRef.current = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentId, publicClient?.chain?.id, publicClient, walletClient, refetchKey])
+  }, [agentId, publicClient?.chain?.id, publicClient, walletClient, refetchKey, derivationCacheKey])
 
   const refetch = () => setRefetchKey(k => k + 1)
 

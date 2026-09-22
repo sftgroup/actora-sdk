@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { eciesEncrypt, generateAesKey } from '../core/crypto'
-import { unpackAgent } from '../core/crypto'
+import { decryptPayload, unpackAgent } from '../core/crypto'
 import { IPFSFetcher } from '../registry/ipfs-fetcher'
 import type {
   AgentPayload, AgentPrivatePayload,
@@ -41,7 +41,18 @@ export interface WalletSigner {
   signMessage(message: string): Promise<string>
   /** Get the current wallet address. */
   getAddress(): Promise<string>
-  /** Get the wallet's ECDSA private key (required for ECIES decryption). */
+  /**
+   * OPTIONAL — derive an ECIES-decryptable secp256k1 private key (hex) WITHOUT
+   * exporting the account key. This is the only browser-compatible path for
+   * EIP-1193 injected wallets: derive it from a deterministic `personal_sign`
+   * signature (see `deriveKeyPairFromWallet`).
+   */
+  deriveEncryptionKey?(): Promise<string>
+  /**
+   * OPTIONAL — export the account's raw private key. Only key material the
+   * process already holds can satisfy this (Node / CLI / keystore / MPC);
+   * injected browser wallets cannot.
+   */
   getPrivateKey?(): Promise<string>
 }
 
@@ -56,6 +67,19 @@ export interface AgentRunnerConfig {
   ipfsFetcher?: IPFSFetcher
   /** IPFS gateway list (overrides IPFSFetcher defaults). */
   ipfsGateways?: string[]
+  /**
+   * OPTIONAL — host-supplied unpacker: the host decides where the content key
+   * comes from (gateway-mediated key, session key, HSM, …). Highest priority.
+   */
+  unpack?: (
+    encryptedPayload: EncryptedPayload,
+    eciesEncryptedKey: string
+  ) => AgentPrivatePayload | Promise<AgentPrivatePayload>
+  /**
+   * OPTIONAL — already-resolved AES key (hex): skips the ECIES step entirely.
+   * Useful when the key was delivered out-of-band for this session.
+   */
+  aesKeyHex?: string
 }
 
 // ── Run Context (returned by useAgent) ─────────────────────────────────────
@@ -123,10 +147,14 @@ export class AgentRunner {
   private reader: OnChainReader
   private wallet: WalletSigner
   private ipfs: IPFSFetcher
+  private unpackOverride?: AgentRunnerConfig['unpack']
+  private aesKeyHex?: string
 
   constructor(config: AgentRunnerConfig) {
     this.reader = config.reader
     this.wallet = config.wallet
+    this.unpackOverride = config.unpack
+    this.aesKeyHex = config.aesKeyHex
     this.ipfs = config.ipfsFetcher ?? new IPFSFetcher({
       fallbackGateways: config.ipfsGateways ?? [
         'gateway.pinata.cloud',
@@ -146,7 +174,8 @@ export class AgentRunner {
    *   1. Verify on-chain subscription (frontend check)
    *   2. Fetch metadata → get encryptedPayloadCid + eciesEncryptedKey
    *   3. IPFS fetch encrypted payload
-   *   4. ECIES decrypt AES key (using wallet private key)
+   *   4. Unpack the AES key (config.unpack / config.aesKeyHex /
+   *      wallet.deriveEncryptionKey() / wallet.getPrivateKey())
    *   5. AES-256-GCM decrypt payload → { prompt, skills, mcp }
    *   6. Build RunnableSkill wrappers (Open: local stub, Closed: MCP remote)
    */
@@ -189,15 +218,20 @@ export class AgentRunner {
       )
     }
 
-    // 4 + 5. ECIES + AES decrypt
+    // 4 + 5. Decrypt (key source: config.unpack → config.aesKeyHex →
+    //        wallet.deriveEncryptionKey() → wallet.getPrivateKey())
     let privatePayload: AgentPrivatePayload
     try {
-      const privKey = await this._getPrivateKey()
-      privatePayload = unpackAgent(encryptedPayload, eciesEncryptedKey, privKey)
+      privatePayload = await this._unpack(encryptedPayload, eciesEncryptedKey)
     } catch (e) {
+      // Preserve the original code (e.g. WALLET_NOT_CONNECTED) — wrapping it in
+      // DECRYPTION_FAILED hides "wallet cannot provide a key" behind a message
+      // that reads like "wrong key".
+      if (e instanceof ActoraError) throw e
       throw new ActoraError(
         ActoraErrorCode.DECRYPTION_FAILED,
-        `Failed to decrypt agent #${agentId}: ${e}`
+        `Failed to decrypt agent #${agentId}: ${e}`,
+        { cause: e }
       )
     }
 
@@ -399,11 +433,35 @@ export class AgentRunner {
     }
   }
 
-  private async _getPrivateKey(): Promise<string> {
+  /**
+   * Decrypt the private payload using the first available key source:
+   *   1. `config.unpack` — host-controlled key source
+   *   2. `config.aesKeyHex` — already-resolved AES key (no ECIES)
+   *   3. `wallet.deriveEncryptionKey()` — browser wallet (personal_sign + HKDF)
+   *   4. `wallet.getPrivateKey()` — self-custodied key material
+   */
+  private async _unpack(
+    encryptedPayload: EncryptedPayload,
+    eciesEncryptedKey: string
+  ): Promise<AgentPrivatePayload> {
+    if (this.unpackOverride) {
+      return await this.unpackOverride(encryptedPayload, eciesEncryptedKey)
+    }
+    if (this.aesKeyHex) {
+      return decryptPayload(encryptedPayload, this.aesKeyHex)
+    }
+    const privKey = await this._resolvePrivateKey()
+    return unpackAgent(encryptedPayload, eciesEncryptedKey, privKey)
+  }
+
+  private async _resolvePrivateKey(): Promise<string> {
+    if (this.wallet.deriveEncryptionKey) return this.wallet.deriveEncryptionKey()
     if (this.wallet.getPrivateKey) return this.wallet.getPrivateKey()
     throw new ActoraError(
       ActoraErrorCode.WALLET_NOT_CONNECTED,
-      'Wallet must support getPrivateKey() for ECIES decryption.'
+      'No payload decryption key available. EIP-1193 browser wallets cannot export the ' +
+      'account private key — implement WalletSigner.deriveEncryptionKey() ' +
+      '(see deriveKeyPairFromWallet), or pass AgentRunnerConfig.aesKeyHex / .unpack.'
     )
   }
 }

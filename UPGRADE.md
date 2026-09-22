@@ -1,5 +1,35 @@
 # @actora/sdk Upgrade Guide
 
+## v0.15.3 → v0.16.0（2026-09-23，建议升级）
+
+> 浏览器钱包（EIP-1193）在发布与运行两侧都可用了：解密密钥来源可注入，`personal_sign + HKDF-SHA256` 派生成为官方路径。
+> **无 API 破坏**（纯附加 + 错误码语义修正）。
+
+### 变更点
+
+- **`AgentRunnerConfig` 新增可选 `unpack?` / `aesKeyHex?`** —— 由宿主决定内容密钥来源（网关下发 / 会话密钥 / HSM），`unpack` 支持异步。
+  密钥来源优先级：`config.unpack` → `config.aesKeyHex` → `wallet.deriveEncryptionKey()` → `wallet.getPrivateKey()`。
+- **`WalletSigner` 新增可选 `deriveEncryptionKey?()`** —— 不导出账户私钥即可提供 ECIES 解密密钥；原 `getPrivateKey?()` 语义不变（仅限自托管密钥材料）。
+- **新增 `derivePrivateKeyFromSignature()` / `deriveKeyPairFromWallet()`（根导出）** —— `personal_sign` 签名 + HKDF-SHA256 派生 secp256k1 payload 密钥；
+  可选 `assertDeterministic` 检测非确定性钱包（非 RFC 6979）。
+- **`useAgentRunner` 新增 opt-in `encryptionKeyDerivation`**（`{ mode: 'personal-sign-hkdf', message?, salt?, infoPrefix?, maxAttempts? }`）——
+  wagmi 浏览器钱包即可解密；同一地址 + 同一参数的派生结果在 hook 内缓存，不会反复弹签名。
+- **错误语义修正**：解密失败时保留原始 `ActoraError.code`（`WALLET_NOT_CONNECTED` 不再被包成 `DECRYPTION_FAILED`）；
+  `DECRYPTION_FAILED` 携带 `cause`（`ActoraError` 构造函数新增可选 `options.cause`）。
+- **`useAgentRunner` 的 wagmi signer** 不再建议不存在的 `eth_private_key`（非 EIP-1193 标准方法），改为提示开启 `encryptionKeyDerivation`。
+
+### 迁移动作
+
+- `npm install @actora/sdk@0.16.0`。仅用 `getPrivateKey()` 的既有自托管集成**零改动**。
+- 浏览器钱包集成：
+  1. **发布侧**改用 `deriveKeyPairFromWallet({ signMessage, address, assertDeterministic: true })` 取 `publicKey`
+     （`message` / `salt` / `infoPrefix` 必须冻结，否则已发布 payload 永久解不开）；
+  2. **运行侧**给 `useAgentRunner` 传 `encryptionKeyDerivation: { mode: 'personal-sign-hkdf' }`，或自行实现 `WalletSigner.deriveEncryptionKey()`。
+- 依赖 `error.code === 'DECRYPTION_FAILED'` 判断「钱包不支持解密」的代码，需改为判断 `WALLET_NOT_CONNECTED`（此前两者混在同一 code 内）。
+- 详见 [README §5.12 浏览器钱包（EIP-1193）](README.md)。
+
+---
+
 ## v0.11.11 → v0.11.12（2026-09-05，可选升级）
 
 > `CentralAgentClient` 新增**鉴权发布/管理**方法：租户 `apiKey`（owner=`partner-<slug>`，平台为市场建 Agent）或注册用户 `accessToken`（owner=用户钱包）。**无 API 破坏**，纯附加。
