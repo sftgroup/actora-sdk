@@ -583,17 +583,25 @@ new AgentRunner({ reader, wallet, aesKeyHex: sessionAesKey })
 metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skills` —— **不会**读取加密 payload
 （见 conversation-service `agent-context-loader`）。
 
-`metadata_json` 的**来源**需要注意：它由网关索引器写入，内容等于 **`tokenURI` 解析出的 JSON**，而解析器
-`parseTokenURIJSON()` 只认 `data:application/json;base64,<base64>`（`ipfs://` 与普通 https URL 一律返回 `null`）。
-链上属性（`registerWithMetadata` 的 key/value）**不参与** `metadata_json` 组装，只有 `name` / `description` /
-`category` / `tags` 会作为**列**的兜底值。由此有三条容易踩空的结论：
+`metadata_json` 的**来源**需要注意：它由网关索引器写入，基底是 **`tokenURI` 解析出的 JSON**（解析器
+`parseTokenURIJSON()` 只认 `data:application/json;base64,<base64>`，`ipfs://` 与普通 https URL 一律返回 `null`），
+再叠加**链上 `skills` 属性**。链上其他属性只有 `name` / `description` / `category` / `tags` 会作为**列**的兜底值。
+可执行 skills 的公开约定如下：
 
-- 托管对话取 skills 的顺序是 `metadata_json.skills` → `metadata_json.attributes.skills`（前者存在即用前者，**不合并**），
-  且必须是**真数组**（JSON 字符串会被判为非数组而丢弃）；
-- 写链上属性 `key='skills'` 对托管对话**无效**，只影响 `skills` 列（市场展示，类型为 `string[]`）；
-- `metadata_json` 非空的前提是 `tokenURI` 为 base64 data URI，而官方 Studio 发布用的是
-  `https://…/ipfs/<cid>` ⇒ **现状下 `metadata_json` 恒为 `{}`，托管对话的 skills 实际恒为空**；`description`
-  因有链上属性兜底可用。
+| 发布方写什么 | 落到哪里 | 谁消费 |
+|---|---|---|
+| 链上属性 `skills` = JSON **`SkillDef[]`**（`[{ name, description, inputSchema, execution? }]`） | `metadata_json.attributes.skills` | 托管对话 → 可执行工具（`execution.type='mcp'` 会**真实调用**） |
+| 链上属性 `skills` = JSON **`string[]`**（技能名列表） | `skills` 列（`tokenURI` JSON 里已有 `skills` 时不覆盖） | 市场展示 |
+| `tokenURI` 为 base64 data URI JSON 且含 `skills` | `metadata_json.skills` | 托管对话（**优先于** `attributes.skills`，两者不合并） |
+
+- 托管对话取值顺序：`metadata_json.skills` → `metadata_json.attributes.skills`；只有**带非空 `name` 的对象**才算技能
+  定义，纯字符串数组会被跳过（不会再因 `inputSchema` 缺失而在建工具时抛错）；
+- `execution` 缺失的技能**仍会进工具列表**，但调用固定返回 `{"error":"Skill \"x\" has no remote execution configured…"}`；
+  `execution.type='mcp'` 真实发起 JSON-RPC `tools/call`（`endpoint` 缺省 `<gateway>/mcp`、`toolName` 缺省技能名，
+  **不注入任何鉴权头** —— 需要鉴权请把凭证放进 endpoint URL）；
+- **存量 Agent 补写属性**：所有者调 `IdentityRegistry.setMetadata(agentId, 'skills', hex(utf8(json)))`，等网关 fallback
+  全量同步（`AGENTS_SYNC_INTERVAL_SEC`，默认 120s；或直接 `POST /api/v1/agents-sync`），再等 Conversation Service
+  上下文缓存 TTL（`CONTEXT_CACHE_TTL_SEC`，默认 300s）过期；
 - `agentId` 模式取上下文走 `GET /api/v1/agents/:id` 且**不带 `chain`**，只命中 `oxachain` 与 `central` 的 ID；
   BSC / Ethereum / Base 的 agent 在该路径下会 404。
 
@@ -601,9 +609,8 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
 
 - 「密文存放于 IPFS、平台与 B 端都无法解密」成立，平台侧没有任何 Agent 内容解密实现；
 - 但**不要把敏感内容写进 `description`**：它以明文入库，并会作为托管对话的 system prompt 被使用；
-- 真 prompt/skills 要参与托管对话，目前实际只有两条路：inline 模式（调用方自备 `prompt`/`skills`）或自托管
-  Runner（持派生密钥那一侧）；把可执行 skills 放进 base64 data URI 形式的 `tokenURI` 是理论上的第三条，
-  但受 gas 与链范围限制（见上）；
+- 真 prompt/skills 要参与托管对话有三条路：① 公开链上 `skills` 属性（推荐，人格与细节仍留在私有载荷里）；
+  ② inline 模式（调用方自备 `prompt`/`skills`）；③ 自托管 Runner（持派生密钥那一侧）；
 - `ConversationClient.getSessionKeyInfo()` 是 A2A **代付**的会话密钥（EIP-712 授权派生，私钥不出端侧），**与内容解密无关**。
 
 ---
