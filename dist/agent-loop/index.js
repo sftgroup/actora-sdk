@@ -24,13 +24,21 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var crypto_exports = {};
 __export(crypto_exports, {
   DEFAULT_DERIVATION_INFO_PREFIX: () => DEFAULT_DERIVATION_INFO_PREFIX,
+  DEFAULT_DERIVATION_INFO_PREFIX_V2: () => DEFAULT_DERIVATION_INFO_PREFIX_V2,
   DEFAULT_DERIVATION_MESSAGE: () => DEFAULT_DERIVATION_MESSAGE,
   DEFAULT_DERIVATION_SALT: () => DEFAULT_DERIVATION_SALT,
+  DEFAULT_EIP712_DOMAIN: () => DEFAULT_EIP712_DOMAIN,
+  DEFAULT_EIP712_MESSAGE_VERSION: () => DEFAULT_EIP712_MESSAGE_VERSION,
+  DEFAULT_EIP712_PRIMARY_TYPE: () => DEFAULT_EIP712_PRIMARY_TYPE,
+  DEFAULT_EIP712_PURPOSE: () => DEFAULT_EIP712_PURPOSE,
+  DEFAULT_EIP712_TYPES: () => DEFAULT_EIP712_TYPES,
   aesDecrypt: () => aesDecrypt,
   aesEncrypt: () => aesEncrypt,
+  buildPayloadKeyTypedData: () => buildPayloadKeyTypedData,
   bytesToHex: () => import_utils.bytesToHex,
   decryptPayload: () => decryptPayload,
   decryptWithKey: () => decryptWithKey,
+  defaultInfoPrefixFor: () => defaultInfoPrefixFor,
   deriveKeyPairFromWallet: () => deriveKeyPairFromWallet,
   derivePrivateKeyFromSignature: () => derivePrivateKeyFromSignature,
   eciesDecrypt: () => eciesDecrypt,
@@ -305,6 +313,30 @@ function generateKeyPair() {
 function getPublicKey(privateKey) {
   return (0, import_utils.bytesToHex)(import_secp256k1.secp256k1.getPublicKey((0, import_utils.hexToBytes)(normalizePrivateKey(privateKey)), false));
 }
+function defaultInfoPrefixFor(mode) {
+  return mode === "eip712-hkdf" ? DEFAULT_DERIVATION_INFO_PREFIX_V2 : DEFAULT_DERIVATION_INFO_PREFIX;
+}
+function buildPayloadKeyTypedData(address, overrides = {}) {
+  if (!address) {
+    throw new Error("Address is required for key derivation (bound into the EIP-712 message)");
+  }
+  const source = overrides.types ?? DEFAULT_EIP712_TYPES;
+  const types = {};
+  for (const [key, entries] of Object.entries(source)) {
+    types[key] = entries.map((entry) => ({ name: entry.name, type: entry.type }));
+  }
+  return {
+    domain: { ...DEFAULT_EIP712_DOMAIN, ...overrides.domain },
+    types,
+    primaryType: overrides.primaryType ?? DEFAULT_EIP712_PRIMARY_TYPE,
+    message: {
+      address: address.toLowerCase(),
+      purpose: DEFAULT_EIP712_PURPOSE,
+      version: DEFAULT_EIP712_MESSAGE_VERSION,
+      ...overrides.message
+    }
+  };
+}
 function utf8(text) {
   return new TextEncoder().encode(text);
 }
@@ -321,7 +353,7 @@ function derivePrivateKeyFromSignature(signature, address, params = {}) {
   }
   if (!address) throw new Error("Address is required for key derivation (bound into HKDF info)");
   const salt = utf8(params.salt ?? DEFAULT_DERIVATION_SALT);
-  const infoBase = `${params.infoPrefix ?? DEFAULT_DERIVATION_INFO_PREFIX}/${address.toLowerCase()}`;
+  const infoBase = `${params.infoPrefix ?? defaultInfoPrefixFor(params.mode ?? "personal-sign-hkdf")}/${address.toLowerCase()}`;
   const maxAttempts = Math.max(1, params.maxAttempts ?? DEFAULT_DERIVATION_MAX_ATTEMPTS);
   const n = import_secp256k1.secp256k1.CURVE.n;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -333,20 +365,31 @@ function derivePrivateKeyFromSignature(signature, address, params = {}) {
   throw new Error(`HKDF produced no valid secp256k1 scalar in ${maxAttempts} attempts`);
 }
 async function deriveKeyPairFromWallet(args) {
-  const message = args.message ?? DEFAULT_DERIVATION_MESSAGE;
-  const signature = await args.signMessage(message);
+  const mode = args.mode ?? "personal-sign-hkdf";
+  const sign = async () => {
+    if (mode === "eip712-hkdf") {
+      if (!args.signTypedData) {
+        throw new Error(
+          "mode: 'eip712-hkdf' requires a signTypedData function (viem WalletClient.signTypedData / eth_signTypedData_v4)"
+        );
+      }
+      return args.signTypedData(buildPayloadKeyTypedData(args.address, args.typedData));
+    }
+    return args.signMessage(args.message ?? DEFAULT_DERIVATION_MESSAGE);
+  };
+  const signature = await sign();
   if (args.assertDeterministic) {
-    const second = await args.signMessage(message);
+    const second = await sign();
     if (second.toLowerCase() !== signature.toLowerCase()) {
       throw new Error(
-        "Wallet returned different signatures for the same message \u2014 it is not RFC 6979 deterministic, so a derived key cannot be reproduced and the agent would be permanently undecryptable. Use a deterministic wallet (MetaMask / Ledger / Trezor) or inject the key via WalletSigner.getPrivateKey() / AgentRunnerConfig.unpack."
+        "Wallet returned different signatures for the same payload \u2014 it is not RFC 6979 deterministic, so a derived key cannot be reproduced and the agent would be permanently undecryptable. Use a deterministic wallet (MetaMask / Ledger / Trezor) or inject the key via WalletSigner.getPrivateKey() / AgentRunnerConfig.unpack."
       );
     }
   }
   const privateKey = derivePrivateKeyFromSignature(signature, args.address, args);
   return { privateKey, publicKey: getPublicKey(privateKey) };
 }
-var import_aes, import_secp256k1, import_sha2, import_hkdf, import_hmac, import_utils, AES_KEY_SIZE, IV_SIZE, TAG_SIZE, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_MAX_ATTEMPTS;
+var import_aes, import_secp256k1, import_sha2, import_hkdf, import_hmac, import_utils, AES_KEY_SIZE, IV_SIZE, TAG_SIZE, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_TYPES, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_DERIVATION_MAX_ATTEMPTS;
 var init_crypto = __esm({
   "src/core/crypto.ts"() {
     "use strict";
@@ -362,6 +405,21 @@ var init_crypto = __esm({
     DEFAULT_DERIVATION_MESSAGE = "Actora: derive agent payload encryption key (v1). This signature authorizes no transaction and no payment.";
     DEFAULT_DERIVATION_SALT = "actora/expert-enc";
     DEFAULT_DERIVATION_INFO_PREFIX = "agent-payload-encryption/v1";
+    DEFAULT_DERIVATION_INFO_PREFIX_V2 = "agent-payload-encryption/v2";
+    DEFAULT_EIP712_DOMAIN = {
+      name: "Actora Agent Payload",
+      version: "2"
+    };
+    DEFAULT_EIP712_TYPES = {
+      PayloadKey: [
+        { name: "address", type: "address" },
+        { name: "purpose", type: "string" },
+        { name: "version", type: "uint256" }
+      ]
+    };
+    DEFAULT_EIP712_PRIMARY_TYPE = "PayloadKey";
+    DEFAULT_EIP712_PURPOSE = "agent-payload-encryption";
+    DEFAULT_EIP712_MESSAGE_VERSION = 2;
     DEFAULT_DERIVATION_MAX_ATTEMPTS = 8;
   }
 });

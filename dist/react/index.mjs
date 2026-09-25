@@ -164,6 +164,45 @@ function unpackAgent(encryptedPayload, eciesEncryptedKey, privateKey) {
 var DEFAULT_DERIVATION_MESSAGE = "Actora: derive agent payload encryption key (v1). This signature authorizes no transaction and no payment.";
 var DEFAULT_DERIVATION_SALT = "actora/expert-enc";
 var DEFAULT_DERIVATION_INFO_PREFIX = "agent-payload-encryption/v1";
+var DEFAULT_DERIVATION_INFO_PREFIX_V2 = "agent-payload-encryption/v2";
+function defaultInfoPrefixFor(mode) {
+  return mode === "eip712-hkdf" ? DEFAULT_DERIVATION_INFO_PREFIX_V2 : DEFAULT_DERIVATION_INFO_PREFIX;
+}
+var DEFAULT_EIP712_DOMAIN = {
+  name: "Actora Agent Payload",
+  version: "2"
+};
+var DEFAULT_EIP712_TYPES = {
+  PayloadKey: [
+    { name: "address", type: "address" },
+    { name: "purpose", type: "string" },
+    { name: "version", type: "uint256" }
+  ]
+};
+var DEFAULT_EIP712_PRIMARY_TYPE = "PayloadKey";
+var DEFAULT_EIP712_PURPOSE = "agent-payload-encryption";
+var DEFAULT_EIP712_MESSAGE_VERSION = 2;
+function buildPayloadKeyTypedData(address, overrides = {}) {
+  if (!address) {
+    throw new Error("Address is required for key derivation (bound into the EIP-712 message)");
+  }
+  const source = overrides.types ?? DEFAULT_EIP712_TYPES;
+  const types = {};
+  for (const [key, entries] of Object.entries(source)) {
+    types[key] = entries.map((entry) => ({ name: entry.name, type: entry.type }));
+  }
+  return {
+    domain: { ...DEFAULT_EIP712_DOMAIN, ...overrides.domain },
+    types,
+    primaryType: overrides.primaryType ?? DEFAULT_EIP712_PRIMARY_TYPE,
+    message: {
+      address: address.toLowerCase(),
+      purpose: DEFAULT_EIP712_PURPOSE,
+      version: DEFAULT_EIP712_MESSAGE_VERSION,
+      ...overrides.message
+    }
+  };
+}
 var DEFAULT_DERIVATION_MAX_ATTEMPTS = 8;
 function utf8(text) {
   return new TextEncoder().encode(text);
@@ -181,7 +220,7 @@ function derivePrivateKeyFromSignature(signature, address, params = {}) {
   }
   if (!address) throw new Error("Address is required for key derivation (bound into HKDF info)");
   const salt = utf8(params.salt ?? DEFAULT_DERIVATION_SALT);
-  const infoBase = `${params.infoPrefix ?? DEFAULT_DERIVATION_INFO_PREFIX}/${address.toLowerCase()}`;
+  const infoBase = `${params.infoPrefix ?? defaultInfoPrefixFor(params.mode ?? "personal-sign-hkdf")}/${address.toLowerCase()}`;
   const maxAttempts = Math.max(1, params.maxAttempts ?? DEFAULT_DERIVATION_MAX_ATTEMPTS);
   const n = secp256k1.CURVE.n;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -779,9 +818,13 @@ function useAgentRunner(config) {
   const mountedRef = useRef(true);
   const derivedKeyRef = useRef(null);
   const derivationCacheKey = encryptionKeyDerivation ? [
+    encryptionKeyDerivation.mode,
     encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE,
     encryptionKeyDerivation.salt ?? "",
-    encryptionKeyDerivation.infoPrefix ?? ""
+    encryptionKeyDerivation.infoPrefix ?? "",
+    encryptionKeyDerivation.domain ? JSON.stringify(encryptionKeyDerivation.domain) : "",
+    encryptionKeyDerivation.primaryType ?? "",
+    encryptionKeyDerivation.types ? JSON.stringify(encryptionKeyDerivation.types) : ""
   ].join("|") : "";
   useEffect(() => {
     mountedRef.current = true;
@@ -817,11 +860,27 @@ function useAgentRunner(config) {
           if (derivedKeyRef.current?.cacheKey === cacheKey) {
             return derivedKeyRef.current.privateKey;
           }
-          const message = encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE;
-          const signature = await walletClient.signMessage({
-            account: walletClient.account,
-            message
-          });
+          let signature;
+          if (encryptionKeyDerivation.mode === "eip712-hkdf") {
+            const typedData = buildPayloadKeyTypedData(address, {
+              domain: encryptionKeyDerivation.domain,
+              types: encryptionKeyDerivation.types,
+              primaryType: encryptionKeyDerivation.primaryType
+            });
+            signature = await walletClient.signTypedData({
+              account: walletClient.account,
+              domain: typedData.domain,
+              types: typedData.types,
+              primaryType: typedData.primaryType,
+              message: typedData.message
+            });
+          } else {
+            const message = encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE;
+            signature = await walletClient.signMessage({
+              account: walletClient.account,
+              message
+            });
+          }
           const privateKey = derivePrivateKeyFromSignature(
             signature,
             address,
@@ -833,7 +892,7 @@ function useAgentRunner(config) {
       } : {},
       async getPrivateKey() {
         throw new Error(
-          'EIP-1193 wallets cannot export the account private key. Pass `encryptionKeyDerivation: { mode: "personal-sign-hkdf" }` to useAgentRunner to derive a separate payload key from a deterministic wallet signature.'
+          'EIP-1193 wallets cannot export the account private key. Pass `encryptionKeyDerivation: { mode: "personal-sign-hkdf" | "eip712-hkdf" }` to useAgentRunner to derive a separate payload key from a deterministic wallet signature.'
         );
       }
     };

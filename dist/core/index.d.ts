@@ -118,16 +118,66 @@ declare function generateKeyPair(): {
  * Derive public key from private key (hex; `0x` prefix optional).
  */
 declare function getPublicKey(privateKey: string): string;
-/** Default frozen message signed by the wallet (byte-exact; never localize). */
+/** Derivation profile: v1 free-form `personal_sign`, or v2 EIP-712 typed data. */
+type DerivationMode = 'personal-sign-hkdf' | 'eip712-hkdf';
+/** Default frozen message signed by the wallet (byte-exact; never localize). v1 only. */
 declare const DEFAULT_DERIVATION_MESSAGE: string;
 declare const DEFAULT_DERIVATION_SALT = "actora/expert-enc";
 declare const DEFAULT_DERIVATION_INFO_PREFIX = "agent-payload-encryption/v1";
+/** HKDF info prefix for v2 (`eip712-hkdf`); `/<lowercased address>` is appended. */
+declare const DEFAULT_DERIVATION_INFO_PREFIX_V2 = "agent-payload-encryption/v2";
+/** HKDF info prefix for a mode, before the `/<address>` suffix. */
+declare function defaultInfoPrefixFor(mode: DerivationMode): string;
+interface Eip712TypeEntry {
+    name: string;
+    type: string;
+}
+type Eip712Types = Record<string, Eip712TypeEntry[]>;
+interface Eip712TypedData {
+    domain: Record<string, unknown>;
+    types: Eip712Types;
+    primaryType: string;
+    message: Record<string, unknown>;
+}
+/** Default v2 domain. Frozen — see the FROZEN CONTRACT note above. */
+declare const DEFAULT_EIP712_DOMAIN: {
+    name: string;
+    version: string;
+};
+/** Default v2 `types`. Frozen. Treat as read-only; the builder clones it. */
+declare const DEFAULT_EIP712_TYPES: Eip712Types;
+declare const DEFAULT_EIP712_PRIMARY_TYPE = "PayloadKey";
+declare const DEFAULT_EIP712_PURPOSE = "agent-payload-encryption";
+declare const DEFAULT_EIP712_MESSAGE_VERSION = 2;
+/** Per-field overrides for the v2 typed data. Omitted fields use the defaults. */
+interface Eip712DerivationOverrides {
+    domain?: Record<string, unknown>;
+    types?: Eip712Types;
+    primaryType?: string;
+    message?: Record<string, unknown>;
+}
+/**
+ * Build the canonical v2 typed data for a publisher/subscriber address.
+ *
+ * `message.address` is lowercased to match the HKDF `info` binding, so the two
+ * bindings cannot drift. Deterministic: no timestamp, no nonce.
+ */
+declare function buildPayloadKeyTypedData(address: string, overrides?: Eip712DerivationOverrides): Eip712TypedData;
 interface WalletKeyDerivationParams {
-    /** Frozen message to sign. Defaults to `DEFAULT_DERIVATION_MESSAGE`. */
+    /**
+     * Which signature the payload key is derived from. Defaults to
+     * `'personal-sign-hkdf'` (v1) — omitting it keeps existing callers on the
+     * frozen v1 path.
+     */
+    mode?: DerivationMode;
+    /** Frozen message to sign (v1 only). Defaults to `DEFAULT_DERIVATION_MESSAGE`. */
     message?: string;
     /** HKDF salt (domain separation). Defaults to `DEFAULT_DERIVATION_SALT`. */
     salt?: string;
-    /** HKDF info prefix; `/<lowercased address>` is appended. */
+    /**
+     * HKDF info prefix; `/<lowercased address>` is appended. Defaults to the
+     * prefix of the selected `mode` (`agent-payload-encryption/v1` or `/v2`).
+     */
     infoPrefix?: string;
     /** Max HKDF attempts when the candidate scalar is out of range (default 8). */
     maxAttempts?: number;
@@ -136,24 +186,37 @@ interface WalletKeyDerivationParams {
  * Derive a secp256k1 private key (32-byte hex) from a wallet signature.
  *
  * Deterministic: same signature + same address + same params ⇒ same key.
+ * `mode` only selects the default `infoPrefix`; the HKDF construction itself is
+ * identical for v1 and v2 (the IKM is the 65-byte signature either way).
  * Throws when the signature is unusable or no valid scalar is found.
  */
 declare function derivePrivateKeyFromSignature(signature: string, address: string, params?: WalletKeyDerivationParams): string;
 interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
-    /** Wallet message signer (wagmi `signMessage` / viem `WalletClient.signMessage`). */
+    /** v1 signer: wallet message signer (wagmi `signMessage` / viem `WalletClient.signMessage`). */
     signMessage(message: string): Promise<string>;
+    /**
+     * v2 signer (`mode: 'eip712-hkdf'`): EIP-712 typed-data signer
+     * (viem `WalletClient.signTypedData` / `eth_signTypedData_v4`). Required by v2.
+     */
+    signTypedData?(typedData: Eip712TypedData): Promise<string>;
+    /** v2 only: typed-data field overrides. Ignored by v1. */
+    typedData?: Eip712DerivationOverrides;
     /** Signer address (any case) — bound into the HKDF info string. */
     address: string;
     /**
-     * Opt-in safety check: sign the message twice and require identical
-     * signatures. Catches non-deterministic (non-RFC-6979) wallets, whose
-     * published agents could never be decrypted again. Costs one extra prompt —
-     * recommended for the publishing path, unnecessary for decryption.
+     * Opt-in safety check: sign twice and require identical signatures. Catches
+     * non-deterministic (non-RFC-6979) wallets, whose published agents could
+     * never be decrypted again. Costs one extra prompt — recommended for the
+     * publishing path, unnecessary for decryption.
      */
     assertDeterministic?: boolean;
 }
 /**
  * Derive the payload key pair from a browser wallet.
+ *
+ * v1 (`mode: 'personal-sign-hkdf'`, default): signs a frozen text message.
+ * v2 (`mode: 'eip712-hkdf'`): signs EIP-712 typed data, so the wallet renders a
+ * structured, domain-scoped prompt instead of a blind `personal_sign`.
  *
  * Publishing: `publishAgent({ agent, publicKey, uploader })` with the returned
  * `publicKey`. Decrypting: pass the returned `privateKey` to `AgentRunner` via
@@ -164,4 +227,4 @@ declare function deriveKeyPairFromWallet(args: DeriveKeyPairFromWalletArgs): Pro
     publicKey: string;
 }>;
 
-export { AgentPayload, AgentPrivatePayload, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, type DeriveKeyPairFromWalletArgs, EncryptedPayload, PackResult, type PublishAgentConfig, type PublishAgentResult, type WalletKeyDerivationParams, aesDecrypt, aesEncrypt, decryptPayload, decryptWithKey, deriveKeyPairFromWallet, derivePrivateKeyFromSignature, eciesDecrypt, eciesEncrypt, encryptPayload, encryptWithKey, generateAesKey, generateKeyPair, getPublicKey, packAgentForPublish, publishAgent, randomBytes, unpackAgent };
+export { AgentPayload, AgentPrivatePayload, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_TYPES, type DerivationMode, type DeriveKeyPairFromWalletArgs, type Eip712DerivationOverrides, type Eip712TypeEntry, type Eip712TypedData, type Eip712Types, EncryptedPayload, PackResult, type PublishAgentConfig, type PublishAgentResult, type WalletKeyDerivationParams, aesDecrypt, aesEncrypt, buildPayloadKeyTypedData, decryptPayload, decryptWithKey, defaultInfoPrefixFor, deriveKeyPairFromWallet, derivePrivateKeyFromSignature, eciesDecrypt, eciesEncrypt, encryptPayload, encryptWithKey, generateAesKey, generateKeyPair, getPublicKey, packAgentForPublish, publishAgent, randomBytes, unpackAgent };
