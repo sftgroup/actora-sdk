@@ -100,7 +100,7 @@ const { planId } = await sub.createPlan({
 ```bash
 npm install @actora/sdk
 # 或锁定版本
-npm install @actora/sdk@0.19.0
+npm install @actora/sdk@0.20.0
 ```
 
 > 包内含 `examples/`（B 端可运行样例）与 `UPGRADE.md`（逐版本迁移指南），安装后可从
@@ -532,9 +532,9 @@ const { finalText } = await loop.run('帮我做这件事')
 - **`aesEncrypt(plaintext, keyHex)` / `aesDecrypt(encryptedBase64, keyHex)`** —— AES-256-GCM（线格式 `base64(IV[12]||ct||tag[16])`）
 - **`eciesEncrypt(dataHex, publicKey)` / `eciesDecrypt(dataHex, privateKey)`** —— ECIES（secp256k1，与 eciesjs 兼容）
 - **`generateKeyPair()`** → `{ privateKey, publicKey }`；**`getPublicKey(privateKey)`**
-- **`derivePrivateKeyFromSignature(signature, address, params?)`** / **`deriveKeyPairFromWallet({ mode?, signMessage, signTypedData?, address, … })`** —— 浏览器钱包密钥派生（v1 `personal_sign` / v2 EIP-712 + HKDF-SHA256，见 §5.12）；配套 **`buildPayloadKeyTypedData(address, overrides?)`** 与 `DEFAULT_EIP712_DOMAIN` / `DEFAULT_EIP712_TYPES` / `DEFAULT_EIP712_PRIMARY_TYPE` / `DEFAULT_DERIVATION_INFO_PREFIX_V2`
+- **`derivePrivateKeyFromSignature(signature, address, params?)`** / **`derivePrivateKeyFromIkm(ikmHex, address, params?)`** / **`deriveKeyPairFromWallet({ mode?, signMessage, signTypedData?, getPrfOutput?, address, … })`** —— 浏览器钱包密钥派生（v1 `personal_sign` / v2 EIP-712 / v3 WebAuthn PRF + HKDF-SHA256，见 §5.12）；配套 **`buildPayloadKeyTypedData(address, overrides?)`** 与 `DEFAULT_EIP712_DOMAIN` / `DEFAULT_EIP712_TYPES` / `DEFAULT_EIP712_PRIMARY_TYPE` / `DEFAULT_DERIVATION_INFO_PREFIX_V2` / `DEFAULT_DERIVATION_INFO_PREFIX_V3` / `DEFAULT_PRF_SALT`（v3 的 IKM 不再是签名，直接用 `derivePrivateKeyFromIkm` 喂 32 字节 PRF 输出）
 - **`generateAesKey()`**；高级封装：`encryptPayload / decryptPayload / packAgentForPublish / publishAgent / unpackAgent`
-- **发布绑定与自检**：`publishAgent({ ..., verifyWithPrivateKey })`（铸造前 dry-run 解包）；`PAYLOAD_KEY_MODE_ATTRIBUTE` / `readPayloadKeyMode(attrs)` / `isDerivationMode(v)` / `AgentRegistry.setPayloadKeyMode(agentId, mode)`
+- **发布绑定与自检**：`publishAgent({ ..., verifyWithPrivateKey })`（铸造前 dry-run 解包）；`PAYLOAD_KEY_MODE_ATTRIBUTE` / `readPayloadKeyMode(attrs)` / `isDerivationMode(v)` / `AgentRegistry.setPayloadKeyMode(agentId, mode)`；v3 另有 `PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE` / `serializePayloadKeyCredential()` / `readPayloadKeyCredential(attrs)` / `AgentRegistry.setPayloadKeyCredential(agentId, credential)`
 
 ```ts
 import { generateKeyPair, aesEncrypt, aesDecrypt, eciesEncrypt, eciesDecrypt } from '@actora/sdk'
@@ -549,36 +549,37 @@ aesDecrypt(c, '00'.repeat(32))            // 'hello'
 
 > **结论先讲**：MetaMask / OKX / Rabby / Trust / Coinbase 等注入式钱包**无法导出账户私钥**，
 > 所以 `AgentRunner.useAgent()` 不能靠账户私钥做 ECIES 解密；而 `eth_getEncryptionPublicKey`
-> （EIP-1024）已废弃且仅 MetaMask 实现。浏览器端的可行路径是**从确定性签名派生一把独立的 payload 密钥**。
+> （EIP-1024）已废弃且仅 MetaMask 实现。浏览器端的可行路径有三条：**从确定性签名派生**（v1 `personal_sign` / v2 EIP-712）、
+> **从 WebAuthn PRF 派生**（v3，非签名、来源绑定）、或**改用托管密钥**（服务端生成密钥对）。
 
 #### 派生规则（冻结契约）
 
-两种模式**只有「签什么」不同**，HKDF 构造逐字节一致（IKM 都是签名的 65 字节 `r‖s‖v`）：
+三种模式**只有「IKM 从哪来」不同**，HKDF 构造逐字节一致：
 
 ```
-v1  mode: 'personal-sign-hkdf'
-signature  = personal_sign(message)                       // 65 字节，要求 RFC 6979 确定性
+v1  mode: 'personal-sign-hkdf'        IKM = personal_sign 签名（65 字节 r‖s‖v，要求 RFC 6979 确定性）
+v2  mode: 'eip712-hkdf'               IKM = eth_signTypedData_v4 签名（65 字节）
+v3  mode: 'webauthn-prf-hkdf'         IKM = WebAuthn PRF 输出（32 字节，非签名）
 
-v2  mode: 'eip712-hkdf'
-signature  = eth_signTypedData_v4({ domain, types, primaryType, message })
-
-两者共用：
-privateKey = HKDF-SHA256(IKM = signature,
+三者共用：
+privateKey = HKDF-SHA256(IKM,
                          salt = "actora/expert-enc",
                          info = "<infoPrefix>/<地址小写>")[retry:i]
 publicKey  = 未压缩公钥（0x04 + 128 hex）→ 传给 publishAgent
 
-infoPrefix = "agent-payload-encryption/v1"    // v1（默认，与 v2 并存）
+infoPrefix = "agent-payload-encryption/v1"    // v1
            | "agent-payload-encryption/v2"    // v2
+           | "agent-payload-encryption/v3"    // v3
 ```
 
-- 账户私钥**永不离开钱包**；派生私钥只存在于内存，不落盘、不上传；解密时用同一钱包对同一载荷再签一次即可重现；
+- 账户私钥**永不离开钱包**；派生私钥只存在于内存，不落盘、不上传；解密时用同一来源重现同一 IKM 即可（v1/v2 再签一次，v3 再求一次 PRF）；
 - **冻结面**：改动其中任一值，**已发布的 payload 永久解不开**——上线前冻结，文案按**字节**冻结（不要本地化、不要改空格）：
   - v1：`message` / `salt` / `infoPrefix` / 发布地址；
   - v2：`domain` / `types` / `primaryType` / `infoPrefix` / 发布地址（typed data 的 `message` 由地址派生，**不含时间戳 / nonce**，
     否则签名不可复现、密钥不可复原）；
+  - v3：`prfSalt` / `salt` / `infoPrefix` / **`rpId`** / **`credentialId`** / 发布地址（`prfSalt` 即上表的 `salt`，经 PRF 扩展求值后作为 HKDF 的 salt 输入）；
 - 越界（HKDF 输出非合法 secp256k1 标量）时按 `info + "/retry:<i>"` 重试，首次命中的方案即冻结方案；
-- **v1 与 v2 并存**：0.18.0 起新档案建议直接用 v2；已用 v1 发布的载荷继续用 v1 解（不提供 v1→v2 的自动迁移，
+- **v1 / v2 / v3 并存**：0.18.0 起新档案建议用 v2；0.20.0 起需要「非签名、来源绑定」时用 v3。已用旧 mode 发布的载荷继续用旧 mode 解（不提供自动迁移，
   因为 `tokenURI` 铸后不可改）。
 
 #### v2：用 EIP-712 取代文本盲签（`mode: 'eip712-hkdf'`）
@@ -589,8 +590,7 @@ v1 的 `personal_sign` 有两个先天问题：钱包一律按**文本盲签**�
 
 > ⚠️ **v2 只解决「呈现」，不解决「可复用」**：typed data 依然是公开常量、无时效、可无限重放，
 > 上面那条攻击路径照旧成立（见「前置条件与失败语义」）。**换编码消不掉 IKM 是签名这个事实**；
-> 要消掉它必须换密钥来源 —— 首选托管密钥（见「托管密钥」一节），或未来的 passkey（WebAuthn PRF）
-> 路线（选型评估中，尚未交付）。
+> 要消掉它有两条路：**托管密钥**（见「托管密钥」一节）或 **WebAuthn PRF（v3，0.20.0 已交付**，见下节）。
 
 默认值（SDK 内置，**刻意不含时间戳**）：
 
@@ -629,6 +629,91 @@ const { ctx, error } = useAgentRunner({
 })
 ```
 
+#### v3：WebAuthn PRF —— 把 IKM 从「签名」换成「浏览器绑定的密钥材料」（`mode: 'webauthn-prf-hkdf'`，0.20.0+）
+
+前两节的 IKM 都是**签名**，于是「公开 / 无时效 / 可复用」成为必然代价。v3 换掉 IKM 的来源：用 **WebAuthn PRF 扩展**
+的确定性输出（32 字节）。PRF 由浏览器/认证器**强制绑定到 RP ID**（你的注册域），**不是签名**，因此：
+
+| 维度 | v1 / v2（IKM = 签名） | v3（IKM = PRF 输出） |
+|---|---|---|
+| 是否可被重放 | ✅ 载荷是公开常量，钓鱼站让用户签同一份即可派生 | ❌ 浏览器拒绝在非注册域使用该凭据，拿不到同值 |
+| 钱包提示 | 文本盲签 / typed data 签名 | **无签名提示**（不经过 EIP-1193） |
+| 是否需要 `assertDeterministic` | 需要（非 RFC 6979 钱包不可复现） | **不需要**：PRF 无计数器，构造上确定 |
+| 与钱包地址的关系 | 绑定发布地址（HKDF `info`） | 同样绑定地址；但密钥主体来自 PRF ⇒ **与钱包账户解耦** |
+| 新增依赖面 | 无 | `rpId` / `credentialId`（**必须落盘**，无法从地址反推） |
+
+发布侧（**先注册 passkey，再派生**）：
+
+```ts
+import {
+  getPrfCapability, createPrfCredential, evaluatePrf,
+  deriveKeyPairFromWallet, publishAgent, DEFAULT_PRF_SALT,
+} from '@actora/sdk'
+
+// ① 能力探测（不弹窗）。prf: 'unknown' 是真实答案 —— 旧浏览器无法在不弹窗的前提下回答，
+//    它**不等于**失败；v3 真不可用时会在 ③ 抛出可操作错误。
+const cap = await getPrfCapability()
+
+// ② 注册 passkey（residentKey + userVerification + PRF 一并开启）
+const cred = await createPrfCredential()      // rpId 默认 location.hostname
+// cred.credentialId 是 base64url，**务必持久化**（见 ④）；丢了就再也派生不出同一把密钥
+
+// ③ 派生：IKM = evaluatePrf 的 32 字节输出
+const { privateKey, publicKey } = await deriveKeyPairFromWallet({
+  mode: 'webauthn-prf-hkdf',
+  address: account.address,
+  getPrfOutput: async () => (await evaluatePrf({ credentialId: cred.credentialId })).prfOutputHex,
+})
+// v3 忽略 assertDeterministic（PRF 无计数器）；铸造前自检照旧
+const result = await publishAgent({ agent, publicKey, uploader, verifyWithPrivateKey: privateKey })
+```
+
+运行侧与链上绑定（**把 `rpId` + `credentialId` 记到档案上**，否则将来无从复现）：
+
+```tsx
+const { ctx, error } = useAgentRunner({
+  agentId,
+  encryptionKeyDerivation: {
+    mode: 'webauthn-prf-hkdf',
+    credentialId,                 // 从链上属性读回
+    rpId: 'app.example.com',      // 必须就是注册该 passkey 时的域
+    // prfSalt: DEFAULT_PRF_SALT, // 默认值，改动即进入冻结面
+  },
+})
+```
+
+```ts
+// 发布后落盘绑定（跨实现复现所需的最小信息）
+await registry.setPayloadKeyMode(agentId, 'webauthn-prf-hkdf')
+await registry.setPayloadKeyCredential(agentId, {
+  rpId: 'app.example.com',
+  credentialId,                   // base64url
+  prfSalt: DEFAULT_PRF_SALT,      // 显式写入，便于第三方 runner 复现
+  address: account.address,
+})
+// 读取：readPayloadKeyCredential(await registry.getAttributes(agentId))
+//      （属性名常量 PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE = 'payload_key_credential'，JSON 字符串）
+```
+
+**零回退（有意设计）**：PRF 不可用时抛 `PrfError`，**绝不静默退化为 `signMessage`** ——
+静默回退会让用户以为持有「passkey 绑定」的密钥，实际回到可复用签名，比直接报错危险得多。
+错误码（`error.code`，`error instanceof PrfError`）：
+
+| `PrfErrorCode` | 触发 | 处置 |
+|---|---|---|
+| `PRF_UNSUPPORTED` | 浏览器/认证器没有 PRF 扩展（移动端钱包内置浏览器**普遍如此**） | 改用 `mode: 'eip712-hkdf'`（v2）或托管密钥 |
+| `PRF_CREDENTIAL_NOT_FOUND` | 凭据不在本设备（`InvalidStateError`） | 在注册设备或同一 passkey 同步服务上重试 |
+| `PRF_CANCELLED` | 用户取消 / 超时 / 凭据不存在（`NotAllowedError`） | 重新发起；确认 RP ID 正确 |
+| `PRF_FAILED` | RP ID 与当前来源不匹配（`SecurityError`）、输出长度异常、其他 | 检查 `rpId` 是否等于注册时的域 |
+
+> ⚠️ **v3 的已知局限（务必在选型时权衡）**：
+> ① **移动端钱包内置浏览器普遍不支持 WebAuthn/PRF** ⇒ 这类端侧请继续用 v2 或托管密钥；
+> ② 密钥绑定 **(rpId, credential)** ⇒ **换域名、或丢失凭据**，已发布载荷**永久解不开**（`tokenURI` 铸后不可改），
+>    故 `credentialId` + `rpId` 必须随档案落盘（`payload_key_credential` 属性）；
+> ③ **跨设备 / 混合传输（QR）场景的 PRF 一致性存在公开缺陷史**（如 WebKit bug 311099：Safari 对安全密钥返回
+>    未解密的 hmac-secret 输出）⇒ v3 因此设计为 **opt-in**，不改变任何默认值。
+> ④ `getPrfCapability()` 在无 `getClientCapabilities()` 的浏览器返回 `prf: 'unknown'`，只能靠真实 ceremony 判定。
+
 #### 发布（浏览器）
 
 ```ts
@@ -651,7 +736,7 @@ const result = await publishAgent({
 // result.encryptedCid → 链上 tokenURI；result.eciesEncryptedKeyHex → 元数据属性
 
 // 铸造后记录派生 mode —— 跨实现的标准字段，第三方 runner 据此选解包方式
-await registry.setPayloadKeyMode(agentId, 'personal-sign-hkdf')   // 或 'eip712-hkdf'
+await registry.setPayloadKeyMode(agentId, 'personal-sign-hkdf')   // 或 'eip712-hkdf'；v3 用 'webauthn-prf-hkdf'（另需 setPayloadKeyCredential）
 ```
 
 发布链路上有三道**铸造前**护栏，都会在「已经不可回退」之前拦住你：
@@ -670,7 +755,7 @@ await registry.setPayloadKeyMode(agentId, 'personal-sign-hkdf')   // 或 'eip712
 ```tsx
 const { ctx, error } = useAgentRunner({
   agentId,
-  encryptionKeyDerivation: { mode: 'personal-sign-hkdf' },   // 显式 opt-in（v1 / v2 二选一）
+  encryptionKeyDerivation: { mode: 'personal-sign-hkdf' },   // 显式 opt-in（v1 / v2 / v3 三选一）
 })
 ```
 
@@ -715,7 +800,7 @@ const result = await publishAgent({
 const { agentId } = await registry.register(result.encryptedCid, {
   eciesEncryptedKey: result.eciesEncryptedKeyHex,
 })
-await registry.setPayloadKeyMode(agentId, 'personal-sign-hkdf')   // 或 'eip712-hkdf'
+await registry.setPayloadKeyMode(agentId, 'personal-sign-hkdf')   // 或 'eip712-hkdf'；v3 用 'webauthn-prf-hkdf'（另需 setPayloadKeyCredential）
 ```
 
 运行侧（**只在这两类位置持有密钥**，不要下发到浏览器）：
@@ -747,11 +832,11 @@ new AgentRunner({ reader, wallet, aesKeyHex: await kms.getAgentAesKey(agentId) }
 
 | 项 | 说明 |
 |---|---|
-| 确定性签名 | 必须满足 RFC 6979（MetaMask / Ledger / Trezor 满足；部分 MPC / 托管钱包不满足），v1 的 `personal_sign` 与 v2 的 `eth_signTypedData_v4` 同样适用。非确定性钱包一旦发布，Agent 就再也解不开（**静默数据损坏**），故 `deriveKeyPairFromWallet()` 自 0.19.0 起**默认开启** `assertDeterministic`（多一次签名提示）；确认签名为确定性时可显式关掉 |
-| 域隔离 | 派生载荷只在 Actora 使用：任何能让同一地址对**同一载荷**签名的场景都等价于拿到内容密钥；换地址即失效。v1 是自由文本（任何站点都能复现该提示词）；**v2 的 EIP-712 `domain` + `types` 让钱包渲染结构化、带域分隔符的请求**，比盲签可辨 |
-| ⚠️ 签名路径的固有边界（v1 与 v2 同样适用） | **只要 IKM 来自签名，「公开 / 无时效 / 可复用」就是必然代价**：文案与 typed data 都是公开常量，钓鱼站让用户签同一份载荷即可派生出其 payload 私钥，配合公开的 `encryptedPayloadCid` 解开私有载荷。这不是 v1 的 bug，换编码消不掉 —— 加时间戳 / nonce 会**直接让密钥不可复原**（载荷永久解不开），所以「抗重放」与「可复原」在这条路径上互斥。**在 typed data 里加「来源域名」字符串也不构成密码学绑定**：字段值公开可复现、当前主流钱包对离线 typed data 不做 origin 校验（origin 仅用于 UI 展示）。真正做到来源绑定需要非签名密钥来源（见「托管密钥」一节） |
-| 密钥来源（除签名外） | ① **托管密钥**（服务端生成密钥对，见上一节）；② 签名派生（v1 / v2）。前者没有「可复用签名」问题，因为根本没有签名 |
-| 错误码 | 钱包不提供任何密钥来源 → `WALLET_NOT_CONNECTED`（**不再**被包成 `DECRYPTION_FAILED`）；密钥不对/密文损坏 → `DECRYPTION_FAILED`，原始错误见 `error.cause` |
+| 确定性签名 | 必须满足 RFC 6979（MetaMask / Ledger / Trezor 满足；部分 MPC / 托管钱包不满足），v1 的 `personal_sign` 与 v2 的 `eth_signTypedData_v4` 同样适用。非确定性钱包一旦发布，Agent 就再也解不开（**静默数据损坏**），故 `deriveKeyPairFromWallet()` 自 0.19.0 起**默认开启** `assertDeterministic`（多一次签名提示）；确认签名为确定性时可显式关掉。**v3 不涉及签名，此约束不适用** |
+| 域隔离 | 派生载荷只在 Actora 使用：任何能让同一地址对**同一载荷**签名的场景都等价于拿到内容密钥；换地址即失效。v1 是自由文本（任何站点都能复现该提示词）；**v2 的 EIP-712 `domain` + `types` 让钱包渲染结构化、带域分隔符的请求**，比盲签可辨；**v3 由浏览器按 RP ID 强制隔离**（换域即换密钥空间，无需依赖文案） |
+| ⚠️ 签名路径的固有边界（v1 与 v2 同样适用） | **只要 IKM 来自签名，「公开 / 无时效 / 可复用」就是必然代价**：文案与 typed data 都是公开常量，钓鱼站让用户签同一份载荷即可派生出其 payload 私钥，配合公开的 `encryptedPayloadCid` 解开私有载荷。这不是 v1 的 bug，换编码消不掉 —— 加时间戳 / nonce 会**直接让密钥不可复原**（载荷永久解不开），所以「抗重放」与「可复原」在这条路径上互斥。**在 typed data 里加「来源域名」字符串也不构成密码学绑定**：字段值公开可复现、当前主流钱包对离线 typed data 不做 origin 校验（origin 仅用于 UI 展示）。真正做到来源绑定需要**非签名密钥来源**：**托管密钥**或 **WebAuthn PRF（v3）** |
+| 密钥来源（除签名外） | ① **托管密钥**（服务端生成密钥对，见上一节）—— 无「可复用签名」问题，因为根本没有签名；② **WebAuthn PRF（v3）** —— 非签名、由浏览器按 RP ID 绑定，见 v3 一节；③ 签名派生（v1 / v2） |
+| 错误码 | 钱包不提供任何密钥来源 → `WALLET_NOT_CONNECTED`（**不再**被包成 `DECRYPTION_FAILED`）；密钥不对/密文损坏 → `DECRYPTION_FAILED`，原始错误见 `error.cause`；v3 的 PRF 失败 → `PrfError`（`error.code` 见 v3 一节，**不回退**到签名派生） |
 | 订阅者能否解密 | **不能**。payload 的 AES key 由**发布时的公钥**包裹，只有持有对应私钥的发布方解得开。订阅者侧要拿到明文 prompt/skills，需走托管对话，或由发布方经 MCP 下发 |
 
 #### 隐私边界：托管对话读的是什么
@@ -1103,6 +1188,7 @@ POST /api/v1/payments
 | 0.17.1 | **DX 修复**：`eciesDecrypt()` / `unpackAgent()` / `getPublicKey()` 的 `privateKey` 接受可选 `0x` 前缀（此前抛底层库的模糊错误），非法格式时报 `Invalid private key: expected 32-byte hex…`；`UPGRADE.md` 加入 npm 包 `files`（此前包内缺失）；修正 `package-lock.json` 残留旧包名 `@agentxv2/sdk`。**无 API 破坏** |
 | 0.18.0 | **payload 密钥派生 v2（EIP-712）**：`encryptionKeyDerivation: { mode: 'eip712-hkdf' }` 与 `deriveKeyPairFromWallet({ mode, signTypedData })`，把「被签的东西」从自由文本换成 EIP-712 typed data（`buildPayloadKeyTypedData` + `DEFAULT_EIP712_*`），HKDF 构造与 IKM 不变、`infoPrefix` 版本化为 `agent-payload-encryption/v2`；**v1（`personal-sign-hkdf`）保留且行为不变**，旧档案继续可解 |
 | 0.19.0 | **密钥来源与发布护栏**：① 托管密钥（服务端生成密钥对）写成**受支持的一等用法**（含安全建议 / 不可迁移性）；② `deriveKeyPairFromWallet()` 默认开启 `assertDeterministic`（可关）并新增默认开启的 `selfCheck`；③ `publishAgent({ verifyWithPrivateKey })` **铸造前** dry-run 解包校验（含 v1/v2 mode 用错）；④ 新增跨实现的派生绑定字段 `payload_key_mode`（`PAYLOAD_KEY_MODE_ATTRIBUTE` / `readPayloadKeyMode()` / `isDerivationMode()` / `AgentRegistry.setPayloadKeyMode()`）；⑤ README 明确「签名路径固有边界」并收回 v2「来源可验证」的过度声明。**若发布流程依赖单次签名提示，请显式传 `assertDeterministic: false`** |
+| 0.20.0 | **payload 密钥派生 v3（WebAuthn PRF，非签名）**：新增 `mode: 'webauthn-prf-hkdf'`，IKM 改为 WebAuthn PRF 扩展输出（32 字节，由浏览器按 RP ID 绑定），HKDF 构造与 v1/v2 逐字节一致、`infoPrefix` 版本化为 `agent-payload-encryption/v3`；配套 `getPrfCapability()`（不弹窗探测）/ `createPrfCredential()` / `evaluatePrf()` / `PrfError`（`PRF_UNSUPPORTED` 等 4 码，**不支持时报可操作错误、绝不静默回退到签名派生**）；派生入口新增 `derivePrivateKeyFromIkm()` 与 `DEFAULT_PRF_SALT` / `DEFAULT_DERIVATION_INFO_PREFIX_V3`；新增 credential 绑定字段 `payload_key_credential`（`PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE` / `serializePayloadKeyCredential()` / `readPayloadKeyCredential()` / `AgentRegistry.setPayloadKeyCredential()`）。**v1/v2 保留且行为不变**，默认值不变、v3 为 opt-in |
 
 ---
 

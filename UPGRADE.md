@@ -1,5 +1,74 @@
 # @actora/sdk Upgrade Guide
 
+## v0.19.0 → v0.20.0（2026-09-25，可选升级）
+
+> 主题：**payload 密钥派生 v3：WebAuthn PRF（`webauthn-prf-hkdf`）—— IKM 不再是签名**。
+> v1/v2 的 IKM 都是签名，因此「公开 / 无时效 / 可复用」是必然代价；v3 把 IKM 换成 **WebAuthn PRF 扩展的
+> 32 字节输出**，它由浏览器/认证器**按 RP ID 绑定**，无法在其他域名复现，也**不经过 EIP-1193**（无盲签提示）。
+> **纯新增**：`default` mode 不变、v1/v2 行为逐字节不变，不升级也能继续用。
+
+### 新增 1：`mode: 'webauthn-prf-hkdf'`（opt-in）
+
+```ts
+import { getPrfCapability, createPrfCredential, evaluatePrf, deriveKeyPairFromWallet } from '@actora/sdk'
+
+const cap = await getPrfCapability()                 // 不弹窗；prf: 'unknown' 不等于失败
+const cred = await createPrfCredential()             // residentKey + UV + PRF；credentialId 必须落盘
+
+const { privateKey, publicKey } = await deriveKeyPairFromWallet({
+  mode: 'webauthn-prf-hkdf',
+  address: account.address,
+  getPrfOutput: async () => (await evaluatePrf({ credentialId: cred.credentialId })).prfOutputHex,
+})
+```
+
+HKDF 构造与 v1/v2 **逐字节一致**，只有两点不同：`infoPrefix` 为 `agent-payload-encryption/v3`，
+IKM 是 32 字节 PRF 输出而非 65 字节签名。因此 `derivePrivateKeyFromSignature` 之外新增了通用入口
+**`derivePrivateKeyFromIkm(ikmHex, address, params?)`**（v1/v2 的老入口行为不变，错误文案也不变）。
+
+### 新增 2：零回退 —— PRF 不可用时**绝不**静默退化为签名派生
+
+这是 v3 的核心安全语义。静默回退会让用户以为持有「passkey 绑定」的密钥，实际回到可复用签名，
+比直接报错危险得多，所以一律抛 `PrfError`：
+
+| `error.code` | 触发 |
+|---|---|
+| `PRF_UNSUPPORTED` | 浏览器/认证器无 PRF 扩展（**移动端钱包内置浏览器普遍如此**） |
+| `PRF_CREDENTIAL_NOT_FOUND` | 凭据不在本设备（`InvalidStateError`） |
+| `PRF_CANCELLED` | 用户取消 / 超时 / 凭据不存在（`NotAllowedError`） |
+| `PRF_FAILED` | RP ID 不匹配（`SecurityError`）、输出长度异常等 |
+
+**不要**把 `PrfError` 当成「可以退回 v2」的信号自动处理 —— 应把 v3 与 v2 的选择放在**发布前**
+（按端侧能力决定），而不是运行时的 try/catch 降级。
+
+### 新增 3：credential 绑定字段 `payload_key_credential`
+
+v3 的密钥绑定 **(rpId, credentialId)**，而这两者**无法从钱包地址反推** ⇒ 必须随档案落盘，否则将来无从复现：
+
+```ts
+await registry.setPayloadKeyMode(agentId, 'webauthn-prf-hkdf')
+await registry.setPayloadKeyCredential(agentId, {
+  rpId: 'app.example.com', credentialId, prfSalt: DEFAULT_PRF_SALT, address: account.address,
+})
+readPayloadKeyCredential(await registry.getAttributes(agentId))   // 读回
+PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE                                  // 'payload_key_credential'
+```
+
+### ⚠️ v3 的代价（选型必读）
+
+- 密钥绑定 **(rpId, credential)**：**换域名、或丢失凭据 ⇒ 已发布载荷永久解不开**（`tokenURI` 铸后不可改）；
+- 移动端钱包内置浏览器普遍无 WebAuthn/PRF，这类端侧请继续用 v2 或托管密钥；
+- 跨设备 / 混合传输（QR）的 PRF 一致性存在公开缺陷史（如 WebKit bug 311099），故 v3 为 **opt-in**；
+- v3 不需要也不使用 `assertDeterministic`（PRF 无计数器，构造上确定）。
+
+### 升级动作
+
+- `npm install @actora/sdk@0.20.0`；
+- 若需要「非签名、来源绑定」：按 README v3 一节接入，并**同时**写 `payload_key_mode` + `payload_key_credential`；
+- 若仍用 v1/v2：**无需任何改动**。
+
+---
+
 ## v0.18.0 → v0.19.0（2026-09-25，建议升级）
 
 > 主题：**密钥来源与发布护栏**。把「服务端生成密钥对」写成受支持的一等用法，补上三道**铸造前**护栏，
