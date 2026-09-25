@@ -32,6 +32,7 @@ __export(core_exports, {
   DEFAULT_EIP712_PRIMARY_TYPE: () => DEFAULT_EIP712_PRIMARY_TYPE,
   DEFAULT_EIP712_PURPOSE: () => DEFAULT_EIP712_PURPOSE,
   DEFAULT_EIP712_TYPES: () => DEFAULT_EIP712_TYPES,
+  PAYLOAD_KEY_MODE_ATTRIBUTE: () => PAYLOAD_KEY_MODE_ATTRIBUTE,
   aesDecrypt: () => aesDecrypt,
   aesEncrypt: () => aesEncrypt,
   buildPayloadKeyTypedData: () => buildPayloadKeyTypedData,
@@ -49,9 +50,11 @@ __export(core_exports, {
   generateKeyPair: () => generateKeyPair,
   getPublicKey: () => getPublicKey,
   hexToBytes: () => import_utils.hexToBytes,
+  isDerivationMode: () => isDerivationMode,
   packAgentForPublish: () => packAgentForPublish,
   publishAgent: () => publishAgent,
   randomBytes: () => randomBytes,
+  readPayloadKeyMode: () => readPayloadKeyMode,
   unpackAgent: () => unpackAgent
 });
 module.exports = __toCommonJS(core_exports);
@@ -329,6 +332,21 @@ async function publishAgent(config) {
   }
   const key = aesKeyHex ?? generateAesKey();
   const eciesEncryptedKeyHex = eciesEncrypt(key, publicKey);
+  if (config.verifyWithPrivateKey) {
+    let unwrapped;
+    try {
+      unwrapped = eciesDecrypt(eciesEncryptedKeyHex, config.verifyWithPrivateKey);
+    } catch (err) {
+      throw new Error(
+        `Pre-publish self-check failed: the supplied private key cannot unwrap the AES key (${err.message}). Check that it matches \`publicKey\` and that the publish and decrypt paths use the same derivation mode. Nothing was uploaded.`
+      );
+    }
+    if (unwrapped !== key) {
+      throw new Error(
+        "Pre-publish self-check failed: the unwrapped AES key does not match the one used to encrypt the payload. Nothing was uploaded."
+      );
+    }
+  }
   const privatePayload = {
     prompt: agent.prompt,
     skills: agent.skills,
@@ -419,6 +437,15 @@ function buildPayloadKeyTypedData(address, overrides = {}) {
   };
 }
 var DEFAULT_DERIVATION_MAX_ATTEMPTS = 8;
+var SELF_CHECK_PROBE = "6163746f72612d73656c662d636865636b";
+function isDerivationMode(value) {
+  return value === "personal-sign-hkdf" || value === "eip712-hkdf";
+}
+var PAYLOAD_KEY_MODE_ATTRIBUTE = "payload_key_mode";
+function readPayloadKeyMode(attributes) {
+  const raw = attributes[PAYLOAD_KEY_MODE_ATTRIBUTE];
+  return isDerivationMode(raw) ? raw : void 0;
+}
 function utf8(text) {
   return new TextEncoder().encode(text);
 }
@@ -460,7 +487,7 @@ async function deriveKeyPairFromWallet(args) {
     return args.signMessage(args.message ?? DEFAULT_DERIVATION_MESSAGE);
   };
   const signature = await sign();
-  if (args.assertDeterministic) {
+  if (args.assertDeterministic ?? true) {
     const second = await sign();
     if (second.toLowerCase() !== signature.toLowerCase()) {
       throw new Error(
@@ -469,7 +496,16 @@ async function deriveKeyPairFromWallet(args) {
     }
   }
   const privateKey = derivePrivateKeyFromSignature(signature, args.address, args);
-  return { privateKey, publicKey: getPublicKey(privateKey) };
+  const publicKey = getPublicKey(privateKey);
+  if (args.selfCheck ?? true) {
+    const probe = SELF_CHECK_PROBE;
+    if (eciesDecrypt(eciesEncrypt(probe, publicKey), privateKey) !== probe) {
+      throw new Error(
+        "Self-check failed: the derived key pair cannot round-trip ECIES. Do not publish with this key \u2014 the agent would be undecryptable."
+      );
+    }
+  }
+  return { privateKey, publicKey };
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
@@ -485,6 +521,7 @@ async function deriveKeyPairFromWallet(args) {
   DEFAULT_EIP712_PRIMARY_TYPE,
   DEFAULT_EIP712_PURPOSE,
   DEFAULT_EIP712_TYPES,
+  PAYLOAD_KEY_MODE_ATTRIBUTE,
   aesDecrypt,
   aesEncrypt,
   buildPayloadKeyTypedData,
@@ -502,9 +539,11 @@ async function deriveKeyPairFromWallet(args) {
   generateKeyPair,
   getPublicKey,
   hexToBytes,
+  isDerivationMode,
   packAgentForPublish,
   publishAgent,
   randomBytes,
+  readPayloadKeyMode,
   unpackAgent
 });
 //# sourceMappingURL=index.js.map

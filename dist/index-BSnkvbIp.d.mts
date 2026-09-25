@@ -1,9 +1,10 @@
-import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-DtPSrWjd.js';
-import { R as RunnableSkill, b as AgentRunner } from './agent-runner-BRmpSXrU.js';
-import { TraceConfig, TraceEvent } from './traces/index.js';
+import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-r5XU4B2l.mjs';
+import { R as RunnableSkill, b as AgentRunner } from './agent-runner-B_lCqbQw.mjs';
+import { TraceConfig, TraceEvent } from './traces/index.mjs';
 import { Address, PublicClient, WalletClient, Hash } from 'viem';
-import { d as A2AAgentCard, f as A2ATask, r as AgentSubscription } from './types-D4CaANmj.js';
-import { IPFSUploader } from './ipfs/index.js';
+import { d as A2AAgentCard, f as A2ATask, r as AgentSubscription } from './types-D4CaANmj.mjs';
+import { DerivationMode } from './core/index.mjs';
+import { IPFSUploader } from './ipfs/index.mjs';
 import { EventEmitter } from 'events';
 
 declare class AgentLoop {
@@ -346,6 +347,18 @@ declare class AgentRegistry {
      *     execution: { type: 'mcp', endpoint, toolName } }] })
      */
     setAttributes(agentId: number, patch: Record<string, unknown>): Promise<Hash>;
+    /**
+     * 记录该档案的 payload 派生 mode（链上属性 `payload_key_mode`）。
+     *
+     * 仅记录「宣称」值，合约不做校验，但这是跨实现的**标准字段**：
+     * 第三方 runner 据此判断该用 v1 还是 v2 派生，否则「用错 mode」与
+     * 「载荷损坏」在现象上完全一样。
+     *
+     *   await registry.setPayloadKeyMode(agentId, 'eip712-hkdf')
+     *
+     * 读取：`readPayloadKeyMode(await registry.getAttributes(agentId))`
+     */
+    setPayloadKeyMode(agentId: number, mode: DerivationMode): Promise<Hash>;
     /**
      * Simple register — just a tokenURI, no extra metadata.
      */

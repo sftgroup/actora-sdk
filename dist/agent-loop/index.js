@@ -32,6 +32,7 @@ __export(crypto_exports, {
   DEFAULT_EIP712_PRIMARY_TYPE: () => DEFAULT_EIP712_PRIMARY_TYPE,
   DEFAULT_EIP712_PURPOSE: () => DEFAULT_EIP712_PURPOSE,
   DEFAULT_EIP712_TYPES: () => DEFAULT_EIP712_TYPES,
+  PAYLOAD_KEY_MODE_ATTRIBUTE: () => PAYLOAD_KEY_MODE_ATTRIBUTE,
   aesDecrypt: () => aesDecrypt,
   aesEncrypt: () => aesEncrypt,
   buildPayloadKeyTypedData: () => buildPayloadKeyTypedData,
@@ -49,9 +50,11 @@ __export(crypto_exports, {
   generateKeyPair: () => generateKeyPair,
   getPublicKey: () => getPublicKey,
   hexToBytes: () => import_utils.hexToBytes,
+  isDerivationMode: () => isDerivationMode,
   packAgentForPublish: () => packAgentForPublish,
   publishAgent: () => publishAgent,
   randomBytes: () => randomBytes,
+  readPayloadKeyMode: () => readPayloadKeyMode,
   unpackAgent: () => unpackAgent
 });
 function randomBytes(length) {
@@ -266,6 +269,21 @@ async function publishAgent(config) {
   }
   const key = aesKeyHex ?? generateAesKey();
   const eciesEncryptedKeyHex = eciesEncrypt(key, publicKey);
+  if (config.verifyWithPrivateKey) {
+    let unwrapped;
+    try {
+      unwrapped = eciesDecrypt(eciesEncryptedKeyHex, config.verifyWithPrivateKey);
+    } catch (err) {
+      throw new Error(
+        `Pre-publish self-check failed: the supplied private key cannot unwrap the AES key (${err.message}). Check that it matches \`publicKey\` and that the publish and decrypt paths use the same derivation mode. Nothing was uploaded.`
+      );
+    }
+    if (unwrapped !== key) {
+      throw new Error(
+        "Pre-publish self-check failed: the unwrapped AES key does not match the one used to encrypt the payload. Nothing was uploaded."
+      );
+    }
+  }
   const privatePayload = {
     prompt: agent.prompt,
     skills: agent.skills,
@@ -337,6 +355,13 @@ function buildPayloadKeyTypedData(address, overrides = {}) {
     }
   };
 }
+function isDerivationMode(value) {
+  return value === "personal-sign-hkdf" || value === "eip712-hkdf";
+}
+function readPayloadKeyMode(attributes) {
+  const raw = attributes[PAYLOAD_KEY_MODE_ATTRIBUTE];
+  return isDerivationMode(raw) ? raw : void 0;
+}
 function utf8(text) {
   return new TextEncoder().encode(text);
 }
@@ -378,7 +403,7 @@ async function deriveKeyPairFromWallet(args) {
     return args.signMessage(args.message ?? DEFAULT_DERIVATION_MESSAGE);
   };
   const signature = await sign();
-  if (args.assertDeterministic) {
+  if (args.assertDeterministic ?? true) {
     const second = await sign();
     if (second.toLowerCase() !== signature.toLowerCase()) {
       throw new Error(
@@ -387,9 +412,18 @@ async function deriveKeyPairFromWallet(args) {
     }
   }
   const privateKey = derivePrivateKeyFromSignature(signature, args.address, args);
-  return { privateKey, publicKey: getPublicKey(privateKey) };
+  const publicKey = getPublicKey(privateKey);
+  if (args.selfCheck ?? true) {
+    const probe = SELF_CHECK_PROBE;
+    if (eciesDecrypt(eciesEncrypt(probe, publicKey), privateKey) !== probe) {
+      throw new Error(
+        "Self-check failed: the derived key pair cannot round-trip ECIES. Do not publish with this key \u2014 the agent would be undecryptable."
+      );
+    }
+  }
+  return { privateKey, publicKey };
 }
-var import_aes, import_secp256k1, import_sha2, import_hkdf, import_hmac, import_utils, AES_KEY_SIZE, IV_SIZE, TAG_SIZE, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_TYPES, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_DERIVATION_MAX_ATTEMPTS;
+var import_aes, import_secp256k1, import_sha2, import_hkdf, import_hmac, import_utils, AES_KEY_SIZE, IV_SIZE, TAG_SIZE, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_TYPES, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_DERIVATION_MAX_ATTEMPTS, SELF_CHECK_PROBE, PAYLOAD_KEY_MODE_ATTRIBUTE;
 var init_crypto = __esm({
   "src/core/crypto.ts"() {
     "use strict";
@@ -421,6 +455,8 @@ var init_crypto = __esm({
     DEFAULT_EIP712_PURPOSE = "agent-payload-encryption";
     DEFAULT_EIP712_MESSAGE_VERSION = 2;
     DEFAULT_DERIVATION_MAX_ATTEMPTS = 8;
+    SELF_CHECK_PROBE = "6163746f72612d73656c662d636865636b";
+    PAYLOAD_KEY_MODE_ATTRIBUTE = "payload_key_mode";
   }
 });
 

@@ -70,6 +70,18 @@ interface PublishAgentConfig {
     aesKeyHex?: string;
     /** Agent name for IPFS metadata */
     agentName?: string;
+    /**
+     * Pre-publish self-check: the payload private key that will be used to
+     * decrypt this agent. When provided, the ECIES-wrapped AES key is unwrapped
+     * with it before anything is uploaded, and a mismatch aborts with an error.
+     *
+     * This is the cheapest way to catch a wrong key or a derivation-`mode`
+     * mismatch **before minting** — `tokenURI` is immutable, so an agent minted
+     * with the wrong key can never be decrypted. Recommended whenever the private
+     * key is available at publish time (e.g. straight from
+     * `deriveKeyPairFromWallet()`).
+     */
+    verifyWithPrivateKey?: string;
 }
 interface PublishAgentResult {
     /** AES encryption key (hex) */
@@ -163,6 +175,24 @@ interface Eip712DerivationOverrides {
  * bindings cannot drift. Deterministic: no timestamp, no nonce.
  */
 declare function buildPayloadKeyTypedData(address: string, overrides?: Eip712DerivationOverrides): Eip712TypedData;
+/** Narrow an untrusted value (e.g. an on-chain attribute) to `DerivationMode`. */
+declare function isDerivationMode(value: unknown): value is DerivationMode;
+/**
+ * On-chain attribute key recording which derivation mode an agent was published
+ * with. Read it to decide how to derive the payload key before attempting a
+ * decrypt — without it a third-party runner has to guess (and guessing wrong
+ * looks exactly like "the payload is corrupt").
+ *
+ * Write it with `AgentRegistry.setPayloadKeyMode()` (or `setAttributes`).
+ */
+declare const PAYLOAD_KEY_MODE_ATTRIBUTE = "payload_key_mode";
+/**
+ * Read the recorded derivation mode off a link/attribute map. Returns
+ * `undefined` when absent — or when the value was written by a newer SDK
+ * version that this one does not understand (check the raw attribute to tell
+ * those two cases apart).
+ */
+declare function readPayloadKeyMode(attributes: Record<string, string | undefined>): DerivationMode | undefined;
 interface WalletKeyDerivationParams {
     /**
      * Which signature the payload key is derived from. Defaults to
@@ -204,12 +234,21 @@ interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
     /** Signer address (any case) — bound into the HKDF info string. */
     address: string;
     /**
-     * Opt-in safety check: sign twice and require identical signatures. Catches
-     * non-deterministic (non-RFC-6979) wallets, whose published agents could
-     * never be decrypted again. Costs one extra prompt — recommended for the
-     * publishing path, unnecessary for decryption.
+     * **Default `true`** (since 0.19.0): sign twice and require identical
+     * signatures. Catches non-deterministic (non-RFC-6979) wallets, whose
+     * published agents could never be decrypted again — a *silent* data-loss bug
+     * that only surfaces weeks later. Costs one extra prompt; pass `false` to
+     * skip it (e.g. when the signer is already known to be deterministic, or the
+     * flow must not prompt twice).
      */
     assertDeterministic?: boolean;
+    /**
+     * **Default `true`**: ECIES round-trip the derived pair (wrap + unwrap a
+     * probe) before returning, so a public key whose private key cannot unwrap
+     * the AES key fails here instead of after minting. Pure computation, no extra
+     * prompt.
+     */
+    selfCheck?: boolean;
 }
 /**
  * Derive the payload key pair from a browser wallet.
@@ -219,12 +258,17 @@ interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
  * structured, domain-scoped prompt instead of a blind `personal_sign`.
  *
  * Publishing: `publishAgent({ agent, publicKey, uploader })` with the returned
- * `publicKey`. Decrypting: pass the returned `privateKey` to `AgentRunner` via
- * `WalletSigner.deriveEncryptionKey()` (or `unpackAgent()` directly).
+ * `publicKey`; pass `verifyWithPrivateKey: <privateKey>` there to dry-run the
+ * unwrap before anything is minted. Decrypting: pass the returned `privateKey`
+ * to `AgentRunner` via `WalletSigner.deriveEncryptionKey()` (or `unpackAgent()`
+ * directly).
+ *
+ * Two safety checks run by default (`assertDeterministic`, `selfCheck`) — both
+ * guard against publishing an agent that can never be decrypted again.
  */
 declare function deriveKeyPairFromWallet(args: DeriveKeyPairFromWalletArgs): Promise<{
     privateKey: string;
     publicKey: string;
 }>;
 
-export { AgentPayload, AgentPrivatePayload, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_TYPES, type DerivationMode, type DeriveKeyPairFromWalletArgs, type Eip712DerivationOverrides, type Eip712TypeEntry, type Eip712TypedData, type Eip712Types, EncryptedPayload, PackResult, type PublishAgentConfig, type PublishAgentResult, type WalletKeyDerivationParams, aesDecrypt, aesEncrypt, buildPayloadKeyTypedData, decryptPayload, decryptWithKey, defaultInfoPrefixFor, deriveKeyPairFromWallet, derivePrivateKeyFromSignature, eciesDecrypt, eciesEncrypt, encryptPayload, encryptWithKey, generateAesKey, generateKeyPair, getPublicKey, packAgentForPublish, publishAgent, randomBytes, unpackAgent };
+export { AgentPayload, AgentPrivatePayload, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_TYPES, type DerivationMode, type DeriveKeyPairFromWalletArgs, type Eip712DerivationOverrides, type Eip712TypeEntry, type Eip712TypedData, type Eip712Types, EncryptedPayload, PAYLOAD_KEY_MODE_ATTRIBUTE, PackResult, type PublishAgentConfig, type PublishAgentResult, type WalletKeyDerivationParams, aesDecrypt, aesEncrypt, buildPayloadKeyTypedData, decryptPayload, decryptWithKey, defaultInfoPrefixFor, deriveKeyPairFromWallet, derivePrivateKeyFromSignature, eciesDecrypt, eciesEncrypt, encryptPayload, encryptWithKey, generateAesKey, generateKeyPair, getPublicKey, isDerivationMode, packAgentForPublish, publishAgent, randomBytes, readPayloadKeyMode, unpackAgent };

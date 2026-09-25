@@ -26,6 +26,7 @@ __export(crypto_exports, {
   DEFAULT_EIP712_PRIMARY_TYPE: () => DEFAULT_EIP712_PRIMARY_TYPE,
   DEFAULT_EIP712_PURPOSE: () => DEFAULT_EIP712_PURPOSE,
   DEFAULT_EIP712_TYPES: () => DEFAULT_EIP712_TYPES,
+  PAYLOAD_KEY_MODE_ATTRIBUTE: () => PAYLOAD_KEY_MODE_ATTRIBUTE,
   aesDecrypt: () => aesDecrypt,
   aesEncrypt: () => aesEncrypt,
   buildPayloadKeyTypedData: () => buildPayloadKeyTypedData,
@@ -43,9 +44,11 @@ __export(crypto_exports, {
   generateKeyPair: () => generateKeyPair,
   getPublicKey: () => getPublicKey,
   hexToBytes: () => hexToBytes,
+  isDerivationMode: () => isDerivationMode,
   packAgentForPublish: () => packAgentForPublish,
   publishAgent: () => publishAgent,
   randomBytes: () => randomBytes,
+  readPayloadKeyMode: () => readPayloadKeyMode,
   unpackAgent: () => unpackAgent
 });
 import { gcm } from "@noble/ciphers/aes.js";
@@ -266,6 +269,21 @@ async function publishAgent(config) {
   }
   const key = aesKeyHex ?? generateAesKey();
   const eciesEncryptedKeyHex = eciesEncrypt(key, publicKey);
+  if (config.verifyWithPrivateKey) {
+    let unwrapped;
+    try {
+      unwrapped = eciesDecrypt(eciesEncryptedKeyHex, config.verifyWithPrivateKey);
+    } catch (err) {
+      throw new Error(
+        `Pre-publish self-check failed: the supplied private key cannot unwrap the AES key (${err.message}). Check that it matches \`publicKey\` and that the publish and decrypt paths use the same derivation mode. Nothing was uploaded.`
+      );
+    }
+    if (unwrapped !== key) {
+      throw new Error(
+        "Pre-publish self-check failed: the unwrapped AES key does not match the one used to encrypt the payload. Nothing was uploaded."
+      );
+    }
+  }
   const privatePayload = {
     prompt: agent.prompt,
     skills: agent.skills,
@@ -337,6 +355,13 @@ function buildPayloadKeyTypedData(address, overrides = {}) {
     }
   };
 }
+function isDerivationMode(value) {
+  return value === "personal-sign-hkdf" || value === "eip712-hkdf";
+}
+function readPayloadKeyMode(attributes) {
+  const raw = attributes[PAYLOAD_KEY_MODE_ATTRIBUTE];
+  return isDerivationMode(raw) ? raw : void 0;
+}
 function utf8(text) {
   return new TextEncoder().encode(text);
 }
@@ -378,7 +403,7 @@ async function deriveKeyPairFromWallet(args) {
     return args.signMessage(args.message ?? DEFAULT_DERIVATION_MESSAGE);
   };
   const signature = await sign();
-  if (args.assertDeterministic) {
+  if (args.assertDeterministic ?? true) {
     const second = await sign();
     if (second.toLowerCase() !== signature.toLowerCase()) {
       throw new Error(
@@ -387,9 +412,18 @@ async function deriveKeyPairFromWallet(args) {
     }
   }
   const privateKey = derivePrivateKeyFromSignature(signature, args.address, args);
-  return { privateKey, publicKey: getPublicKey(privateKey) };
+  const publicKey = getPublicKey(privateKey);
+  if (args.selfCheck ?? true) {
+    const probe = SELF_CHECK_PROBE;
+    if (eciesDecrypt(eciesEncrypt(probe, publicKey), privateKey) !== probe) {
+      throw new Error(
+        "Self-check failed: the derived key pair cannot round-trip ECIES. Do not publish with this key \u2014 the agent would be undecryptable."
+      );
+    }
+  }
+  return { privateKey, publicKey };
 }
-var AES_KEY_SIZE, IV_SIZE, TAG_SIZE, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_TYPES, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_DERIVATION_MAX_ATTEMPTS;
+var AES_KEY_SIZE, IV_SIZE, TAG_SIZE, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_TYPES, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_DERIVATION_MAX_ATTEMPTS, SELF_CHECK_PROBE, PAYLOAD_KEY_MODE_ATTRIBUTE;
 var init_crypto = __esm({
   "src/core/crypto.ts"() {
     "use strict";
@@ -415,6 +449,8 @@ var init_crypto = __esm({
     DEFAULT_EIP712_PURPOSE = "agent-payload-encryption";
     DEFAULT_EIP712_MESSAGE_VERSION = 2;
     DEFAULT_DERIVATION_MAX_ATTEMPTS = 8;
+    SELF_CHECK_PROBE = "6163746f72612d73656c662d636865636b";
+    PAYLOAD_KEY_MODE_ATTRIBUTE = "payload_key_mode";
   }
 });
 
@@ -4766,6 +4802,9 @@ function createLLMProvider(config) {
   }
 }
 
+// src/registry/agent-registry.ts
+init_crypto();
+
 // src/subscription/subscription.ts
 var ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 var PLAN_CREATED_EVENT2 = parseAbiItem(
@@ -5482,6 +5521,23 @@ var AgentRegistry = class {
       agentId,
       Object.entries(merged).map(([key, value]) => ({ key, value }))
     );
+  }
+  /**
+   * 记录该档案的 payload 派生 mode（链上属性 `payload_key_mode`）。
+   *
+   * 仅记录「宣称」值，合约不做校验，但这是跨实现的**标准字段**：
+   * 第三方 runner 据此判断该用 v1 还是 v2 派生，否则「用错 mode」与
+   * 「载荷损坏」在现象上完全一样。
+   *
+   *   await registry.setPayloadKeyMode(agentId, 'eip712-hkdf')
+   *
+   * 读取：`readPayloadKeyMode(await registry.getAttributes(agentId))`
+   */
+  async setPayloadKeyMode(agentId, mode) {
+    if (!isDerivationMode(mode)) {
+      throw new Error(`Unknown derivation mode: ${String(mode)}`);
+    }
+    return this.setAttributes(agentId, { [PAYLOAD_KEY_MODE_ATTRIBUTE]: mode });
   }
   /**
    * Simple register — just a tokenURI, no extra metadata.
@@ -7898,6 +7954,7 @@ export {
   MultiEndpointClient,
   NoopTraceEmitter,
   OpenAIProvider,
+  PAYLOAD_KEY_MODE_ATTRIBUTE,
   PAYMENT_VERSION,
   PaymentsClient2 as PaymentsClient,
   PeriodClient,
@@ -7941,10 +7998,12 @@ export {
   getPublicKey,
   guardSubscription,
   hexToBytes,
+  isDerivationMode,
   packAgentForPublish,
   parseTokenURIJSON,
   publishAgent,
   randomBytes,
+  readPayloadKeyMode,
   sleep,
   subscribeToEvents,
   toAttributes,
