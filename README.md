@@ -1,4 +1,4 @@
-# @actora/sdk v0.19.0
+# @actora/sdk v0.20.1
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
@@ -100,7 +100,7 @@ const { planId } = await sub.createPlan({
 ```bash
 npm install @actora/sdk
 # 或锁定版本
-npm install @actora/sdk@0.20.0
+npm install @actora/sdk@0.20.1
 ```
 
 > 包内含 `examples/`（B 端可运行样例）与 `UPGRADE.md`（逐版本迁移指南），安装后可从
@@ -1220,6 +1220,7 @@ POST /api/v1/payments
 | 0.18.0 | **payload 密钥派生 v2（EIP-712）**：`encryptionKeyDerivation: { mode: 'eip712-hkdf' }` 与 `deriveKeyPairFromWallet({ mode, signTypedData })`，把「被签的东西」从自由文本换成 EIP-712 typed data（`buildPayloadKeyTypedData` + `DEFAULT_EIP712_*`），HKDF 构造与 IKM 不变、`infoPrefix` 版本化为 `agent-payload-encryption/v2`；**v1（`personal-sign-hkdf`）保留且行为不变**，旧档案继续可解 |
 | 0.19.0 | **密钥来源与发布护栏**：① 托管密钥（服务端生成密钥对）写成**受支持的一等用法**（含安全建议 / 不可迁移性）；② `deriveKeyPairFromWallet()` 默认开启 `assertDeterministic`（可关）并新增默认开启的 `selfCheck`；③ `publishAgent({ verifyWithPrivateKey })` **铸造前** dry-run 解包校验（含 v1/v2 mode 用错）；④ 新增跨实现的派生绑定字段 `payload_key_mode`（`PAYLOAD_KEY_MODE_ATTRIBUTE` / `readPayloadKeyMode()` / `isDerivationMode()` / `AgentRegistry.setPayloadKeyMode()`）；⑤ README 明确「签名路径固有边界」并收回 v2「来源可验证」的过度声明。**若发布流程依赖单次签名提示，请显式传 `assertDeterministic: false`** |
 | 0.20.0 | **payload 密钥派生 v3（WebAuthn PRF，非签名）**：新增 `mode: 'webauthn-prf-hkdf'`，IKM 改为 WebAuthn PRF 扩展输出（32 字节，由浏览器按 RP ID 绑定），HKDF 构造与 v1/v2 逐字节一致、`infoPrefix` 版本化为 `agent-payload-encryption/v3`；配套 `getPrfCapability()`（不弹窗探测）/ `createPrfCredential()` / `evaluatePrf()` / `PrfError`（`PRF_UNSUPPORTED` 等 4 码，**不支持时报可操作错误、绝不静默回退到签名派生**）；派生入口新增 `derivePrivateKeyFromIkm()` 与 `DEFAULT_PRF_SALT` / `DEFAULT_DERIVATION_INFO_PREFIX_V3`；新增 credential 绑定字段 `payload_key_credential`（`PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE` / `serializePayloadKeyCredential()` / `readPayloadKeyCredential()` / `AgentRegistry.setPayloadKeyCredential()`）。**v1/v2 保留且行为不变**，默认值不变、v3 为 opt-in |
+| 0.20.1 | **纯文档**：§5.12 新增「选型：四条路径怎么选」矩阵（v1 / v2 / v3 / 私钥托管并列对照），并明确「Runner 跑在服务端 ⇒ 私钥托管可完全规避 WebAuthn/PRF 的兼容性问题」及其代价（信任边界转移、不可轮换、丢失即永久解不开、提供的是服务端鉴权而非客户端自持 + 域绑定）。**无代码 / API / 行为变更** |
 
 ---
 
