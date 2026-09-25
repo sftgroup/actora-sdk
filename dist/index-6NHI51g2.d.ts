@@ -1,9 +1,9 @@
-import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-DtPSrWjd.js';
-import { R as RunnableSkill, b as AgentRunner } from './agent-runner-BRmpSXrU.js';
+import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-0ClYLabb.js';
+import { R as RunnableSkill, b as AgentRunner } from './agent-runner-DXDRlS5t.js';
 import { TraceConfig, TraceEvent } from './traces/index.js';
 import { Address, PublicClient, WalletClient, Hash } from 'viem';
-import { d as A2AAgentCard, f as A2ATask, r as AgentSubscription } from './types-D4CaANmj.js';
-import { DerivationMode } from './core/index.js';
+import { d as A2AAgentCard, f as A2ATask, r as AgentSubscription } from './types-CX4o7N9P.js';
+import { D as DerivationMode, q as PayloadKeyCredential } from './crypto-uXblsQuP.js';
 import { IPFSUploader } from './ipfs/index.js';
 import { EventEmitter } from 'events';
 
@@ -359,6 +359,22 @@ declare class AgentRegistry {
      * 读取：`readPayloadKeyMode(await registry.getAttributes(agentId))`
      */
     setPayloadKeyMode(agentId: number, mode: DerivationMode): Promise<Hash>;
+    /**
+     * 记录 v3（`webauthn-prf-hkdf`）解密所必需的两项绑定：WebAuthn RP ID 与
+     * credentialId（PRF 盐可省，默认冻结值）。
+     *
+     * v3 的密钥绑定在 (rpId, credential) 上，**无法从地址反推凭据** —— 不写这两个
+     * 字段，即使本人拿着正确的 passkey 也找不回派生密钥（表现与"载荷损坏"一样）。
+     *
+     *   await registry.setPayloadKeyCredential(agentId, {
+     *     rpId: 'app.example.com',
+     *     credentialId,                       // createPrfCredential() 的返回值
+     *     address: account.address,
+     *   })
+     *
+     * 读取：`readPayloadKeyCredential(await registry.getAttributes(agentId))`
+     */
+    setPayloadKeyCredential(agentId: number, credential: PayloadKeyCredential): Promise<Hash>;
     /**
      * Simple register — just a tokenURI, no extra metadata.
      */

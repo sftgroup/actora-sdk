@@ -165,8 +165,11 @@ var DEFAULT_DERIVATION_MESSAGE = "Actora: derive agent payload encryption key (v
 var DEFAULT_DERIVATION_SALT = "actora/expert-enc";
 var DEFAULT_DERIVATION_INFO_PREFIX = "agent-payload-encryption/v1";
 var DEFAULT_DERIVATION_INFO_PREFIX_V2 = "agent-payload-encryption/v2";
+var DEFAULT_DERIVATION_INFO_PREFIX_V3 = "agent-payload-encryption/v3";
 function defaultInfoPrefixFor(mode) {
-  return mode === "eip712-hkdf" ? DEFAULT_DERIVATION_INFO_PREFIX_V2 : DEFAULT_DERIVATION_INFO_PREFIX;
+  if (mode === "eip712-hkdf") return DEFAULT_DERIVATION_INFO_PREFIX_V2;
+  if (mode === "webauthn-prf-hkdf") return DEFAULT_DERIVATION_INFO_PREFIX_V3;
+  return DEFAULT_DERIVATION_INFO_PREFIX;
 }
 var DEFAULT_EIP712_DOMAIN = {
   name: "Actora Agent Payload",
@@ -203,6 +206,10 @@ function buildPayloadKeyTypedData(address, overrides = {}) {
     }
   };
 }
+var DEFAULT_PRF_SALT = "actora/expert-enc";
+function prfSaltBytes(salt = DEFAULT_PRF_SALT) {
+  return utf8(salt);
+}
 var DEFAULT_DERIVATION_MAX_ATTEMPTS = 8;
 function utf8(text) {
   return new TextEncoder().encode(text);
@@ -212,11 +219,11 @@ function bytesToBigInt(bytes) {
   for (const b of bytes) out = out << 8n | BigInt(b);
   return out;
 }
-function derivePrivateKeyFromSignature(signature, address, params = {}) {
-  const hex = signature.startsWith("0x") ? signature.slice(2) : signature;
+function deriveFromIkmHex(ikmHex, address, params, label) {
+  const hex = ikmHex.startsWith("0x") ? ikmHex.slice(2) : ikmHex;
   const ikm = hexToBytes(hex);
   if (ikm.length < 32) {
-    throw new Error(`Signature too short for key derivation (${ikm.length} bytes, need >= 32)`);
+    throw new Error(`${label} too short for key derivation (${ikm.length} bytes, need >= 32)`);
   }
   if (!address) throw new Error("Address is required for key derivation (bound into HKDF info)");
   const salt = utf8(params.salt ?? DEFAULT_DERIVATION_SALT);
@@ -230,6 +237,9 @@ function derivePrivateKeyFromSignature(signature, address, params = {}) {
     if (scalar > 0n && scalar < n) return bytesToHex(candidate);
   }
   throw new Error(`HKDF produced no valid secp256k1 scalar in ${maxAttempts} attempts`);
+}
+function derivePrivateKeyFromIkm(ikm, address, params = {}) {
+  return deriveFromIkmHex(ikm, address, params, "IKM");
 }
 
 // src/registry/ipfs-fetcher.ts
@@ -717,6 +727,106 @@ var KNOWN_CHAINS = {
   }
 };
 
+// src/core/webauthn-prf.ts
+var PrfError = class extends Error {
+  code;
+  constructor(code, message, options) {
+    super(message);
+    this.name = "PrfError";
+    this.code = code;
+    if (options?.cause !== void 0) this.cause = options.cause;
+  }
+};
+function randomBytes2(length) {
+  return crypto.getRandomValues(new Uint8Array(length));
+}
+function fromBase64Url(text) {
+  const padded = text.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(padded + "=".repeat((4 - padded.length % 4) % 4));
+  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+}
+function toHex(bytes) {
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function defaultRpId() {
+  return location.hostname;
+}
+function unsupported(message, cause) {
+  return new PrfError(
+    "PRF_UNSUPPORTED",
+    `${message} \u2014 PRF \u4E0D\u53EF\u7528\u65F6\u4E0D\u4F1A\u56DE\u9000\u5230\u7B7E\u540D\u6D3E\u751F\uFF08\u90A3\u4F1A\u4F7F\u7528\u6237\u4EE5\u4E3A\u5B89\u5168\u3001\u5B9E\u9645\u56DE\u5230\u53EF\u590D\u7528\u7684\u7B7E\u540D\u5BC6\u94A5\uFF09\u3002\u8BF7\u6539\u7528 mode: 'eip712-hkdf'\uFF08v2\uFF09\u6216\u6258\u7BA1\u5BC6\u94A5\uFF08\u670D\u52A1\u7AEF\u751F\u6210\u5BC6\u94A5\u5BF9\uFF09\u3002`,
+    { cause }
+  );
+}
+function classify(error, context, rpId) {
+  const cause = error;
+  const name = cause?.name ?? "";
+  if (name === "NotAllowedError") {
+    return new PrfError(
+      "PRF_CANCELLED",
+      `${context}\u88AB\u53D6\u6D88\u6216\u8D85\u65F6\uFF08NotAllowedError\uFF09\u3002\u82E5\u8BBE\u5907\u4E0A\u4E0D\u5B58\u5728\u8BE5\u51ED\u636E\uFF0C\u6D4F\u89C8\u5668\u4E5F\u4F1A\u62A5\u8FD9\u4E2A\u9519 \u2014\u2014 \u8BF7\u786E\u8BA4\u51ED\u636E\u7684 RP ID \u662F "${rpId}"\uFF0C\u6216\u6539\u7528\u540C\u4E00 passkey \u540C\u6B65\u670D\u52A1\uFF08iCloud \u94A5\u5319\u4E32 / Google \u5BC6\u7801\u7BA1\u7406\u5DE5\u5177\uFF09\u3002`,
+      { cause }
+    );
+  }
+  if (name === "InvalidStateError") {
+    return new PrfError(
+      "PRF_CREDENTIAL_NOT_FOUND",
+      `${context}\u65F6\u8BE5\u51ED\u636E\u4E0D\u5728\u672C\u8BBE\u5907\uFF08InvalidStateError\uFF09\u3002\u8BF7\u5728\u6CE8\u518C\u5B83\u7684\u8BBE\u5907\u6216\u540C\u4E00\u540C\u6B65\u670D\u52A1\u4E0A\u91CD\u8BD5\u3002`,
+      { cause }
+    );
+  }
+  if (name === "SecurityError") {
+    return new PrfError(
+      "PRF_FAILED",
+      `${context}\u88AB\u6D4F\u89C8\u5668\u62D2\u7EDD\uFF08SecurityError\uFF09\uFF1ARP ID "${rpId}" \u4E0E\u5F53\u524D\u9875\u9762\u6765\u6E90\u4E0D\u5339\u914D\u3002\u51ED\u636E\u6309 RP ID \u9694\u79BB\uFF0C\u6362\u57DF\u540D\u5373\u6362\u5BC6\u94A5\u7A7A\u95F4\u3002`,
+      { cause }
+    );
+  }
+  return new PrfError("PRF_FAILED", `${context}\u5931\u8D25\uFF1A${cause?.message ?? String(error)}`, { cause });
+}
+async function evaluatePrf(options) {
+  if (typeof navigator === "undefined" || !navigator.credentials?.get) {
+    throw unsupported("\u5F53\u524D\u73AF\u5883\u6CA1\u6709 WebAuthn\uFF08navigator.credentials.get \u4E0D\u5B58\u5728\uFF09");
+  }
+  const rpId = options.rpId ?? defaultRpId();
+  const salt = options.salt ?? DEFAULT_PRF_SALT;
+  let assertion;
+  try {
+    assertion = await navigator.credentials.get({
+      publicKey: {
+        rpId,
+        challenge: randomBytes2(32),
+        allowCredentials: options.allowDiscoverable ? [] : [{ type: "public-key", id: fromBase64Url(options.credentialId) }],
+        userVerification: "required",
+        extensions: {
+          prf: { eval: { first: prfSaltBytes(salt) } }
+        }
+      }
+    });
+  } catch (error) {
+    throw classify(error, "\u6C42\u503C PRF", rpId);
+  }
+  if (!assertion) {
+    throw new PrfError("PRF_FAILED", "\u6C42\u503C PRF \u5931\u8D25\uFF1A\u6D4F\u89C8\u5668\u672A\u8FD4\u56DE\u65AD\u8A00\u7ED3\u679C\u3002");
+  }
+  const ext = assertion.getClientExtensionResults();
+  const first = ext.prf?.results?.first;
+  if (!first) {
+    throw unsupported(
+      `\u8BE5\u6D4F\u89C8\u5668/\u8BA4\u8BC1\u5668\u672A\u8FD4\u56DE PRF \u7ED3\u679C\uFF08prf=${JSON.stringify(ext.prf ?? null)}\uFF09\u3002\u79FB\u52A8\u7AEF\u94B1\u5305\u5185\u7F6E\u6D4F\u89C8\u5668\u666E\u904D\u4E0D\u652F\u6301 WebAuthn\uFF0C\u5C5E\u5DF2\u77E5\u60C5\u51B5`,
+      ext.prf
+    );
+  }
+  const output = new Uint8Array(first);
+  if (output.length !== 32) {
+    throw new PrfError(
+      "PRF_FAILED",
+      `PRF \u8F93\u51FA\u957F\u5EA6\u5F02\u5E38\uFF08${output.length} \u5B57\u8282\uFF0C\u671F\u671B 32\uFF09\u3002\u4E0D\u540C\u5B9E\u73B0\u957F\u5EA6\u4E0D\u4E00\u81F4\u4F1A\u8BA9\u6D3E\u751F\u5BC6\u94A5\u4E0D\u53EF\u590D\u73B0\uFF0C\u62D2\u7EDD\u4F7F\u7528\u3002`
+    );
+  }
+  return { prfOutputHex: toHex(output), rpId, salt };
+}
+
 // src/react/useAgentRunner.ts
 var IDENTITY_REGISTRY_ABI = [
   // getAgentMetadata returns MetadataEntry[] with key+value strings
@@ -824,7 +934,10 @@ function useAgentRunner(config) {
     encryptionKeyDerivation.infoPrefix ?? "",
     encryptionKeyDerivation.domain ? JSON.stringify(encryptionKeyDerivation.domain) : "",
     encryptionKeyDerivation.primaryType ?? "",
-    encryptionKeyDerivation.types ? JSON.stringify(encryptionKeyDerivation.types) : ""
+    encryptionKeyDerivation.types ? JSON.stringify(encryptionKeyDerivation.types) : "",
+    encryptionKeyDerivation.credentialId ?? "",
+    encryptionKeyDerivation.rpId ?? "",
+    encryptionKeyDerivation.prfSalt ?? ""
   ].join("|") : "";
   useEffect(() => {
     mountedRef.current = true;
@@ -860,14 +973,27 @@ function useAgentRunner(config) {
           if (derivedKeyRef.current?.cacheKey === cacheKey) {
             return derivedKeyRef.current.privateKey;
           }
-          let signature;
-          if (encryptionKeyDerivation.mode === "eip712-hkdf") {
+          let secret;
+          if (encryptionKeyDerivation.mode === "webauthn-prf-hkdf") {
+            const credentialId = encryptionKeyDerivation.credentialId;
+            if (!credentialId) {
+              throw new Error(
+                'mode: "webauthn-prf-hkdf" requires `credentialId`. Read it from the on-chain attribute (`readPayloadKeyCredential(await reader.getAttributes(agentId))`, key "payload_key_credential") or pass it explicitly. It cannot be recovered from the wallet address \u2014 without it the v3 payload key is not reproducible.'
+              );
+            }
+            const { prfOutputHex } = await evaluatePrf({
+              credentialId,
+              rpId: encryptionKeyDerivation.rpId,
+              salt: encryptionKeyDerivation.prfSalt
+            });
+            secret = prfOutputHex;
+          } else if (encryptionKeyDerivation.mode === "eip712-hkdf") {
             const typedData = buildPayloadKeyTypedData(address, {
               domain: encryptionKeyDerivation.domain,
               types: encryptionKeyDerivation.types,
               primaryType: encryptionKeyDerivation.primaryType
             });
-            signature = await walletClient.signTypedData({
+            secret = await walletClient.signTypedData({
               account: walletClient.account,
               domain: typedData.domain,
               types: typedData.types,
@@ -876,13 +1002,13 @@ function useAgentRunner(config) {
             });
           } else {
             const message = encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE;
-            signature = await walletClient.signMessage({
+            secret = await walletClient.signMessage({
               account: walletClient.account,
               message
             });
           }
-          const privateKey = derivePrivateKeyFromSignature(
-            signature,
+          const privateKey = derivePrivateKeyFromIkm(
+            secret,
             address,
             encryptionKeyDerivation
           );
@@ -892,7 +1018,7 @@ function useAgentRunner(config) {
       } : {},
       async getPrivateKey() {
         throw new Error(
-          'EIP-1193 wallets cannot export the account private key. Pass `encryptionKeyDerivation: { mode: "personal-sign-hkdf" | "eip712-hkdf" }` to useAgentRunner to derive a separate payload key from a deterministic wallet signature.'
+          'EIP-1193 wallets cannot export the account private key. Pass `encryptionKeyDerivation: { mode: "personal-sign-hkdf" | "eip712-hkdf" | "webauthn-prf-hkdf" }` to useAgentRunner to derive a separate payload key from a deterministic signature (v1/v2) or a passkey PRF (v3).'
         );
       }
     };

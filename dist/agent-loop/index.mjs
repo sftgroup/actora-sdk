@@ -19,6 +19,7 @@ var crypto_exports = {};
 __export(crypto_exports, {
   DEFAULT_DERIVATION_INFO_PREFIX: () => DEFAULT_DERIVATION_INFO_PREFIX,
   DEFAULT_DERIVATION_INFO_PREFIX_V2: () => DEFAULT_DERIVATION_INFO_PREFIX_V2,
+  DEFAULT_DERIVATION_INFO_PREFIX_V3: () => DEFAULT_DERIVATION_INFO_PREFIX_V3,
   DEFAULT_DERIVATION_MESSAGE: () => DEFAULT_DERIVATION_MESSAGE,
   DEFAULT_DERIVATION_SALT: () => DEFAULT_DERIVATION_SALT,
   DEFAULT_EIP712_DOMAIN: () => DEFAULT_EIP712_DOMAIN,
@@ -26,6 +27,8 @@ __export(crypto_exports, {
   DEFAULT_EIP712_PRIMARY_TYPE: () => DEFAULT_EIP712_PRIMARY_TYPE,
   DEFAULT_EIP712_PURPOSE: () => DEFAULT_EIP712_PURPOSE,
   DEFAULT_EIP712_TYPES: () => DEFAULT_EIP712_TYPES,
+  DEFAULT_PRF_SALT: () => DEFAULT_PRF_SALT,
+  PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE: () => PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE,
   PAYLOAD_KEY_MODE_ATTRIBUTE: () => PAYLOAD_KEY_MODE_ATTRIBUTE,
   aesDecrypt: () => aesDecrypt,
   aesEncrypt: () => aesEncrypt,
@@ -35,6 +38,7 @@ __export(crypto_exports, {
   decryptWithKey: () => decryptWithKey,
   defaultInfoPrefixFor: () => defaultInfoPrefixFor,
   deriveKeyPairFromWallet: () => deriveKeyPairFromWallet,
+  derivePrivateKeyFromIkm: () => derivePrivateKeyFromIkm,
   derivePrivateKeyFromSignature: () => derivePrivateKeyFromSignature,
   eciesDecrypt: () => eciesDecrypt,
   eciesEncrypt: () => eciesEncrypt,
@@ -46,9 +50,12 @@ __export(crypto_exports, {
   hexToBytes: () => hexToBytes,
   isDerivationMode: () => isDerivationMode,
   packAgentForPublish: () => packAgentForPublish,
+  prfSaltBytes: () => prfSaltBytes,
   publishAgent: () => publishAgent,
   randomBytes: () => randomBytes,
+  readPayloadKeyCredential: () => readPayloadKeyCredential,
   readPayloadKeyMode: () => readPayloadKeyMode,
+  serializePayloadKeyCredential: () => serializePayloadKeyCredential,
   unpackAgent: () => unpackAgent
 });
 import { gcm } from "@noble/ciphers/aes.js";
@@ -332,7 +339,9 @@ function getPublicKey(privateKey) {
   return bytesToHex(secp256k1.getPublicKey(hexToBytes(normalizePrivateKey(privateKey)), false));
 }
 function defaultInfoPrefixFor(mode) {
-  return mode === "eip712-hkdf" ? DEFAULT_DERIVATION_INFO_PREFIX_V2 : DEFAULT_DERIVATION_INFO_PREFIX;
+  if (mode === "eip712-hkdf") return DEFAULT_DERIVATION_INFO_PREFIX_V2;
+  if (mode === "webauthn-prf-hkdf") return DEFAULT_DERIVATION_INFO_PREFIX_V3;
+  return DEFAULT_DERIVATION_INFO_PREFIX;
 }
 function buildPayloadKeyTypedData(address, overrides = {}) {
   if (!address) {
@@ -355,8 +364,39 @@ function buildPayloadKeyTypedData(address, overrides = {}) {
     }
   };
 }
+function prfSaltBytes(salt = DEFAULT_PRF_SALT) {
+  return utf8(salt);
+}
+function serializePayloadKeyCredential(credential) {
+  if (!credential || !credential.rpId) {
+    throw new Error("rpId is required to bind a v3 credential (the credential is RP-ID scoped)");
+  }
+  if (!credential.credentialId) {
+    throw new Error("credentialId is required to bind a v3 credential (otherwise the key is unrecoverable)");
+  }
+  return JSON.stringify({
+    rpId: credential.rpId,
+    credentialId: credential.credentialId,
+    ...credential.prfSalt ? { prfSalt: credential.prfSalt } : {},
+    ...credential.address ? { address: credential.address.toLowerCase() } : {},
+    ...credential.infoPrefix ? { infoPrefix: credential.infoPrefix } : {}
+  });
+}
+function readPayloadKeyCredential(attributes) {
+  const raw = attributes[PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE];
+  if (!raw) return void 0;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.rpId !== "string" || typeof parsed.credentialId !== "string") {
+      return void 0;
+    }
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
 function isDerivationMode(value) {
-  return value === "personal-sign-hkdf" || value === "eip712-hkdf";
+  return value === "personal-sign-hkdf" || value === "eip712-hkdf" || value === "webauthn-prf-hkdf";
 }
 function readPayloadKeyMode(attributes) {
   const raw = attributes[PAYLOAD_KEY_MODE_ATTRIBUTE];
@@ -370,11 +410,11 @@ function bytesToBigInt(bytes) {
   for (const b of bytes) out = out << 8n | BigInt(b);
   return out;
 }
-function derivePrivateKeyFromSignature(signature, address, params = {}) {
-  const hex = signature.startsWith("0x") ? signature.slice(2) : signature;
+function deriveFromIkmHex(ikmHex, address, params, label) {
+  const hex = ikmHex.startsWith("0x") ? ikmHex.slice(2) : ikmHex;
   const ikm = hexToBytes(hex);
   if (ikm.length < 32) {
-    throw new Error(`Signature too short for key derivation (${ikm.length} bytes, need >= 32)`);
+    throw new Error(`${label} too short for key derivation (${ikm.length} bytes, need >= 32)`);
   }
   if (!address) throw new Error("Address is required for key derivation (bound into HKDF info)");
   const salt = utf8(params.salt ?? DEFAULT_DERIVATION_SALT);
@@ -389,9 +429,23 @@ function derivePrivateKeyFromSignature(signature, address, params = {}) {
   }
   throw new Error(`HKDF produced no valid secp256k1 scalar in ${maxAttempts} attempts`);
 }
+function derivePrivateKeyFromSignature(signature, address, params = {}) {
+  return deriveFromIkmHex(signature, address, params, "Signature");
+}
+function derivePrivateKeyFromIkm(ikm, address, params = {}) {
+  return deriveFromIkmHex(ikm, address, params, "IKM");
+}
 async function deriveKeyPairFromWallet(args) {
   const mode = args.mode ?? "personal-sign-hkdf";
   const sign = async () => {
+    if (mode === "webauthn-prf-hkdf") {
+      if (!args.getPrfOutput) {
+        throw new Error(
+          "mode: 'webauthn-prf-hkdf' requires a getPrfOutput function (e.g. () => evaluatePrf({ credentialId, rpId }).then(r => r.prfOutputHex)). It will NOT fall back to signMessage: a passkey-derived key cannot be reproduced from a signature."
+        );
+      }
+      return args.getPrfOutput();
+    }
     if (mode === "eip712-hkdf") {
       if (!args.signTypedData) {
         throw new Error(
@@ -403,7 +457,7 @@ async function deriveKeyPairFromWallet(args) {
     return args.signMessage(args.message ?? DEFAULT_DERIVATION_MESSAGE);
   };
   const signature = await sign();
-  if (args.assertDeterministic ?? true) {
+  if (mode !== "webauthn-prf-hkdf" && (args.assertDeterministic ?? true)) {
     const second = await sign();
     if (second.toLowerCase() !== signature.toLowerCase()) {
       throw new Error(
@@ -411,7 +465,7 @@ async function deriveKeyPairFromWallet(args) {
       );
     }
   }
-  const privateKey = derivePrivateKeyFromSignature(signature, args.address, args);
+  const privateKey = derivePrivateKeyFromIkm(signature, args.address, args);
   const publicKey = getPublicKey(privateKey);
   if (args.selfCheck ?? true) {
     const probe = SELF_CHECK_PROBE;
@@ -423,7 +477,7 @@ async function deriveKeyPairFromWallet(args) {
   }
   return { privateKey, publicKey };
 }
-var AES_KEY_SIZE, IV_SIZE, TAG_SIZE, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_TYPES, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_DERIVATION_MAX_ATTEMPTS, SELF_CHECK_PROBE, PAYLOAD_KEY_MODE_ATTRIBUTE;
+var AES_KEY_SIZE, IV_SIZE, TAG_SIZE, DEFAULT_DERIVATION_MESSAGE, DEFAULT_DERIVATION_SALT, DEFAULT_DERIVATION_INFO_PREFIX, DEFAULT_DERIVATION_INFO_PREFIX_V2, DEFAULT_DERIVATION_INFO_PREFIX_V3, DEFAULT_EIP712_DOMAIN, DEFAULT_EIP712_TYPES, DEFAULT_EIP712_PRIMARY_TYPE, DEFAULT_EIP712_PURPOSE, DEFAULT_EIP712_MESSAGE_VERSION, DEFAULT_PRF_SALT, PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE, DEFAULT_DERIVATION_MAX_ATTEMPTS, SELF_CHECK_PROBE, PAYLOAD_KEY_MODE_ATTRIBUTE;
 var init_crypto = __esm({
   "src/core/crypto.ts"() {
     "use strict";
@@ -434,6 +488,7 @@ var init_crypto = __esm({
     DEFAULT_DERIVATION_SALT = "actora/expert-enc";
     DEFAULT_DERIVATION_INFO_PREFIX = "agent-payload-encryption/v1";
     DEFAULT_DERIVATION_INFO_PREFIX_V2 = "agent-payload-encryption/v2";
+    DEFAULT_DERIVATION_INFO_PREFIX_V3 = "agent-payload-encryption/v3";
     DEFAULT_EIP712_DOMAIN = {
       name: "Actora Agent Payload",
       version: "2"
@@ -448,6 +503,8 @@ var init_crypto = __esm({
     DEFAULT_EIP712_PRIMARY_TYPE = "PayloadKey";
     DEFAULT_EIP712_PURPOSE = "agent-payload-encryption";
     DEFAULT_EIP712_MESSAGE_VERSION = 2;
+    DEFAULT_PRF_SALT = "actora/expert-enc";
+    PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE = "payload_key_credential";
     DEFAULT_DERIVATION_MAX_ATTEMPTS = 8;
     SELF_CHECK_PROBE = "6163746f72612d73656c662d636865636b";
     PAYLOAD_KEY_MODE_ATTRIBUTE = "payload_key_mode";

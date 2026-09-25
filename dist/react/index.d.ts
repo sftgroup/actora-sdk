@@ -1,35 +1,46 @@
-import { A as AgentRunContext } from '../agent-runner-BRmpSXrU.js';
-export { O as OnChainReader, R as RunnableSkill, W as WalletSigner } from '../agent-runner-BRmpSXrU.js';
+import { A as AgentRunContext } from '../agent-runner-DXDRlS5t.js';
+export { O as OnChainReader, R as RunnableSkill, W as WalletSigner } from '../agent-runner-DXDRlS5t.js';
 import { C as ChainConfig } from '../config-DOyidIlP.js';
-import { WalletKeyDerivationParams, DerivationMode, Eip712Types } from '../core/index.js';
-import '../types-D4CaANmj.js';
+import { W as WalletKeyDerivationParams, D as DerivationMode, E as Eip712Types } from '../crypto-uXblsQuP.js';
+import '../types-CX4o7N9P.js';
 import 'viem';
 import '../ipfs/index.js';
-import '@noble/ciphers/utils.js';
 
 /**
- * OPT-IN browser-wallet decryption. EIP-1193 wallets cannot export the account
- * private key, so the payload key is derived from a deterministic signature
- * instead: `personal_sign` text (v1) or EIP-712 typed data (v2), both fed into
- * the same HKDF-SHA256 construction.
+ * OPT-IN browser-wallet / passkey decryption. EIP-1193 wallets cannot export
+ * the account private key, so the payload key is derived from a deterministic
+ * secret instead — all three modes feed the *same* HKDF-SHA256 construction:
+ *
+ *   v1 `personal-sign-hkdf` : `personal_sign` of a frozen text message
+ *   v2 `eip712-hkdf`        : EIP-712 typed data (structured prompt)
+ *   v3 `webauthn-prf-hkdf`  : WebAuthn PRF output — *not* a signature, bound by
+ *                             the browser to the RP ID, so it cannot be replayed
+ *                             by a phishing site on another origin
  *
  * The derived key never leaves the browser and the account key is untouched.
  * Once agents are published with a set of values, that whole set is frozen:
  *
- *   v1 `personal-sign-hkdf` : `message` / `salt` / `infoPrefix`
- *   v2 `eip712-hkdf`        : `domain` / `types` / `primaryType` / `infoPrefix`
- *                             (the typed-data message is derived from the
- *                              address, never from user input)
+ *   v1: `message` / `salt` / `infoPrefix`
+ *   v2: `domain` / `types` / `primaryType` / `infoPrefix`
+ *       (the typed-data message is derived from the address, never user input)
+ *   v3: `prfSalt` / `salt` / `infoPrefix` / `rpId` / `credentialId`
  *
- * Changing any of them makes existing payloads undecryptable. v1 and v2
- * coexist — old payloads stay decryptable with `mode: 'personal-sign-hkdf'`.
+ * Changing any of them makes existing payloads undecryptable. All three coexist.
+ *
+ * v3 notes: `credentialId` is required — read it back from the on-chain
+ * `payload_key_credential` attribute (`readPayloadKeyCredential`) or pass it
+ * explicitly; there is no way to discover a credential from an address. A
+ * connected wallet is still needed for the address bound into the HKDF info, so
+ * decrypt with the same address you published with. When PRF is unavailable this
+ * throws `PRF_UNSUPPORTED` and **never** falls back to a signature.
  */
 interface WalletKeyDerivationConfig extends WalletKeyDerivationParams {
     /**
-     * `'personal-sign-hkdf'` (v1): signs a frozen text message — wallets render
-     * it as a blind-sign prompt.
-     * `'eip712-hkdf'` (v2): signs EIP-712 typed data — the wallet shows a
-     * structured, domain-scoped prompt.
+     * `'personal-sign-hkdf'` (v1): signs a frozen text message — wallets render it
+     * as a blind-sign prompt.
+     * `'eip712-hkdf'` (v2): signs EIP-712 typed data — structured, domain-scoped.
+     * `'webauthn-prf-hkdf'` (v3): no signature; passkey PRF output bound to the
+     * site's domain.
      */
     mode: DerivationMode;
     /** v2 only: override the EIP-712 domain (defaults to `DEFAULT_EIP712_DOMAIN`). */
@@ -38,6 +49,12 @@ interface WalletKeyDerivationConfig extends WalletKeyDerivationParams {
     types?: Eip712Types;
     /** v2 only: override the EIP-712 primary type (defaults to `PayloadKey`). */
     primaryType?: string;
+    /** v3 only: base64url credential ID (from `createPrfCredential()` or the chain). */
+    credentialId?: string;
+    /** v3 only: WebAuthn RP ID; defaults to `location.hostname`. */
+    rpId?: string;
+    /** v3 only: PRF evaluation salt; defaults to the frozen `DEFAULT_PRF_SALT`. */
+    prfSalt?: string;
 }
 interface UseAgentRunnerConfig {
     agentId: number;
