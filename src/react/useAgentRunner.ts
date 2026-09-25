@@ -23,9 +23,10 @@ import type { ChainConfig } from '../config/config'
 import {
   DEFAULT_DERIVATION_MESSAGE,
   buildPayloadKeyTypedData,
-  derivePrivateKeyFromSignature,
+  derivePrivateKeyFromIkm,
 } from '../core/crypto'
 import type { DerivationMode, Eip712Types, WalletKeyDerivationParams } from '../core/crypto'
+import { evaluatePrf } from '../core/webauthn-prf'
 
 // ── IdentityRegistry ABI (minimal — only what useAgent needs) ──────────────
 
@@ -67,28 +68,40 @@ const SUBSCRIPTION_MANAGER_ABI = [
 // ── Hook Config ────────────────────────────────────────────────────────────
 
 /**
- * OPT-IN browser-wallet decryption. EIP-1193 wallets cannot export the account
- * private key, so the payload key is derived from a deterministic signature
- * instead: `personal_sign` text (v1) or EIP-712 typed data (v2), both fed into
- * the same HKDF-SHA256 construction.
+ * OPT-IN browser-wallet / passkey decryption. EIP-1193 wallets cannot export
+ * the account private key, so the payload key is derived from a deterministic
+ * secret instead — all three modes feed the *same* HKDF-SHA256 construction:
+ *
+ *   v1 `personal-sign-hkdf` : `personal_sign` of a frozen text message
+ *   v2 `eip712-hkdf`        : EIP-712 typed data (structured prompt)
+ *   v3 `webauthn-prf-hkdf`  : WebAuthn PRF output — *not* a signature, bound by
+ *                             the browser to the RP ID, so it cannot be replayed
+ *                             by a phishing site on another origin
  *
  * The derived key never leaves the browser and the account key is untouched.
  * Once agents are published with a set of values, that whole set is frozen:
  *
- *   v1 `personal-sign-hkdf` : `message` / `salt` / `infoPrefix`
- *   v2 `eip712-hkdf`        : `domain` / `types` / `primaryType` / `infoPrefix`
- *                             (the typed-data message is derived from the
- *                              address, never from user input)
+ *   v1: `message` / `salt` / `infoPrefix`
+ *   v2: `domain` / `types` / `primaryType` / `infoPrefix`
+ *       (the typed-data message is derived from the address, never user input)
+ *   v3: `prfSalt` / `salt` / `infoPrefix` / `rpId` / `credentialId`
  *
- * Changing any of them makes existing payloads undecryptable. v1 and v2
- * coexist — old payloads stay decryptable with `mode: 'personal-sign-hkdf'`.
+ * Changing any of them makes existing payloads undecryptable. All three coexist.
+ *
+ * v3 notes: `credentialId` is required — read it back from the on-chain
+ * `payload_key_credential` attribute (`readPayloadKeyCredential`) or pass it
+ * explicitly; there is no way to discover a credential from an address. A
+ * connected wallet is still needed for the address bound into the HKDF info, so
+ * decrypt with the same address you published with. When PRF is unavailable this
+ * throws `PRF_UNSUPPORTED` and **never** falls back to a signature.
  */
 export interface WalletKeyDerivationConfig extends WalletKeyDerivationParams {
   /**
-   * `'personal-sign-hkdf'` (v1): signs a frozen text message — wallets render
-   * it as a blind-sign prompt.
-   * `'eip712-hkdf'` (v2): signs EIP-712 typed data — the wallet shows a
-   * structured, domain-scoped prompt.
+   * `'personal-sign-hkdf'` (v1): signs a frozen text message — wallets render it
+   * as a blind-sign prompt.
+   * `'eip712-hkdf'` (v2): signs EIP-712 typed data — structured, domain-scoped.
+   * `'webauthn-prf-hkdf'` (v3): no signature; passkey PRF output bound to the
+   * site's domain.
    */
   mode: DerivationMode
   /** v2 only: override the EIP-712 domain (defaults to `DEFAULT_EIP712_DOMAIN`). */
@@ -97,6 +110,12 @@ export interface WalletKeyDerivationConfig extends WalletKeyDerivationParams {
   types?: Eip712Types
   /** v2 only: override the EIP-712 primary type (defaults to `PayloadKey`). */
   primaryType?: string
+  /** v3 only: base64url credential ID (from `createPrfCredential()` or the chain). */
+  credentialId?: string
+  /** v3 only: WebAuthn RP ID; defaults to `location.hostname`. */
+  rpId?: string
+  /** v3 only: PRF evaluation salt; defaults to the frozen `DEFAULT_PRF_SALT`. */
+  prfSalt?: string
 }
 
 export interface UseAgentRunnerConfig {
@@ -216,6 +235,9 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
         encryptionKeyDerivation.domain ? JSON.stringify(encryptionKeyDerivation.domain) : '',
         encryptionKeyDerivation.primaryType ?? '',
         encryptionKeyDerivation.types ? JSON.stringify(encryptionKeyDerivation.types) : '',
+        encryptionKeyDerivation.credentialId ?? '',
+        encryptionKeyDerivation.rpId ?? '',
+        encryptionKeyDerivation.prfSalt ?? '',
       ].join('|')
     : ''
 
@@ -263,8 +285,30 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
                 return derivedKeyRef.current.privateKey
               }
 
-              let signature: string
-              if (encryptionKeyDerivation.mode === 'eip712-hkdf') {
+              // The *secret source* differs per mode; the HKDF derivation below
+              // is identical for all three (that is why mode cannot be changed
+              // by re-encoding a signature).
+              let secret: string
+              if (encryptionKeyDerivation.mode === 'webauthn-prf-hkdf') {
+                // v3: WebAuthn PRF — no signature at all. The credential is not
+                // discoverable from the address, so it must be supplied (or read
+                // from the on-chain `payload_key_credential` attribute).
+                const credentialId = encryptionKeyDerivation.credentialId
+                if (!credentialId) {
+                  throw new Error(
+                    'mode: "webauthn-prf-hkdf" requires `credentialId`. Read it from the ' +
+                    'on-chain attribute (`readPayloadKeyCredential(await reader.getAttributes(agentId))`, ' +
+                    'key "payload_key_credential") or pass it explicitly. It cannot be recovered ' +
+                    'from the wallet address — without it the v3 payload key is not reproducible.'
+                  )
+                }
+                const { prfOutputHex } = await evaluatePrf({
+                  credentialId,
+                  rpId: encryptionKeyDerivation.rpId,
+                  salt: encryptionKeyDerivation.prfSalt,
+                })
+                secret = prfOutputHex
+              } else if (encryptionKeyDerivation.mode === 'eip712-hkdf') {
                 // v2: sign EIP-712 typed data — structured, domain-scoped prompt
                 // instead of a blind text signature.
                 const typedData = buildPayloadKeyTypedData(address, {
@@ -272,7 +316,7 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
                   types: encryptionKeyDerivation.types,
                   primaryType: encryptionKeyDerivation.primaryType,
                 })
-                signature = await walletClient.signTypedData({
+                secret = await walletClient.signTypedData({
                   account: walletClient.account,
                   domain: typedData.domain as TypedDataDomain,
                   types: typedData.types,
@@ -281,14 +325,14 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
                 })
               } else {
                 const message = encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE
-                signature = await walletClient.signMessage({
+                secret = await walletClient.signMessage({
                   account: walletClient.account,
                   message,
                 })
               }
 
-              const privateKey = derivePrivateKeyFromSignature(
-                signature,
+              const privateKey = derivePrivateKeyFromIkm(
+                secret,
                 address,
                 encryptionKeyDerivation
               )
@@ -301,8 +345,9 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
         // wagmi walletClient never exposes the account private key (EIP-1193).
         throw new Error(
           'EIP-1193 wallets cannot export the account private key. Pass ' +
-          '`encryptionKeyDerivation: { mode: "personal-sign-hkdf" | "eip712-hkdf" }` to ' +
-          'useAgentRunner to derive a separate payload key from a deterministic wallet signature.'
+          '`encryptionKeyDerivation: { mode: "personal-sign-hkdf" | "eip712-hkdf" | ' +
+          '"webauthn-prf-hkdf" }` to useAgentRunner to derive a separate payload key ' +
+          'from a deterministic signature (v1/v2) or a passkey PRF (v3).'
         )
       },
     }

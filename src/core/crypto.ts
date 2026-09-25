@@ -548,18 +548,19 @@ export function getPublicKey(privateKey: string): string {
   return bytesToHex(secp256k1.getPublicKey(hexToBytes(normalizePrivateKey(privateKey)), false))
 }
 
-// ── Wallet-derived key pair (personal_sign + HKDF-SHA256) ──────────────────
+// ── Wallet-derived key pair ────────────────────────────────────────────────
 //
 // Browser wallets (EIP-1193: MetaMask / OKX / Rabby / Trust / Coinbase) can
 // never hand over the account private key, and `eth_getEncryptionPublicKey`
 // (EIP-1024) is deprecated and MetaMask-only. The portable alternative is to
-// derive a *separate* secp256k1 payload key from a deterministic signature:
+// derive a *separate* secp256k1 payload key from a deterministic secret:
 //
-//   signature = personal_sign(frozen message)   ← 65 bytes, RFC 6979
-//   privateKey = HKDF-SHA256(IKM=signature, salt, info || address)[retry:i]
+//   v1/v2: secret = signature (65 B)               [personal_sign / EIP-712]
+//   v3   : secret = WebAuthn PRF output (32 B)     [passkey — not a signature]
+//   privateKey = HKDF-SHA256(IKM=secret, salt, info || address)[retry:i]
 //
 // The account key never leaves the wallet; the derived key never leaves the
-// browser. Decryption replays the same signature.
+// browser. Decryption replays the same secret.
 //
 // FROZEN CONTRACT — once agents are published with these values, changing any
 // of them (or the publishing address) makes every already-published payload
@@ -567,16 +568,30 @@ export function getPublicKey(privateKey: string): string {
 //
 //   v1 `personal-sign-hkdf` : `message` / `salt` / `infoPrefix`
 //   v2 `eip712-hkdf`        : `domain` / `types` / `primaryType` / `message` / `infoPrefix`
+//   v3 `webauthn-prf-hkdf`  : `prfSalt` / `salt` / `infoPrefix` / **rpId** / **credentialId**
 //
-// Bump `infoPrefix` version only together with a migration story. Both versions
-// coexist: v1 payloads stay decryptable. See `DEFAULT_DERIVATION_INFO_PREFIX_V2`.
+// v3 adds two dimensions the signature modes do not have: the WebAuthn RP ID
+// (the site's registrable domain — the browser enforces it, which is what makes
+// v3 phishing-resistant) and the credential itself. Both are *mandatory* to
+// reproduce the key, so they are recorded on-chain (see
+// `PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE`).
 //
-// REQUIREMENT: the wallet must sign deterministically (RFC 6979 — MetaMask /
-// Ledger / Trezor do; some MPC / custodial wallets do not). Use
-// `assertDeterministic` when deriving a *publishing* key.
+// Bump `infoPrefix` version only together with a migration story. All versions
+// coexist: v1/v2 payloads stay decryptable. See `DEFAULT_DERIVATION_INFO_PREFIX_V3`.
+//
+// REQUIREMENT (signature modes only): the wallet must sign deterministically
+// (RFC 6979 — MetaMask / Ledger / Trezor do; some MPC / custodial wallets do
+// not). Use `assertDeterministic` when deriving a *publishing* key. v3 is
+// deterministic by construction (PRF has no counter).
 
-/** Derivation profile: v1 free-form `personal_sign`, or v2 EIP-712 typed data. */
-export type DerivationMode = 'personal-sign-hkdf' | 'eip712-hkdf'
+/**
+ * Derivation profile.
+ *
+ * - `personal-sign-hkdf` (v1): IKM = `personal_sign` signature (65 B)
+ * - `eip712-hkdf` (v2): IKM = `eth_signTypedData_v4` signature (65 B)
+ * - `webauthn-prf-hkdf` (v3): IKM = WebAuthn **PRF** output (32 B, *not* a signature)
+ */
+export type DerivationMode = 'personal-sign-hkdf' | 'eip712-hkdf' | 'webauthn-prf-hkdf'
 
 /** Default frozen message signed by the wallet (byte-exact; never localize). v1 only. */
 export const DEFAULT_DERIVATION_MESSAGE =
@@ -587,12 +602,14 @@ export const DEFAULT_DERIVATION_SALT = 'actora/expert-enc'
 export const DEFAULT_DERIVATION_INFO_PREFIX = 'agent-payload-encryption/v1'
 /** HKDF info prefix for v2 (`eip712-hkdf`); `/<lowercased address>` is appended. */
 export const DEFAULT_DERIVATION_INFO_PREFIX_V2 = 'agent-payload-encryption/v2'
+/** HKDF info prefix for v3 (`webauthn-prf-hkdf`); `/<lowercased address>` is appended. */
+export const DEFAULT_DERIVATION_INFO_PREFIX_V3 = 'agent-payload-encryption/v3'
 
 /** HKDF info prefix for a mode, before the `/<address>` suffix. */
 export function defaultInfoPrefixFor(mode: DerivationMode): string {
-  return mode === 'eip712-hkdf'
-    ? DEFAULT_DERIVATION_INFO_PREFIX_V2
-    : DEFAULT_DERIVATION_INFO_PREFIX
+  if (mode === 'eip712-hkdf') return DEFAULT_DERIVATION_INFO_PREFIX_V2
+  if (mode === 'webauthn-prf-hkdf') return DEFAULT_DERIVATION_INFO_PREFIX_V3
+  return DEFAULT_DERIVATION_INFO_PREFIX
 }
 
 // ── v2: EIP-712 typed-data derivation ──────────────────────────────────────
@@ -680,6 +697,89 @@ export function buildPayloadKeyTypedData(
   }
 }
 
+// ── v3: WebAuthn PRF derivation ────────────────────────────────────────────
+//
+// v1/v2 derive from a *signature*, which is public and replayable: anything that
+// can make the user sign the same payload derives the same payload key. Adding
+// fields cannot fix it — a nonce / timestamp would make the key *unreproducible*
+// instead. v3 changes the IKM **source**: the WebAuthn PRF extension output,
+// which the authenticator computes from the credential and which the browser
+// binds to the RP ID (your registrable domain). A phishing site on another
+// origin cannot obtain it, and there is no signature to replay.
+//
+//   prfOutput  = PRF(credential, salt)                    ← 32 bytes, stable
+//   privateKey = HKDF-SHA256(IKM = prfOutput, salt, info)[retry:i]
+//
+// Cost: the key is bound to (credential, rpId) instead of just an address, so
+// losing the credential — or serving from a different domain — makes published
+// payloads undecryptable. Both values are therefore recorded on-chain
+// (`PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE`); without them v3 is *not* recoverable.
+
+/** Frozen PRF evaluation salt (utf8). Changing it derives a different key. */
+export const DEFAULT_PRF_SALT = 'actora/expert-enc'
+
+/** `prf.eval.first` bytes for a PRF salt (defaults to the frozen `DEFAULT_PRF_SALT`). */
+export function prfSaltBytes(salt: string = DEFAULT_PRF_SALT): Uint8Array {
+  return utf8(salt)
+}
+
+/**
+ * On-chain attribute key holding everything needed to *reproduce* a v3 key:
+ * the WebAuthn RP ID, the credential ID and the PRF salt. A credential is not
+ * discoverable from the address alone, so without this a v3 payload cannot be
+ * decrypted even by the right user on the right device.
+ *
+ * Write it with `AgentRegistry.setPayloadKeyCredential()`.
+ */
+export const PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE = 'payload_key_credential'
+
+export interface PayloadKeyCredential {
+  /** WebAuthn RP ID — the registrable domain the credential is bound to. */
+  rpId: string
+  /** Base64url credential ID (a public handle, not a secret). */
+  credentialId: string
+  /** PRF evaluation salt. Defaults to `DEFAULT_PRF_SALT`. */
+  prfSalt?: string
+  /** Publishing address (lowercased) — the same binding used by the HKDF info. */
+  address?: string
+  /** HKDF info prefix actually used (defaults to the v3 prefix). */
+  infoPrefix?: string
+}
+
+/** Serialize a credential binding for the `payload_key_credential` attribute. */
+export function serializePayloadKeyCredential(credential: PayloadKeyCredential): string {
+  if (!credential || !credential.rpId) {
+    throw new Error('rpId is required to bind a v3 credential (the credential is RP-ID scoped)')
+  }
+  if (!credential.credentialId) {
+    throw new Error('credentialId is required to bind a v3 credential (otherwise the key is unrecoverable)')
+  }
+  return JSON.stringify({
+    rpId: credential.rpId,
+    credentialId: credential.credentialId,
+    ...(credential.prfSalt ? { prfSalt: credential.prfSalt } : {}),
+    ...(credential.address ? { address: credential.address.toLowerCase() } : {}),
+    ...(credential.infoPrefix ? { infoPrefix: credential.infoPrefix } : {}),
+  })
+}
+
+/** Parse the `payload_key_credential` attribute; `undefined` when absent/invalid. */
+export function readPayloadKeyCredential(
+  attributes: Record<string, string | undefined>
+): PayloadKeyCredential | undefined {
+  const raw = attributes[PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE]
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as PayloadKeyCredential
+    if (!parsed || typeof parsed.rpId !== 'string' || typeof parsed.credentialId !== 'string') {
+      return undefined
+    }
+    return parsed
+  } catch {
+    return undefined
+  }
+}
+
 /** Stop after this many HKDF attempts to find a valid secp256k1 scalar. */
 const DEFAULT_DERIVATION_MAX_ATTEMPTS = 8
 
@@ -688,7 +788,7 @@ const SELF_CHECK_PROBE = '6163746f72612d73656c662d636865636b' // utf8 "actora-se
 
 /** Narrow an untrusted value (e.g. an on-chain attribute) to `DerivationMode`. */
 export function isDerivationMode(value: unknown): value is DerivationMode {
-  return value === 'personal-sign-hkdf' || value === 'eip712-hkdf'
+  return value === 'personal-sign-hkdf' || value === 'eip712-hkdf' || value === 'webauthn-prf-hkdf'
 }
 
 /**
@@ -727,7 +827,7 @@ export interface WalletKeyDerivationParams {
   salt?: string
   /**
    * HKDF info prefix; `/<lowercased address>` is appended. Defaults to the
-   * prefix of the selected `mode` (`agent-payload-encryption/v1` or `/v2`).
+   * prefix of the selected `mode` (`agent-payload-encryption/v1`, `/v2` or `/v3`).
    */
   infoPrefix?: string
   /** Max HKDF attempts when the candidate scalar is out of range (default 8). */
@@ -744,23 +844,17 @@ function bytesToBigInt(bytes: Uint8Array): bigint {
   return out
 }
 
-/**
- * Derive a secp256k1 private key (32-byte hex) from a wallet signature.
- *
- * Deterministic: same signature + same address + same params ⇒ same key.
- * `mode` only selects the default `infoPrefix`; the HKDF construction itself is
- * identical for v1 and v2 (the IKM is the 65-byte signature either way).
- * Throws when the signature is unusable or no valid scalar is found.
- */
-export function derivePrivateKeyFromSignature(
-  signature: string,
+/** Shared HKDF body — identical for every mode; only the IKM source differs. */
+function deriveFromIkmHex(
+  ikmHex: string,
   address: string,
-  params: WalletKeyDerivationParams = {}
+  params: WalletKeyDerivationParams,
+  label: string
 ): string {
-  const hex = signature.startsWith('0x') ? signature.slice(2) : signature
+  const hex = ikmHex.startsWith('0x') ? ikmHex.slice(2) : ikmHex
   const ikm = hexToBytes(hex)
   if (ikm.length < 32) {
-    throw new Error(`Signature too short for key derivation (${ikm.length} bytes, need >= 32)`)
+    throw new Error(`${label} too short for key derivation (${ikm.length} bytes, need >= 32)`)
   }
   if (!address) throw new Error('Address is required for key derivation (bound into HKDF info)')
 
@@ -782,6 +876,38 @@ export function derivePrivateKeyFromSignature(
   throw new Error(`HKDF produced no valid secp256k1 scalar in ${maxAttempts} attempts`)
 }
 
+/**
+ * Derive a secp256k1 private key (32-byte hex) from a wallet signature.
+ *
+ * Deterministic: same signature + same address + same params ⇒ same key.
+ * `mode` only selects the default `infoPrefix`; the HKDF construction itself is
+ * identical for v1/v2/v3 (the IKM is the wallet's 65-byte signature for v1/v2).
+ * Throws when the signature is unusable or no valid scalar is found.
+ */
+export function derivePrivateKeyFromSignature(
+  signature: string,
+  address: string,
+  params: WalletKeyDerivationParams = {}
+): string {
+  return deriveFromIkmHex(signature, address, params, 'Signature')
+}
+
+/**
+ * Derive a secp256k1 private key (32-byte hex) from a raw IKM.
+ *
+ * Needed by `webauthn-prf-hkdf` (v3), whose IKM is the 32-byte WebAuthn PRF
+ * output rather than a 65-byte signature. The HKDF construction is byte-for-byte
+ * the same as `derivePrivateKeyFromSignature` — only the secret's origin differs,
+ * which is why switching modes cannot be fixed by re-encoding a signature.
+ */
+export function derivePrivateKeyFromIkm(
+  ikm: string,
+  address: string,
+  params: WalletKeyDerivationParams = {}
+): string {
+  return deriveFromIkmHex(ikm, address, params, 'IKM')
+}
+
 export interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
   /** v1 signer: wallet message signer (wagmi `signMessage` / viem `WalletClient.signMessage`). */
   signMessage(message: string): Promise<string>
@@ -792,15 +918,25 @@ export interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
   signTypedData?(typedData: Eip712TypedData): Promise<string>
   /** v2 only: typed-data field overrides. Ignored by v1. */
   typedData?: Eip712DerivationOverrides
+  /**
+   * v3 secret provider (`mode: 'webauthn-prf-hkdf'`): returns the WebAuthn PRF
+   * output as hex (32 bytes). Typically
+   * `() => evaluatePrf({ credentialId, rpId }).then((r) => r.prfOutputHex)`.
+   * Required by v3 — **there is deliberately no fallback to `signMessage`**.
+   */
+  getPrfOutput?(): Promise<string>
   /** Signer address (any case) — bound into the HKDF info string. */
   address: string
   /**
-   * **Default `true`** (since 0.19.0): sign twice and require identical
-   * signatures. Catches non-deterministic (non-RFC-6979) wallets, whose
-   * published agents could never be decrypted again — a *silent* data-loss bug
-   * that only surfaces weeks later. Costs one extra prompt; pass `false` to
-   * skip it (e.g. when the signer is already known to be deterministic, or the
-   * flow must not prompt twice).
+   * **Default `true`** (since 0.19.0) for the *signature* modes: sign twice and
+   * require identical signatures. Catches non-deterministic (non-RFC-6979)
+   * wallets, whose published agents could never be decrypted again — a *silent*
+   * data-loss bug that only surfaces weeks later. Costs one extra prompt; pass
+   * `false` to skip it (e.g. when the signer is already known to be
+   * deterministic, or the flow must not prompt twice).
+   *
+   * Ignored by v3: the PRF has no counter, so it is deterministic by
+   * construction and re-probing would only cost another biometric prompt.
    */
   assertDeterministic?: boolean
   /**
@@ -813,11 +949,16 @@ export interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
 }
 
 /**
- * Derive the payload key pair from a browser wallet.
+ * Derive the payload key pair from a browser wallet or a passkey.
  *
  * v1 (`mode: 'personal-sign-hkdf'`, default): signs a frozen text message.
  * v2 (`mode: 'eip712-hkdf'`): signs EIP-712 typed data, so the wallet renders a
  * structured, domain-scoped prompt instead of a blind `personal_sign`.
+ * v3 (`mode: 'webauthn-prf-hkdf'`): no signature at all — the IKM is the
+ * WebAuthn PRF output, bound by the browser to the RP ID, so it cannot be
+ * replayed by a phishing site on another origin. Requires `getPrfOutput` (and,
+ * for decryption later, the credential recorded via
+ * `PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE`).
  *
  * Publishing: `publishAgent({ agent, publicKey, uploader })` with the returned
  * `publicKey`; pass `verifyWithPrivateKey: <privateKey>` there to dry-run the
@@ -825,8 +966,8 @@ export interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
  * to `AgentRunner` via `WalletSigner.deriveEncryptionKey()` (or `unpackAgent()`
  * directly).
  *
- * Two safety checks run by default (`assertDeterministic`, `selfCheck`) — both
- * guard against publishing an agent that can never be decrypted again.
+ * Safety checks default on (`assertDeterministic` for v1/v2, `selfCheck` for
+ * all) — both guard against publishing an agent that can never be decrypted.
  */
 export async function deriveKeyPairFromWallet(
   args: DeriveKeyPairFromWalletArgs
@@ -834,6 +975,19 @@ export async function deriveKeyPairFromWallet(
   const mode = args.mode ?? 'personal-sign-hkdf'
 
   const sign = async (): Promise<string> => {
+    if (mode === 'webauthn-prf-hkdf') {
+      if (!args.getPrfOutput) {
+        // No fallback on purpose: silently signing instead would put the user
+        // back on a replayable key while believing they are on a passkey.
+        throw new Error(
+          "mode: 'webauthn-prf-hkdf' requires a getPrfOutput function " +
+          '(e.g. () => evaluatePrf({ credentialId, rpId }).then(r => r.prfOutputHex)). ' +
+          'It will NOT fall back to signMessage: a passkey-derived key cannot be ' +
+          'reproduced from a signature.'
+        )
+      }
+      return args.getPrfOutput()
+    }
     if (mode === 'eip712-hkdf') {
       if (!args.signTypedData) {
         throw new Error(
@@ -848,7 +1002,7 @@ export async function deriveKeyPairFromWallet(
 
   const signature = await sign()
 
-  if (args.assertDeterministic ?? true) {
+  if (mode !== 'webauthn-prf-hkdf' && (args.assertDeterministic ?? true)) {
     const second = await sign()
     if (second.toLowerCase() !== signature.toLowerCase()) {
       throw new Error(
@@ -860,7 +1014,7 @@ export async function deriveKeyPairFromWallet(
     }
   }
 
-  const privateKey = derivePrivateKeyFromSignature(signature, args.address, args)
+  const privateKey = derivePrivateKeyFromIkm(signature, args.address, args)
   const publicKey = getPublicKey(privateKey)
 
   if (args.selfCheck ?? true) {

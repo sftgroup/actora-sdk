@@ -13,8 +13,8 @@
 import { encodeAbiParameters, parseAbiParameters, stringToHex, hexToString } from 'viem'
 import type { PublicClient, WalletClient, Address, Hash } from 'viem'
 import type { OnChainAgentMetadata } from '../core/types'
-import { PAYLOAD_KEY_MODE_ATTRIBUTE, isDerivationMode } from '../core/crypto'
-import type { DerivationMode } from '../core/crypto'
+import { PAYLOAD_KEY_MODE_ATTRIBUTE, PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE, isDerivationMode, serializePayloadKeyCredential } from '../core/crypto'
+import type { DerivationMode, PayloadKeyCredential } from '../core/crypto'
 import { ZERO_ADDRESS } from '../subscription/subscription'
 
 // ── Minimal ABI Fragments ──────────────────────────────────────────────────
@@ -390,6 +390,30 @@ export class AgentRegistry {
       throw new Error(`Unknown derivation mode: ${String(mode)}`)
     }
     return this.setAttributes(agentId, { [PAYLOAD_KEY_MODE_ATTRIBUTE]: mode })
+  }
+
+  /**
+   * 记录 v3（`webauthn-prf-hkdf`）解密所必需的两项绑定：WebAuthn RP ID 与
+   * credentialId（PRF 盐可省，默认冻结值）。
+   *
+   * v3 的密钥绑定在 (rpId, credential) 上，**无法从地址反推凭据** —— 不写这两个
+   * 字段，即使本人拿着正确的 passkey 也找不回派生密钥（表现与"载荷损坏"一样）。
+   *
+   *   await registry.setPayloadKeyCredential(agentId, {
+   *     rpId: 'app.example.com',
+   *     credentialId,                       // createPrfCredential() 的返回值
+   *     address: account.address,
+   *   })
+   *
+   * 读取：`readPayloadKeyCredential(await registry.getAttributes(agentId))`
+   */
+  async setPayloadKeyCredential(
+    agentId: number,
+    credential: PayloadKeyCredential
+  ): Promise<Hash> {
+    return this.setAttributes(agentId, {
+      [PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE]: serializePayloadKeyCredential(credential),
+    })
   }
 
   /**

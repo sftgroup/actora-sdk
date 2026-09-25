@@ -11,13 +11,19 @@ import type { OnChainReader, WalletSigner } from '../src/agent/agent-runner'
 import type { IPFSFetcher } from '../src/registry/ipfs-fetcher'
 import type { IPFSUploader } from '../src/ipfs/ipfs-uploader'
 import {
+  DEFAULT_DERIVATION_INFO_PREFIX,
+  DEFAULT_DERIVATION_INFO_PREFIX_V2,
+  DEFAULT_DERIVATION_INFO_PREFIX_V3,
   DEFAULT_DERIVATION_MESSAGE,
   DEFAULT_EIP712_PRIMARY_TYPE,
   DEFAULT_EIP712_PURPOSE,
+  DEFAULT_PRF_SALT,
+  PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE,
   PAYLOAD_KEY_MODE_ATTRIBUTE,
   buildPayloadKeyTypedData,
   bytesToHex,
   deriveKeyPairFromWallet,
+  derivePrivateKeyFromIkm,
   derivePrivateKeyFromSignature,
   eciesDecrypt,
   eciesEncrypt,
@@ -29,7 +35,9 @@ import {
   isDerivationMode,
   packAgentForPublish,
   publishAgent,
+  readPayloadKeyCredential,
   readPayloadKeyMode,
+  serializePayloadKeyCredential,
   unpackAgent,
 } from '../src/core/crypto'
 import type { Eip712TypedData } from '../src/core/crypto'
@@ -603,15 +611,135 @@ describe('payload_key_mode attribute', () => {
     expect(
       readPayloadKeyMode({ [PAYLOAD_KEY_MODE_ATTRIBUTE]: 'personal-sign-hkdf' }),
     ).toBe('personal-sign-hkdf')
+    expect(readPayloadKeyMode({ [PAYLOAD_KEY_MODE_ATTRIBUTE]: 'webauthn-prf-hkdf' })).toBe(
+      'webauthn-prf-hkdf',
+    )
     // Absent ⇒ the caller must fall back; unknown ⇒ do not silently guess.
     expect(readPayloadKeyMode({})).toBeUndefined()
-    expect(readPayloadKeyMode({ [PAYLOAD_KEY_MODE_ATTRIBUTE]: 'webauthn-prf-hkdf' })).toBeUndefined()
+    expect(readPayloadKeyMode({ [PAYLOAD_KEY_MODE_ATTRIBUTE]: 'something-else' })).toBeUndefined()
   })
 
   it('isDerivationMode narrows only the modes this SDK can derive', () => {
     expect(isDerivationMode('personal-sign-hkdf')).toBe(true)
     expect(isDerivationMode('eip712-hkdf')).toBe(true)
-    expect(isDerivationMode('webauthn-prf-hkdf')).toBe(false)
+    expect(isDerivationMode('webauthn-prf-hkdf')).toBe(true)
+    expect(isDerivationMode('something-else')).toBe(false)
     expect(isDerivationMode(undefined)).toBe(false)
+  })
+})
+
+// ── v3: webauthn-prf-hkdf ──────────────────────────────────────────────────
+// The IKM is a 32-byte PRF output, not a signature. Everything downstream of the
+// IKM must stay byte-identical, and a mode mix-up must never silently "work".
+
+describe('webauthn-prf-hkdf', () => {
+  // A fixed 32-byte stand-in for a PRF output (real ones come from the
+  // authenticator; the derivation only cares that it is 32 bytes of hex).
+  const PRF_OUTPUT = '5a'.repeat(32)
+
+  it('derives deterministically from a PRF output, and changes with it', () => {
+    const a = derivePrivateKeyFromIkm(PRF_OUTPUT, WALLET_ADDRESS, { mode: 'webauthn-prf-hkdf' })
+    const b = derivePrivateKeyFromIkm(PRF_OUTPUT, WALLET_ADDRESS, { mode: 'webauthn-prf-hkdf' })
+    const other = derivePrivateKeyFromIkm('5b'.repeat(32), WALLET_ADDRESS, {
+      mode: 'webauthn-prf-hkdf',
+    })
+    expect(a).toBe(b)
+    expect(a).not.toBe(other)
+    expect(a).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('gives a different key per version for the same IKM (no silent cross-mode use)', () => {
+    // Same 32-byte secret, three versioned info prefixes ⇒ three distinct keys.
+    const v1 = derivePrivateKeyFromIkm(PRF_OUTPUT, WALLET_ADDRESS, { infoPrefix: DEFAULT_DERIVATION_INFO_PREFIX })
+    const v2 = derivePrivateKeyFromIkm(PRF_OUTPUT, WALLET_ADDRESS, { infoPrefix: DEFAULT_DERIVATION_INFO_PREFIX_V2 })
+    const v3 = derivePrivateKeyFromIkm(PRF_OUTPUT, WALLET_ADDRESS, { mode: 'webauthn-prf-hkdf' })
+    expect(new Set([v1, v2, v3]).size).toBe(3)
+    expect(v3).toBe(
+      derivePrivateKeyFromIkm(PRF_OUTPUT, WALLET_ADDRESS, { infoPrefix: DEFAULT_DERIVATION_INFO_PREFIX_V3 }),
+    )
+  })
+
+  it('binds the address into the key, like every other mode', () => {
+    const here = derivePrivateKeyFromIkm(PRF_OUTPUT, WALLET_ADDRESS, { mode: 'webauthn-prf-hkdf' })
+    const elsewhere = derivePrivateKeyFromIkm(PRF_OUTPUT, '0x' + '22'.repeat(20), {
+      mode: 'webauthn-prf-hkdf',
+    })
+    expect(here).not.toBe(elsewhere)
+  })
+
+  it('rejects a PRF output that is too short', () => {
+    expect(() => derivePrivateKeyFromIkm('5a'.repeat(16), WALLET_ADDRESS)).toThrow(/IKM too short/)
+  })
+
+  it('requires getPrfOutput and never falls back to signMessage', async () => {
+    let signed: string | null = null
+    await expect(
+      deriveKeyPairFromWallet({
+        mode: 'webauthn-prf-hkdf',
+        address: WALLET_ADDRESS,
+        signMessage: async (m: string) => {
+          signed = m
+          return deterministicSignMessage(m)
+        },
+      }),
+    ).rejects.toThrow(/requires a getPrfOutput function/)
+    // The whole point of v3: no silent degradation to a replayable signature.
+    expect(signed).toBeNull()
+  })
+
+  it('derives the pair from getPrfOutput without prompting a wallet', async () => {
+    let calls = 0
+    const { privateKey, publicKey } = await deriveKeyPairFromWallet({
+      mode: 'webauthn-prf-hkdf',
+      address: WALLET_ADDRESS,
+      getPrfOutput: async () => {
+        calls++
+        return PRF_OUTPUT
+      },
+      signMessage: async () => {
+        throw new Error('signMessage must not be called in v3')
+      },
+    })
+    // Once only: PRF has no counter, so re-probing would just cost a second prompt.
+    expect(calls).toBe(1)
+    expect(privateKey).toBe(
+      derivePrivateKeyFromIkm(PRF_OUTPUT, WALLET_ADDRESS, { mode: 'webauthn-prf-hkdf' }),
+    )
+    expect(eciesDecrypt(eciesEncrypt('cd'.repeat(32), publicKey), privateKey)).toBe('cd'.repeat(32))
+  })
+})
+
+describe('payload_key_credential binding (v3)', () => {
+  it('round-trips the rpId + credentialId needed to reproduce a v3 key', () => {
+    const serialized = serializePayloadKeyCredential({
+      rpId: 'app.example.com',
+      credentialId: 'AbC-123_x',
+      address: WALLET_ADDRESS,
+      prfSalt: DEFAULT_PRF_SALT,
+    })
+    const parsed = readPayloadKeyCredential({ [PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE]: serialized })
+    expect(parsed).toEqual({
+      rpId: 'app.example.com',
+      credentialId: 'AbC-123_x',
+      address: WALLET_ADDRESS.toLowerCase(),
+      prfSalt: DEFAULT_PRF_SALT,
+    })
+  })
+
+  it('refuses to serialize without rpId or credentialId', () => {
+    // Both are mandatory: a credential is RP-ID scoped and cannot be discovered
+    // from an address, so half a binding is worse than none (it looks complete).
+    expect(() => serializePayloadKeyCredential({ rpId: '', credentialId: 'x' })).toThrow(/rpId/)
+    expect(() => serializePayloadKeyCredential({ rpId: 'a.com', credentialId: '' })).toThrow(
+      /credentialId/,
+    )
+  })
+
+  it('returns undefined for absent or malformed attributes', () => {
+    expect(readPayloadKeyCredential({})).toBeUndefined()
+    expect(readPayloadKeyCredential({ [PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE]: 'not json' })).toBeUndefined()
+    expect(
+      readPayloadKeyCredential({ [PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE]: '{"rpId":"a.com"}' }),
+    ).toBeUndefined()
   })
 })
