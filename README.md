@@ -1,4 +1,4 @@
-# @actora/sdk v0.17.1
+# @actora/sdk v0.18.0
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
@@ -100,7 +100,7 @@ const { planId } = await sub.createPlan({
 ```bash
 npm install @actora/sdk
 # 或锁定版本
-npm install @actora/sdk@0.17.1
+npm install @actora/sdk@0.18.0
 ```
 
 > 包内含 `examples/`（B 端可运行样例）与 `UPGRADE.md`（逐版本迁移指南），安装后可从
@@ -532,7 +532,7 @@ const { finalText } = await loop.run('帮我做这件事')
 - **`aesEncrypt(plaintext, keyHex)` / `aesDecrypt(encryptedBase64, keyHex)`** —— AES-256-GCM（线格式 `base64(IV[12]||ct||tag[16])`）
 - **`eciesEncrypt(dataHex, publicKey)` / `eciesDecrypt(dataHex, privateKey)`** —— ECIES（secp256k1，与 eciesjs 兼容）
 - **`generateKeyPair()`** → `{ privateKey, publicKey }`；**`getPublicKey(privateKey)`**
-- **`derivePrivateKeyFromSignature(signature, address, params?)`** / **`deriveKeyPairFromWallet({ signMessage, address, … })`** —— 浏览器钱包密钥派生（personal_sign + HKDF-SHA256，见 §5.12）
+- **`derivePrivateKeyFromSignature(signature, address, params?)`** / **`deriveKeyPairFromWallet({ mode?, signMessage, signTypedData?, address, … })`** —— 浏览器钱包密钥派生（v1 `personal_sign` / v2 EIP-712 + HKDF-SHA256，见 §5.12）；配套 **`buildPayloadKeyTypedData(address, overrides?)`** 与 `DEFAULT_EIP712_DOMAIN` / `DEFAULT_EIP712_TYPES` / `DEFAULT_EIP712_PRIMARY_TYPE` / `DEFAULT_DERIVATION_INFO_PREFIX_V2`
 - **`generateAesKey()`**；高级封装：`encryptPayload / decryptPayload / packAgentForPublish / publishAgent / unpackAgent`
 
 ```ts
@@ -552,29 +552,88 @@ aesDecrypt(c, '00'.repeat(32))            // 'hello'
 
 #### 派生规则（冻结契约）
 
+两种模式**只有「签什么」不同**，HKDF 构造逐字节一致（IKM 都是签名的 65 字节 `r‖s‖v`）：
+
 ```
+v1  mode: 'personal-sign-hkdf'
 signature  = personal_sign(message)                       // 65 字节，要求 RFC 6979 确定性
+
+v2  mode: 'eip712-hkdf'
+signature  = eth_signTypedData_v4({ domain, types, primaryType, message })
+
+两者共用：
 privateKey = HKDF-SHA256(IKM = signature,
                          salt = "actora/expert-enc",
-                         info = "agent-payload-encryption/v1/<地址小写>")[retry:i]
+                         info = "<infoPrefix>/<地址小写>")[retry:i]
 publicKey  = 未压缩公钥（0x04 + 128 hex）→ 传给 publishAgent
+
+infoPrefix = "agent-payload-encryption/v1"    // v1（默认，与 v2 并存）
+           | "agent-payload-encryption/v2"    // v2
 ```
 
-- 账户私钥**永不离开钱包**；派生私钥只存在于内存，不落盘、不上传；解密时用同一钱包对同一文案再签一次即可重现；
-- `message` / `salt` / `infoPrefix` / 发布地址**任一变化都会让已发布的 payload 永久解不开**——上线前冻结这四项，
-  文案按**字节**冻结（不要本地化、不要改空格）；
-- 越界（HKDF 输出非合法 secp256k1 标量）时按 `info + "/retry:<i>"` 重试，首次命中的方案即冻结方案。
+- 账户私钥**永不离开钱包**；派生私钥只存在于内存，不落盘、不上传；解密时用同一钱包对同一载荷再签一次即可重现；
+- **冻结面**：改动其中任一值，**已发布的 payload 永久解不开**——上线前冻结，文案按**字节**冻结（不要本地化、不要改空格）：
+  - v1：`message` / `salt` / `infoPrefix` / 发布地址；
+  - v2：`domain` / `types` / `primaryType` / `infoPrefix` / 发布地址（typed data 的 `message` 由地址派生，**不含时间戳 / nonce**，
+    否则签名不可复现、密钥不可复原）；
+- 越界（HKDF 输出非合法 secp256k1 标量）时按 `info + "/retry:<i>"` 重试，首次命中的方案即冻结方案；
+- **v1 与 v2 并存**：0.18.0 起新档案建议直接用 v2；已用 v1 发布的载荷继续用 v1 解（不提供 v1→v2 的自动迁移，
+  因为 `tokenURI` 铸后不可改）。
+
+#### v2：用 EIP-712 取代文本盲签（`mode: 'eip712-hkdf'`）
+
+v1 的 `personal_sign` 有两个先天问题：钱包一律按**文本盲签**渲染（MetaMask / Rabby / OKX 提示「无法验证来源」），
+且文案**公开固定、可无限复用**（任何钓鱼站让用户签同一串文本即可派生出该用户的 payload 私钥）。v2 把「被签的东西」
+换成 EIP-712 typed data，**派生算法不变**，钱包会展示结构化、带 domain 的签名请求。
+
+默认值（SDK 内置，**刻意不含时间戳**）：
+
+```ts
+domain      = { name: 'Actora Agent Payload', version: '2' }
+types       = { PayloadKey: [
+  { name: 'address', type: 'address' },   // 与 HKDF info 的地址同口径（小写），双保险
+  { name: 'purpose', type: 'string' },    // 'agent-payload-encryption'
+  { name: 'version', type: 'uint256' },   // 2
+] }
+primaryType = 'PayloadKey'
+message     = { address: <地址小写>, purpose: 'agent-payload-encryption', version: 2 }
+```
+
+发布侧（`deriveKeyPairFromWallet` 接受 typed data，不再是只有 `signMessage`）：
+
+```ts
+import { deriveKeyPairFromWallet } from '@actora/sdk'
+
+const { publicKey } = await deriveKeyPairFromWallet({
+  mode: 'eip712-hkdf',
+  signTypedData: (typedData) => walletClient.signTypedData({ account, ...typedData }),
+  address: account.address,
+  assertDeterministic: true,   // 发布路径建议开启：多签一次即可拦下非确定性钱包
+})
+```
+
+运行侧（默认值即上表；`domain` / `types` / `primaryType` 可覆盖，覆盖后同样进入冻结面）：
+
+```tsx
+const { ctx, error } = useAgentRunner({
+  agentId,
+  encryptionKeyDerivation: { mode: 'eip712-hkdf' },   // v2
+  // encryptionKeyDerivation: { mode: 'personal-sign-hkdf' },  // v1：解已有载荷时用
+})
+```
 
 #### 发布（浏览器）
 
 ```ts
 import { deriveKeyPairFromWallet, publishAgent } from '@actora/sdk'
 
+// v1（沿用既有档案）
 const { publicKey } = await deriveKeyPairFromWallet({
   signMessage: (message) => walletClient.signMessage({ account, message }),
   address: account.address,
   assertDeterministic: true,   // 发布路径建议开启：多签一次即可拦下非确定性钱包
 })
+// v2（新档案推荐）：见上一节 `mode: 'eip712-hkdf'`
 
 const result = await publishAgent({ agent, publicKey, uploader })
 // result.encryptedCid → 链上 tokenURI；result.eciesEncryptedKeyHex → 元数据属性
@@ -585,7 +644,7 @@ const result = await publishAgent({ agent, publicKey, uploader })
 ```tsx
 const { ctx, error } = useAgentRunner({
   agentId,
-  encryptionKeyDerivation: { mode: 'personal-sign-hkdf' },   // 显式 opt-in
+  encryptionKeyDerivation: { mode: 'personal-sign-hkdf' },   // 显式 opt-in（v1 / v2 二选一）
 })
 ```
 
@@ -612,8 +671,8 @@ new AgentRunner({ reader, wallet, aesKeyHex: sessionAesKey })
 
 | 项 | 说明 |
 |---|---|
-| 确定性签名 | 必须满足 RFC 6979（MetaMask / Ledger / Trezor 满足；部分 MPC / 托管钱包不满足）。非确定性钱包一旦发布，Agent 就再也解不开，故发布路径务必开 `assertDeterministic` |
-| 域隔离 | 派生文案只在 Actora 使用：任何能让同一地址对**同一字符串**签名的场景都等价于拿到内容密钥；换地址即失效 |
+| 确定性签名 | 必须满足 RFC 6979（MetaMask / Ledger / Trezor 满足；部分 MPC / 托管钱包不满足），v1 的 `personal_sign` 与 v2 的 `eth_signTypedData_v4` 同样适用。非确定性钱包一旦发布，Agent 就再也解不开，故发布路径务必开 `assertDeterministic` |
+| 域隔离 | 派生载荷只在 Actora 使用：任何能让同一地址对**同一载荷**签名的场景都等价于拿到内容密钥；换地址即失效。v1 是自由文本（任何站点都能复现该提示词）；**v2 的 EIP-712 domain + `types` 把「同一载荷」限定为本 SDK 的固定结构**，请求来源在钱包里可验证 |
 | 错误码 | 钱包不提供任何密钥来源 → `WALLET_NOT_CONNECTED`（**不再**被包成 `DECRYPTION_FAILED`）；密钥不对/密文损坏 → `DECRYPTION_FAILED`，原始错误见 `error.cause` |
 | 订阅者能否解密 | **不能**。payload 的 AES key 由**发布时的公钥**包裹，只有持有对应私钥的发布方解得开。订阅者侧要拿到明文 prompt/skills，需走托管对话，或由发布方经 MCP 下发 |
 
@@ -964,6 +1023,7 @@ POST /api/v1/payments
 | 0.16.0 | **浏览器钱包（EIP-1193）发布/运行打通**：`derivePrivateKeyFromSignature` / `deriveKeyPairFromWallet`（personal_sign + HKDF-SHA256）、`useAgentRunner` 的 `encryptionKeyDerivation` opt-in、`AgentRunnerConfig.unpack?/aesKeyHex?` 与 `WalletSigner.deriveEncryptionKey?()` 密钥注入；错误语义修正（`WALLET_NOT_CONNECTED` 不再降级为 `DECRYPTION_FAILED`，`DECRYPTION_FAILED` 携带 `cause`）；README 新增 §5.12 与托管链路隐私边界说明 |
 | 0.17.0 | **链上属性写入助手**：`registry.setAttributes()`（读回合并后整组写回，补写公开 `skills` 不必手写合约调用）/ `overwriteAttributes()` / `toAttributes()`；配套**托管对话多链修复**（`agentId` 模式的 BSC / Ethereum / Base 404 与 403，见 §5.12） |
 | 0.17.1 | **DX 修复**：`eciesDecrypt()` / `unpackAgent()` / `getPublicKey()` 的 `privateKey` 接受可选 `0x` 前缀（此前抛底层库的模糊错误），非法格式时报 `Invalid private key: expected 32-byte hex…`；`UPGRADE.md` 加入 npm 包 `files`（此前包内缺失）；修正 `package-lock.json` 残留旧包名 `@agentxv2/sdk`。**无 API 破坏** |
+| 0.18.0 | **payload 密钥派生 v2（EIP-712）**：`encryptionKeyDerivation: { mode: 'eip712-hkdf' }` 与 `deriveKeyPairFromWallet({ mode, signTypedData })`，把「被签的东西」从自由文本换成 EIP-712 typed data（`buildPayloadKeyTypedData` + `DEFAULT_EIP712_*`），HKDF 构造与 IKM 不变、`infoPrefix` 版本化为 `agent-payload-encryption/v2`；**v1（`personal-sign-hkdf`）保留且行为不变**，旧档案继续可解 |
 
 ---
 

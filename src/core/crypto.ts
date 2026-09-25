@@ -529,31 +529,142 @@ export function getPublicKey(privateKey: string): string {
 // browser. Decryption replays the same signature.
 //
 // FROZEN CONTRACT — once agents are published with these values, changing any
-// of `message` / `salt` / `infoPrefix` (or the publishing address) makes every
-// already-published payload permanently undecryptable. Bump `infoPrefix`
-// version only together with a migration story.
+// of them (or the publishing address) makes every already-published payload
+// permanently undecryptable.
+//
+//   v1 `personal-sign-hkdf` : `message` / `salt` / `infoPrefix`
+//   v2 `eip712-hkdf`        : `domain` / `types` / `primaryType` / `message` / `infoPrefix`
+//
+// Bump `infoPrefix` version only together with a migration story. Both versions
+// coexist: v1 payloads stay decryptable. See `DEFAULT_DERIVATION_INFO_PREFIX_V2`.
 //
 // REQUIREMENT: the wallet must sign deterministically (RFC 6979 — MetaMask /
 // Ledger / Trezor do; some MPC / custodial wallets do not). Use
 // `assertDeterministic` when deriving a *publishing* key.
 
-/** Default frozen message signed by the wallet (byte-exact; never localize). */
+/** Derivation profile: v1 free-form `personal_sign`, or v2 EIP-712 typed data. */
+export type DerivationMode = 'personal-sign-hkdf' | 'eip712-hkdf'
+
+/** Default frozen message signed by the wallet (byte-exact; never localize). v1 only. */
 export const DEFAULT_DERIVATION_MESSAGE =
   'Actora: derive agent payload encryption key (v1). ' +
   'This signature authorizes no transaction and no payment.'
 
 export const DEFAULT_DERIVATION_SALT = 'actora/expert-enc'
 export const DEFAULT_DERIVATION_INFO_PREFIX = 'agent-payload-encryption/v1'
+/** HKDF info prefix for v2 (`eip712-hkdf`); `/<lowercased address>` is appended. */
+export const DEFAULT_DERIVATION_INFO_PREFIX_V2 = 'agent-payload-encryption/v2'
+
+/** HKDF info prefix for a mode, before the `/<address>` suffix. */
+export function defaultInfoPrefixFor(mode: DerivationMode): string {
+  return mode === 'eip712-hkdf'
+    ? DEFAULT_DERIVATION_INFO_PREFIX_V2
+    : DEFAULT_DERIVATION_INFO_PREFIX
+}
+
+// ── v2: EIP-712 typed-data derivation ──────────────────────────────────────
+//
+// v1 signs free-form text, which EIP-1193 wallets can only render as a blind
+// "sign this message" prompt, and the string is public + fixed ⇒ replayable by
+// any phishing site. v2 keeps the HKDF construction byte-for-byte identical and
+// only replaces *what is signed*: EIP-712 typed data, so the wallet shows a
+// structured, domain-scoped prompt that names the contract intent.
+//
+//   signature  = eth_signTypedData_v4(domain, types, message)
+//   privateKey = HKDF-SHA256(IKM = signature[65B], salt, info)[retry:i]
+//
+// No timestamp / nonce: the signature must be reproducible forever, otherwise
+// the payload becomes undecryptable.
+
+export interface Eip712TypeEntry {
+  name: string
+  type: string
+}
+export type Eip712Types = Record<string, Eip712TypeEntry[]>
+
+export interface Eip712TypedData {
+  domain: Record<string, unknown>
+  types: Eip712Types
+  primaryType: string
+  message: Record<string, unknown>
+}
+
+/** Default v2 domain. Frozen — see the FROZEN CONTRACT note above. */
+export const DEFAULT_EIP712_DOMAIN = {
+  name: 'Actora Agent Payload',
+  version: '2',
+}
+
+/** Default v2 `types`. Frozen. Treat as read-only; the builder clones it. */
+export const DEFAULT_EIP712_TYPES: Eip712Types = {
+  PayloadKey: [
+    { name: 'address', type: 'address' },
+    { name: 'purpose', type: 'string' },
+    { name: 'version', type: 'uint256' },
+  ],
+}
+
+export const DEFAULT_EIP712_PRIMARY_TYPE = 'PayloadKey'
+export const DEFAULT_EIP712_PURPOSE = 'agent-payload-encryption'
+export const DEFAULT_EIP712_MESSAGE_VERSION = 2
+
+/** Per-field overrides for the v2 typed data. Omitted fields use the defaults. */
+export interface Eip712DerivationOverrides {
+  domain?: Record<string, unknown>
+  types?: Eip712Types
+  primaryType?: string
+  message?: Record<string, unknown>
+}
+
+/**
+ * Build the canonical v2 typed data for a publisher/subscriber address.
+ *
+ * `message.address` is lowercased to match the HKDF `info` binding, so the two
+ * bindings cannot drift. Deterministic: no timestamp, no nonce.
+ */
+export function buildPayloadKeyTypedData(
+  address: string,
+  overrides: Eip712DerivationOverrides = {}
+): Eip712TypedData {
+  if (!address) {
+    throw new Error('Address is required for key derivation (bound into the EIP-712 message)')
+  }
+  const source = overrides.types ?? DEFAULT_EIP712_TYPES
+  const types: Eip712Types = {}
+  for (const [key, entries] of Object.entries(source)) {
+    types[key] = entries.map((entry) => ({ name: entry.name, type: entry.type }))
+  }
+  return {
+    domain: { ...DEFAULT_EIP712_DOMAIN, ...overrides.domain },
+    types,
+    primaryType: overrides.primaryType ?? DEFAULT_EIP712_PRIMARY_TYPE,
+    message: {
+      address: address.toLowerCase(),
+      purpose: DEFAULT_EIP712_PURPOSE,
+      version: DEFAULT_EIP712_MESSAGE_VERSION,
+      ...overrides.message,
+    },
+  }
+}
 
 /** Stop after this many HKDF attempts to find a valid secp256k1 scalar. */
 const DEFAULT_DERIVATION_MAX_ATTEMPTS = 8
 
 export interface WalletKeyDerivationParams {
-  /** Frozen message to sign. Defaults to `DEFAULT_DERIVATION_MESSAGE`. */
+  /**
+   * Which signature the payload key is derived from. Defaults to
+   * `'personal-sign-hkdf'` (v1) — omitting it keeps existing callers on the
+   * frozen v1 path.
+   */
+  mode?: DerivationMode
+  /** Frozen message to sign (v1 only). Defaults to `DEFAULT_DERIVATION_MESSAGE`. */
   message?: string
   /** HKDF salt (domain separation). Defaults to `DEFAULT_DERIVATION_SALT`. */
   salt?: string
-  /** HKDF info prefix; `/<lowercased address>` is appended. */
+  /**
+   * HKDF info prefix; `/<lowercased address>` is appended. Defaults to the
+   * prefix of the selected `mode` (`agent-payload-encryption/v1` or `/v2`).
+   */
   infoPrefix?: string
   /** Max HKDF attempts when the candidate scalar is out of range (default 8). */
   maxAttempts?: number
@@ -573,6 +684,8 @@ function bytesToBigInt(bytes: Uint8Array): bigint {
  * Derive a secp256k1 private key (32-byte hex) from a wallet signature.
  *
  * Deterministic: same signature + same address + same params ⇒ same key.
+ * `mode` only selects the default `infoPrefix`; the HKDF construction itself is
+ * identical for v1 and v2 (the IKM is the 65-byte signature either way).
  * Throws when the signature is unusable or no valid scalar is found.
  */
 export function derivePrivateKeyFromSignature(
@@ -588,7 +701,9 @@ export function derivePrivateKeyFromSignature(
   if (!address) throw new Error('Address is required for key derivation (bound into HKDF info)')
 
   const salt = utf8(params.salt ?? DEFAULT_DERIVATION_SALT)
-  const infoBase = `${params.infoPrefix ?? DEFAULT_DERIVATION_INFO_PREFIX}/${address.toLowerCase()}`
+  const infoBase = `${
+    params.infoPrefix ?? defaultInfoPrefixFor(params.mode ?? 'personal-sign-hkdf')
+  }/${address.toLowerCase()}`
   const maxAttempts = Math.max(1, params.maxAttempts ?? DEFAULT_DERIVATION_MAX_ATTEMPTS)
   const n = secp256k1.CURVE.n
 
@@ -604,21 +719,32 @@ export function derivePrivateKeyFromSignature(
 }
 
 export interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
-  /** Wallet message signer (wagmi `signMessage` / viem `WalletClient.signMessage`). */
+  /** v1 signer: wallet message signer (wagmi `signMessage` / viem `WalletClient.signMessage`). */
   signMessage(message: string): Promise<string>
+  /**
+   * v2 signer (`mode: 'eip712-hkdf'`): EIP-712 typed-data signer
+   * (viem `WalletClient.signTypedData` / `eth_signTypedData_v4`). Required by v2.
+   */
+  signTypedData?(typedData: Eip712TypedData): Promise<string>
+  /** v2 only: typed-data field overrides. Ignored by v1. */
+  typedData?: Eip712DerivationOverrides
   /** Signer address (any case) — bound into the HKDF info string. */
   address: string
   /**
-   * Opt-in safety check: sign the message twice and require identical
-   * signatures. Catches non-deterministic (non-RFC-6979) wallets, whose
-   * published agents could never be decrypted again. Costs one extra prompt —
-   * recommended for the publishing path, unnecessary for decryption.
+   * Opt-in safety check: sign twice and require identical signatures. Catches
+   * non-deterministic (non-RFC-6979) wallets, whose published agents could
+   * never be decrypted again. Costs one extra prompt — recommended for the
+   * publishing path, unnecessary for decryption.
    */
   assertDeterministic?: boolean
 }
 
 /**
  * Derive the payload key pair from a browser wallet.
+ *
+ * v1 (`mode: 'personal-sign-hkdf'`, default): signs a frozen text message.
+ * v2 (`mode: 'eip712-hkdf'`): signs EIP-712 typed data, so the wallet renders a
+ * structured, domain-scoped prompt instead of a blind `personal_sign`.
  *
  * Publishing: `publishAgent({ agent, publicKey, uploader })` with the returned
  * `publicKey`. Decrypting: pass the returned `privateKey` to `AgentRunner` via
@@ -627,14 +753,28 @@ export interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
 export async function deriveKeyPairFromWallet(
   args: DeriveKeyPairFromWalletArgs
 ): Promise<{ privateKey: string; publicKey: string }> {
-  const message = args.message ?? DEFAULT_DERIVATION_MESSAGE
-  const signature = await args.signMessage(message)
+  const mode = args.mode ?? 'personal-sign-hkdf'
+
+  const sign = async (): Promise<string> => {
+    if (mode === 'eip712-hkdf') {
+      if (!args.signTypedData) {
+        throw new Error(
+          "mode: 'eip712-hkdf' requires a signTypedData function " +
+          '(viem WalletClient.signTypedData / eth_signTypedData_v4)'
+        )
+      }
+      return args.signTypedData(buildPayloadKeyTypedData(args.address, args.typedData))
+    }
+    return args.signMessage(args.message ?? DEFAULT_DERIVATION_MESSAGE)
+  }
+
+  const signature = await sign()
 
   if (args.assertDeterministic) {
-    const second = await args.signMessage(message)
+    const second = await sign()
     if (second.toLowerCase() !== signature.toLowerCase()) {
       throw new Error(
-        'Wallet returned different signatures for the same message — it is not RFC 6979 ' +
+        'Wallet returned different signatures for the same payload — it is not RFC 6979 ' +
         'deterministic, so a derived key cannot be reproduced and the agent would be ' +
         'permanently undecryptable. Use a deterministic wallet (MetaMask / Ledger / Trezor) ' +
         'or inject the key via WalletSigner.getPrivateKey() / AgentRunnerConfig.unpack.'

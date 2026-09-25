@@ -1,5 +1,72 @@
 # @actora/sdk Upgrade Guide
 
+## v0.17.1 → v0.18.0（2026-09-25，建议升级）
+
+> payload 密钥派生新增 **v2：EIP-712 模式（`eip712-hkdf`）**。把「被签的东西」从自由文本换成 EIP-712 typed data，
+> **HKDF 构造与 IKM（签名 65 字节）逐字节不变**，只有「签名从哪来」变了。
+> **无 API 破坏**：v1（`personal-sign-hkdf`）完整保留，默认行为不变，已发布载荷继续可解。
+
+### 为什么要 v2
+
+v1 的 `personal_sign` 有两个先天问题，且都无法在集成方一侧解决：
+
+1. 钱包一律按**文本盲签**渲染 —— MetaMask / Rabby / OKX 提示「无法验证来源 / 请确认你完全理解内容并信任该站点」；
+2. 文案**公开且固定、可无限复用** —— 任何钓鱼站让用户签同一串文本，即可派生出该用户的 payload 私钥、解开其加密载荷。
+   改文案无用（仍是盲签），改常量等于换密钥（已发布载荷永久解不开）。
+
+v2 用 EIP-712 typed data，钱包展示结构化、带 domain 的签名请求；同时 domain + `types` 把「同一载荷」限定为本 SDK 的固定结构。
+
+### 变更点
+
+- **`useAgentRunner` 的 `encryptionKeyDerivation.mode` 由字面量 `'personal-sign-hkdf'` 扩展为
+  `'personal-sign-hkdf' | 'eip712-hkdf'`**，并新增 v2 专属可覆盖项 `domain?` / `types?` / `primaryType?`；
+  v2 走 `walletClient.signTypedData`，派生缓存键已纳入 v2 字段。
+- **`deriveKeyPairFromWallet()` 新增 `mode?` / `signTypedData?` / `typedData?`** —— 发布侧不再只能 `signMessage`；
+  `mode: 'eip712-hkdf'` 时必须提供 `signTypedData`（缺失时报可操作错误）。
+- **新增 `buildPayloadKeyTypedData(address, overrides?)`（根导出）** —— 构造 v2 typed data；
+  `message.address` 与 HKDF `info` **同口径（小写）**，双保险。
+- **新增常量 / 类型**：`DEFAULT_EIP712_DOMAIN` / `DEFAULT_EIP712_TYPES` / `DEFAULT_EIP712_PRIMARY_TYPE` /
+  `DEFAULT_EIP712_PURPOSE` / `DEFAULT_EIP712_MESSAGE_VERSION` / `DEFAULT_DERIVATION_INFO_PREFIX_V2` /
+  `DerivationMode` / `Eip712TypedData` / `Eip712Types` / `Eip712DerivationOverrides`。
+- **`derivePrivateKeyFromSignature()` 新增可选 `params.mode`** —— 只用于选择默认 `infoPrefix`
+  （`agent-payload-encryption/v1` 或 `/v2`）；不传时与 0.17.x 行为完全一致（测试有回归用例）。
+
+### v2 默认值（冻结面 = `domain` / `types` / `primaryType` / `infoPrefix` / 发布地址）
+
+```ts
+domain      = { name: 'Actora Agent Payload', version: '2' }
+types       = { PayloadKey: [
+  { name: 'address', type: 'address' },   // 与 HKDF info 的地址同口径（小写）
+  { name: 'purpose', type: 'string' },    // 'agent-payload-encryption'
+  { name: 'version', type: 'uint256' },   // 2
+] }
+primaryType = 'PayloadKey'
+message     = { address: <地址小写>, purpose: 'agent-payload-encryption', version: 2 }
+infoPrefix  = 'agent-payload-encryption/v2'
+```
+
+> 刻意**不含时间戳 / nonce**：签名必须永远可复现，否则载荷不可复原。
+> 任一冻结值变化 ⇒ 用该值发布的载荷**永久解不开**。
+
+### 迁移动作
+
+- `npm install @actora/sdk@0.18.0`。**既有 v1 集成零改动**：不写 `mode` 或写 `mode: 'personal-sign-hkdf'` 行为一致。
+- **新档案推荐 v2**（发布侧与运行侧必须同为 v2）：
+  ```ts
+  const { publicKey } = await deriveKeyPairFromWallet({
+    mode: 'eip712-hkdf',
+    signTypedData: (typedData) => walletClient.signTypedData({ account, ...typedData }),
+    address: account.address,
+    assertDeterministic: true,
+  })
+  // 运行侧
+  useAgentRunner({ agentId, encryptionKeyDerivation: { mode: 'eip712-hkdf' } })
+  ```
+- **已用 v1 发布的载荷继续用 v1 解**（`mode: 'personal-sign-hkdf'`）；本版本**不提供** v1→v2 自动迁移
+  （`tokenURI` 铸造后不可改，重封装代价高）。同一条链上 v1 / v2 档案并存是受支持的形态。
+
+---
+
 ## v0.17.0 → v0.17.1（2026-09-23，可选升级）
 
 > 两处 DX 修复：解密入口放宽私钥格式；`UPGRADE.md` 随包发布（此前只在仓库里，`npm` 包内没有）。

@@ -4,12 +4,16 @@
 import { describe, it, expect } from 'vitest'
 import { secp256k1 } from '@noble/curves/secp256k1.js'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { hashTypedData } from 'viem'
 
 import { AgentRunner } from '../src/agent/agent-runner'
 import type { OnChainReader, WalletSigner } from '../src/agent/agent-runner'
 import type { IPFSFetcher } from '../src/registry/ipfs-fetcher'
 import {
   DEFAULT_DERIVATION_MESSAGE,
+  DEFAULT_EIP712_PRIMARY_TYPE,
+  DEFAULT_EIP712_PURPOSE,
+  buildPayloadKeyTypedData,
   bytesToHex,
   deriveKeyPairFromWallet,
   derivePrivateKeyFromSignature,
@@ -19,9 +23,11 @@ import {
   generateAesKey,
   generateKeyPair,
   getPublicKey,
+  hexToBytes,
   packAgentForPublish,
   unpackAgent,
 } from '../src/core/crypto'
+import type { Eip712TypedData } from '../src/core/crypto'
 import type { AgentPayload, AgentPrivatePayload, EncryptedPayload } from '../src/core/types'
 import { ActoraError, ActoraErrorCode } from '../src/core/types'
 
@@ -49,6 +55,18 @@ const WALLET_PRIVATE_KEY = '11'.repeat(32)
 function deterministicSignMessage(message: string): string {
   const msgHash = sha256(new TextEncoder().encode(message))
   const sig = secp256k1.sign(msgHash, WALLET_PRIVATE_KEY)
+  return '0x' + bytesToHex(sig.toCompactRawBytes()) + sig.recovery.toString(16).padStart(2, '0')
+}
+
+/** RFC 6979-style deterministic eth_signTypedData_v4 stand-in (real EIP-712 digest). */
+function deterministicSignTypedData(typedData: Eip712TypedData): string {
+  const digest = hashTypedData({
+    domain: typedData.domain,
+    types: typedData.types,
+    primaryType: typedData.primaryType,
+    message: typedData.message,
+  } as Parameters<typeof hashTypedData>[0])
+  const sig = secp256k1.sign(hexToBytes(digest.slice(2)), WALLET_PRIVATE_KEY)
   return '0x' + bytesToHex(sig.toCompactRawBytes()) + sig.recovery.toString(16).padStart(2, '0')
 }
 
@@ -199,6 +217,158 @@ describe('deriveKeyPairFromWallet', () => {
         assertDeterministic: true,
       }),
     ).rejects.toThrow(/not RFC 6979 deterministic/)
+  })
+})
+
+// ── v2: EIP-712 typed-data derivation (`eip712-hkdf`) ──────────────────────
+// Same HKDF construction as v1; only *what is signed* changes. v1 stays
+// supported so already-published payloads remain decryptable.
+
+describe('buildPayloadKeyTypedData', () => {
+  it('fills in the frozen v2 defaults and lowercases the address', () => {
+    const typed = buildPayloadKeyTypedData(WALLET_ADDRESS)
+    expect(typed.domain).toEqual({ name: 'Actora Agent Payload', version: '2' })
+    expect(typed.primaryType).toBe(DEFAULT_EIP712_PRIMARY_TYPE)
+    expect(typed.types.PayloadKey).toEqual([
+      { name: 'address', type: 'address' },
+      { name: 'purpose', type: 'string' },
+      { name: 'version', type: 'uint256' },
+    ])
+    expect(typed.message).toEqual({
+      address: WALLET_ADDRESS.toLowerCase(),
+      purpose: DEFAULT_EIP712_PURPOSE,
+      version: 2,
+    })
+  })
+
+  it('carries no timestamp/nonce (the signature must be replayable forever)', () => {
+    const a = buildPayloadKeyTypedData(WALLET_ADDRESS)
+    const b = buildPayloadKeyTypedData(WALLET_ADDRESS)
+    expect(a).toEqual(b)
+    expect(JSON.stringify(a.message)).not.toMatch(/time|nonce|deadline|expir/i)
+  })
+
+  it('applies overrides without mutating the exported defaults', () => {
+    const typed = buildPayloadKeyTypedData(WALLET_ADDRESS, {
+      domain: { chainId: 56 },
+      primaryType: 'Custom',
+    })
+    expect(typed.domain).toEqual({ name: 'Actora Agent Payload', version: '2', chainId: 56 })
+    expect(typed.primaryType).toBe('Custom')
+    expect(DEFAULT_EIP712_PRIMARY_TYPE).toBe('PayloadKey')
+  })
+
+  it('rejects a missing address', () => {
+    expect(() => buildPayloadKeyTypedData('')).toThrow(/Address is required/)
+  })
+})
+
+describe("deriveKeyPairFromWallet ({ mode: 'eip712-hkdf' })", () => {
+  const v2 = {
+    mode: 'eip712-hkdf' as const,
+    signTypedData: async (t: Eip712TypedData) => deterministicSignTypedData(t),
+    address: WALLET_ADDRESS,
+  }
+
+  it('is deterministic and round-trips publish → decrypt', async () => {
+    const first = await deriveKeyPairFromWallet(v2)
+    const second = await deriveKeyPairFromWallet({ ...v2 })
+    expect(second).toEqual(first)
+    expect(secp256k1.utils.isValidPrivateKey(first.privateKey)).toBe(true)
+
+    const { encryptedPayload, eciesEncryptedKey } = encryptedFixture(first.publicKey)
+    expect(unpackAgent(encryptedPayload, eciesEncryptedKey, first.privateKey).prompt).toBe(
+      AGENT.prompt,
+    )
+  })
+
+  it('derives a different key than v1 for the same address (info prefix v2)', async () => {
+    const v1 = await deriveKeyPairFromWallet({
+      signMessage: async (m: string) => deterministicSignMessage(m),
+      address: WALLET_ADDRESS,
+    })
+    expect((await deriveKeyPairFromWallet(v2)).privateKey).not.toBe(v1.privateKey)
+    expect(
+      derivePrivateKeyFromSignature('0x' + 'ab'.repeat(65), WALLET_ADDRESS, {
+        mode: 'eip712-hkdf',
+      }),
+    ).not.toBe(derivePrivateKeyFromSignature('0x' + 'ab'.repeat(65), WALLET_ADDRESS))
+  })
+
+  it('binds the address in both the typed data and the HKDF info (same 口径 ⇒ same key)', async () => {
+    const lower = await deriveKeyPairFromWallet(v2)
+    const upper = await deriveKeyPairFromWallet({ ...v2, address: WALLET_ADDRESS.toUpperCase() })
+    expect(upper.privateKey).toBe(lower.privateKey)
+
+    const other = await deriveKeyPairFromWallet({
+      ...v2,
+      address: '0x1111111111111111111111111111111111111111',
+    })
+    expect(other.privateKey).not.toBe(lower.privateKey)
+  })
+
+  it('fails to decrypt once a frozen v2 value changes (domain / types / infoPrefix)', async () => {
+    const published = await deriveKeyPairFromWallet(v2)
+    const { encryptedPayload, eciesEncryptedKey } = encryptedFixture(published.publicKey)
+
+    for (const override of [
+      { typedData: { domain: { name: 'Other' } } },
+      { infoPrefix: 'agent-payload-encryption/v3' },
+      { typedData: { message: { version: 3 } } },
+      {
+        typedData: {
+          types: {
+            PayloadKey: [
+              { name: 'address', type: 'address' },
+              { name: 'purpose', type: 'string' },
+              { name: 'version', type: 'string' },
+            ],
+          },
+          message: { version: '3' },
+        },
+      },
+    ]) {
+      const rotated = await deriveKeyPairFromWallet({ ...v2, ...override })
+      expect(rotated.privateKey).not.toBe(published.privateKey)
+      expect(() => unpackAgent(encryptedPayload, eciesEncryptedKey, rotated.privateKey)).toThrow()
+    }
+  })
+
+  it('requires signTypedData and detects non-deterministic wallets', async () => {
+    await expect(
+      deriveKeyPairFromWallet({
+        mode: 'eip712-hkdf',
+        signMessage: async (m: string) => deterministicSignMessage(m),
+        address: WALLET_ADDRESS,
+      }),
+    ).rejects.toThrow(/requires a signTypedData/)
+
+    let call = 0
+    await expect(
+      deriveKeyPairFromWallet({
+        ...v2,
+        signTypedData: async (t: Eip712TypedData) => deterministicSignTypedData(t) + (call++ ? '00' : ''),
+        assertDeterministic: true,
+      }),
+    ).rejects.toThrow(/not RFC 6979 deterministic/)
+  })
+
+  it('keeps v1 working when mode is omitted (no regression for published payloads)', async () => {
+    const published = await deriveKeyPairFromWallet({
+      signMessage: async (m: string) => deterministicSignMessage(m),
+      address: WALLET_ADDRESS,
+    })
+    const { encryptedPayload, eciesEncryptedKey } = encryptedFixture(published.publicKey)
+    expect(unpackAgent(encryptedPayload, eciesEncryptedKey, published.privateKey).prompt).toBe(
+      AGENT.prompt,
+    )
+    // Explicit v1 mode is byte-identical to the omitted-mode default.
+    const explicit = await deriveKeyPairFromWallet({
+      mode: 'personal-sign-hkdf',
+      signMessage: async (m: string) => deterministicSignMessage(m),
+      address: WALLET_ADDRESS,
+    })
+    expect(explicit).toEqual(published)
   })
 })
 

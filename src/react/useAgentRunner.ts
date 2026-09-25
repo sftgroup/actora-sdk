@@ -13,15 +13,19 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { usePublicClient, useWalletClient } from 'wagmi'
-import type { Address } from 'viem'
+import type { Address, TypedDataDomain } from 'viem'
 
 import { AgentRunner } from '../agent/agent-runner'
 import type { AgentRunContext, OnChainReader } from '../agent/agent-runner'
 import { IPFSFetcher } from '../registry/ipfs-fetcher'
 import { KNOWN_CHAINS } from '../config/config'
 import type { ChainConfig } from '../config/config'
-import { DEFAULT_DERIVATION_MESSAGE, derivePrivateKeyFromSignature } from '../core/crypto'
-import type { WalletKeyDerivationParams } from '../core/crypto'
+import {
+  DEFAULT_DERIVATION_MESSAGE,
+  buildPayloadKeyTypedData,
+  derivePrivateKeyFromSignature,
+} from '../core/crypto'
+import type { DerivationMode, Eip712Types, WalletKeyDerivationParams } from '../core/crypto'
 
 // ── IdentityRegistry ABI (minimal — only what useAgent needs) ──────────────
 
@@ -64,16 +68,35 @@ const SUBSCRIPTION_MANAGER_ABI = [
 
 /**
  * OPT-IN browser-wallet decryption. EIP-1193 wallets cannot export the account
- * private key, so the payload key is derived from a deterministic
- * `personal_sign` signature instead (personal_sign + HKDF-SHA256).
+ * private key, so the payload key is derived from a deterministic signature
+ * instead: `personal_sign` text (v1) or EIP-712 typed data (v2), both fed into
+ * the same HKDF-SHA256 construction.
  *
  * The derived key never leaves the browser and the account key is untouched.
- * `message` / `salt` / `infoPrefix` must stay byte-frozen once agents are
- * published with them — changing any of them makes existing payloads
- * undecryptable.
+ * Once agents are published with a set of values, that whole set is frozen:
+ *
+ *   v1 `personal-sign-hkdf` : `message` / `salt` / `infoPrefix`
+ *   v2 `eip712-hkdf`        : `domain` / `types` / `primaryType` / `infoPrefix`
+ *                             (the typed-data message is derived from the
+ *                              address, never from user input)
+ *
+ * Changing any of them makes existing payloads undecryptable. v1 and v2
+ * coexist — old payloads stay decryptable with `mode: 'personal-sign-hkdf'`.
  */
 export interface WalletKeyDerivationConfig extends WalletKeyDerivationParams {
-  mode: 'personal-sign-hkdf'
+  /**
+   * `'personal-sign-hkdf'` (v1): signs a frozen text message — wallets render
+   * it as a blind-sign prompt.
+   * `'eip712-hkdf'` (v2): signs EIP-712 typed data — the wallet shows a
+   * structured, domain-scoped prompt.
+   */
+  mode: DerivationMode
+  /** v2 only: override the EIP-712 domain (defaults to `DEFAULT_EIP712_DOMAIN`). */
+  domain?: Record<string, unknown>
+  /** v2 only: override the EIP-712 types (defaults to `DEFAULT_EIP712_TYPES`). */
+  types?: Eip712Types
+  /** v2 only: override the EIP-712 primary type (defaults to `PayloadKey`). */
+  primaryType?: string
 }
 
 export interface UseAgentRunnerConfig {
@@ -186,9 +209,13 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
 
   const derivationCacheKey = encryptionKeyDerivation
     ? [
+        encryptionKeyDerivation.mode,
         encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE,
         encryptionKeyDerivation.salt ?? '',
         encryptionKeyDerivation.infoPrefix ?? '',
+        encryptionKeyDerivation.domain ? JSON.stringify(encryptionKeyDerivation.domain) : '',
+        encryptionKeyDerivation.primaryType ?? '',
+        encryptionKeyDerivation.types ? JSON.stringify(encryptionKeyDerivation.types) : '',
       ].join('|')
     : ''
 
@@ -235,11 +262,31 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
               if (derivedKeyRef.current?.cacheKey === cacheKey) {
                 return derivedKeyRef.current.privateKey
               }
-              const message = encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE
-              const signature = await walletClient.signMessage({
-                account: walletClient.account,
-                message,
-              })
+
+              let signature: string
+              if (encryptionKeyDerivation.mode === 'eip712-hkdf') {
+                // v2: sign EIP-712 typed data — structured, domain-scoped prompt
+                // instead of a blind text signature.
+                const typedData = buildPayloadKeyTypedData(address, {
+                  domain: encryptionKeyDerivation.domain,
+                  types: encryptionKeyDerivation.types,
+                  primaryType: encryptionKeyDerivation.primaryType,
+                })
+                signature = await walletClient.signTypedData({
+                  account: walletClient.account,
+                  domain: typedData.domain as TypedDataDomain,
+                  types: typedData.types,
+                  primaryType: typedData.primaryType,
+                  message: typedData.message,
+                })
+              } else {
+                const message = encryptionKeyDerivation.message ?? DEFAULT_DERIVATION_MESSAGE
+                signature = await walletClient.signMessage({
+                  account: walletClient.account,
+                  message,
+                })
+              }
+
               const privateKey = derivePrivateKeyFromSignature(
                 signature,
                 address,
@@ -254,8 +301,8 @@ export function useAgentRunner(config: UseAgentRunnerConfig): UseAgentRunnerResu
         // wagmi walletClient never exposes the account private key (EIP-1193).
         throw new Error(
           'EIP-1193 wallets cannot export the account private key. Pass ' +
-          '`encryptionKeyDerivation: { mode: "personal-sign-hkdf" }` to useAgentRunner to derive ' +
-          'a separate payload key from a deterministic wallet signature.'
+          '`encryptionKeyDerivation: { mode: "personal-sign-hkdf" | "eip712-hkdf" }` to ' +
+          'useAgentRunner to derive a separate payload key from a deterministic wallet signature.'
         )
       },
     }
