@@ -9,10 +9,12 @@ import { hashTypedData } from 'viem'
 import { AgentRunner } from '../src/agent/agent-runner'
 import type { OnChainReader, WalletSigner } from '../src/agent/agent-runner'
 import type { IPFSFetcher } from '../src/registry/ipfs-fetcher'
+import type { IPFSUploader } from '../src/ipfs/ipfs-uploader'
 import {
   DEFAULT_DERIVATION_MESSAGE,
   DEFAULT_EIP712_PRIMARY_TYPE,
   DEFAULT_EIP712_PURPOSE,
+  PAYLOAD_KEY_MODE_ATTRIBUTE,
   buildPayloadKeyTypedData,
   bytesToHex,
   deriveKeyPairFromWallet,
@@ -24,7 +26,10 @@ import {
   generateKeyPair,
   getPublicKey,
   hexToBytes,
+  isDerivationMode,
   packAgentForPublish,
+  publishAgent,
+  readPayloadKeyMode,
   unpackAgent,
 } from '../src/core/crypto'
 import type { Eip712TypedData } from '../src/core/crypto'
@@ -217,6 +222,35 @@ describe('deriveKeyPairFromWallet', () => {
         assertDeterministic: true,
       }),
     ).rejects.toThrow(/not RFC 6979 deterministic/)
+  })
+
+  it('checks determinism by default since 0.19.0, and can be opted out', async () => {
+    let call = 0
+    const signer = async (m: string) => deterministicSignMessage(m + call++)
+    await expect(
+      deriveKeyPairFromWallet({ signMessage: signer, address: WALLET_ADDRESS }),
+    ).rejects.toThrow(/not RFC 6979 deterministic/)
+
+    call = 0
+    await expect(
+      deriveKeyPairFromWallet({
+        signMessage: signer,
+        address: WALLET_ADDRESS,
+        assertDeterministic: false,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ privateKey: expect.any(String) }))
+  })
+
+  it('round-trips the derived pair as a self-check (selfCheck default on)', async () => {
+    const wallet = { signMessage: async (m: string) => deterministicSignMessage(m), address: WALLET_ADDRESS }
+    const checked = await deriveKeyPairFromWallet(wallet)
+    const unchecked = await deriveKeyPairFromWallet({ ...wallet, selfCheck: false })
+    expect(unchecked).toEqual(checked)
+
+    // The returned pair is usable as advertised: it wraps and unwraps.
+    expect(eciesDecrypt(eciesEncrypt('ab'.repeat(32), checked.publicKey), checked.privateKey)).toBe(
+      'ab'.repeat(32),
+    )
   })
 })
 
@@ -497,5 +531,87 @@ describe('private key accepts an optional 0x prefix', () => {
     for (const bad of ['0xabc', 'zz'.repeat(32), prefixed + '00']) {
       expect(() => eciesDecrypt(eciesEncryptedKey, bad)).toThrow(/32-byte hex/)
     }
+  })
+})
+
+// ── Pre-publish self-check + mode binding ──────────────────────────────────
+// `tokenURI` is immutable once minted, so a wrong key / wrong mode must be
+// caught before anything is uploaded.
+
+describe('publishAgent pre-publish self-check', () => {
+  function fakeUploader(seen: string[]) {
+    return {
+      isConfigured: () => true,
+      uploadEncryptedPayload: async () => {
+        seen.push('encrypted')
+        return { cid: 'cid-enc', url: 'https://gw/cid-enc', size: 1 }
+      },
+      uploadJSON: async () => {
+        seen.push('public')
+        return { cid: 'cid-pub', url: 'https://gw/cid-pub', size: 1 }
+      },
+    } as unknown as IPFSUploader
+  }
+
+  it('passes when the private key matches the published public key', async () => {
+    const { privateKey, publicKey } = await deriveKeyPairFromWallet({
+      signMessage: async (m: string) => deterministicSignMessage(m),
+      address: WALLET_ADDRESS,
+    })
+    const seen: string[] = []
+    const result = await publishAgent({
+      agent: AGENT,
+      publicKey,
+      uploader: fakeUploader(seen),
+      verifyWithPrivateKey: privateKey,
+    })
+    expect(result.eciesEncryptedKeyHex).toBeTruthy()
+    expect(seen).toEqual(['encrypted', 'public'])
+  })
+
+  it('aborts before uploading when the key does not match (e.g. wrong mode)', async () => {
+    const { publicKey } = await deriveKeyPairFromWallet({
+      signMessage: async (m: string) => deterministicSignMessage(m),
+      address: WALLET_ADDRESS,
+    })
+    // Same signer, v2 mode ⇒ different private key than the v1-derived publicKey.
+    const wrongMode = await deriveKeyPairFromWallet({
+      mode: 'eip712-hkdf',
+      signTypedData: async (t: Eip712TypedData) => deterministicSignTypedData(t),
+      address: WALLET_ADDRESS,
+    })
+
+    const seen: string[] = []
+    await expect(
+      publishAgent({
+        agent: AGENT,
+        publicKey,
+        uploader: fakeUploader(seen),
+        verifyWithPrivateKey: wrongMode.privateKey,
+      }),
+    ).rejects.toThrow(/Pre-publish self-check failed/)
+    expect(seen).toEqual([]) // nothing was uploaded ⇒ nothing can be minted
+  })
+})
+
+describe('payload_key_mode attribute', () => {
+  it('round-trips a known mode and ignores unknown values', () => {
+    expect(PAYLOAD_KEY_MODE_ATTRIBUTE).toBe('payload_key_mode')
+    expect(
+      readPayloadKeyMode({ [PAYLOAD_KEY_MODE_ATTRIBUTE]: 'eip712-hkdf' }),
+    ).toBe('eip712-hkdf')
+    expect(
+      readPayloadKeyMode({ [PAYLOAD_KEY_MODE_ATTRIBUTE]: 'personal-sign-hkdf' }),
+    ).toBe('personal-sign-hkdf')
+    // Absent ⇒ the caller must fall back; unknown ⇒ do not silently guess.
+    expect(readPayloadKeyMode({})).toBeUndefined()
+    expect(readPayloadKeyMode({ [PAYLOAD_KEY_MODE_ATTRIBUTE]: 'webauthn-prf-hkdf' })).toBeUndefined()
+  })
+
+  it('isDerivationMode narrows only the modes this SDK can derive', () => {
+    expect(isDerivationMode('personal-sign-hkdf')).toBe(true)
+    expect(isDerivationMode('eip712-hkdf')).toBe(true)
+    expect(isDerivationMode('webauthn-prf-hkdf')).toBe(false)
+    expect(isDerivationMode(undefined)).toBe(false)
   })
 })

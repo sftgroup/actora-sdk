@@ -13,6 +13,8 @@
 import { encodeAbiParameters, parseAbiParameters, stringToHex, hexToString } from 'viem'
 import type { PublicClient, WalletClient, Address, Hash } from 'viem'
 import type { OnChainAgentMetadata } from '../core/types'
+import { PAYLOAD_KEY_MODE_ATTRIBUTE, isDerivationMode } from '../core/crypto'
+import type { DerivationMode } from '../core/crypto'
 import { ZERO_ADDRESS } from '../subscription/subscription'
 
 // ── Minimal ABI Fragments ──────────────────────────────────────────────────
@@ -370,6 +372,24 @@ export class AgentRegistry {
       agentId,
       Object.entries(merged).map(([key, value]) => ({ key, value }))
     )
+  }
+
+  /**
+   * 记录该档案的 payload 派生 mode（链上属性 `payload_key_mode`）。
+   *
+   * 仅记录「宣称」值，合约不做校验，但这是跨实现的**标准字段**：
+   * 第三方 runner 据此判断该用 v1 还是 v2 派生，否则「用错 mode」与
+   * 「载荷损坏」在现象上完全一样。
+   *
+   *   await registry.setPayloadKeyMode(agentId, 'eip712-hkdf')
+   *
+   * 读取：`readPayloadKeyMode(await registry.getAttributes(agentId))`
+   */
+  async setPayloadKeyMode(agentId: number, mode: DerivationMode): Promise<Hash> {
+    if (!isDerivationMode(mode)) {
+      throw new Error(`Unknown derivation mode: ${String(mode)}`)
+    }
+    return this.setAttributes(agentId, { [PAYLOAD_KEY_MODE_ATTRIBUTE]: mode })
   }
 
   /**

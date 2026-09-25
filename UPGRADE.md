@@ -1,5 +1,70 @@
 # @actora/sdk Upgrade Guide
 
+## v0.18.0 → v0.19.0（2026-09-25，建议升级）
+
+> 主题：**密钥来源与发布护栏**。把「服务端生成密钥对」写成受支持的一等用法，补上三道**铸造前**护栏，
+> 并提供跨实现的派生绑定字段；同时在文档里明确「签名派生路径的固有边界」（v1/v2 都适用），
+> 并收回 0.18.0 README 里 v2「请求来源在钱包里可验证」的**过度声明**（该说法不成立）。
+> **无 API 破坏**，但有一处**默认值变更**（见下）。
+
+### ⚠️ 唯一的行为变更：`assertDeterministic` 默认开启
+
+`deriveKeyPairFromWallet()` 的 `assertDeterministic` 由「默认关」改为**默认开**（多一次签名提示），
+用于拦下非确定性钱包 —— 这类钱包发布的 Agent **将来必然解不开**，属静默数据损坏。
+若你的发布流程必须只弹一次签名，显式传 `assertDeterministic: false`；运行侧不受影响。
+
+### 新增 1：铸造前自检（推荐接入）
+
+```ts
+const { privateKey, publicKey } = await deriveKeyPairFromWallet({ … })
+
+const result = await publishAgent({
+  agent, publicKey, uploader,
+  verifyWithPrivateKey: privateKey,   // 解不开就不上传、不铸造
+})
+```
+
+`verifyWithPrivateKey` 会在**任何上传之前**用该私钥解开本次 ECIES 包裹的 AES key 并比对，
+不通过直接抛错（`Pre-publish self-check failed: …`）。这也是发现 **v1/v2 mode 用错**的最省事手段 ——
+`tokenURI` 铸造后不可改，用错 mode 等于永久解不开，而现象与「载荷损坏」完全一样。
+
+另新增默认开启的 `selfCheck`（派生后 ECIES 往返自检，纯计算、无额外提示）。
+
+### 新增 2：派生 mode 的标准绑定字段 `payload_key_mode`
+
+```ts
+await registry.setPayloadKeyMode(agentId, 'eip712-hkdf')      // 写入（走 setAttributes，读回合并）
+readPayloadKeyMode(await registry.getAttributes(agentId))     // 读取 → 'eip712-hkdf' | 'personal-sign-hkdf' | undefined
+isDerivationMode(value)                                       // 类型守卫
+PAYLOAD_KEY_MODE_ATTRIBUTE                                    // 'payload_key_mode'
+```
+
+合约不校验该字段（它只是「宣称」值），但这是**跨实现的标准约定**：第三方 runner 据此判断该用 v1 还是 v2。
+未知值 `readPayloadKeyMode()` 返回 `undefined`（**不要猜**）。
+
+### 新增 3：文档化的「托管密钥」形态（服务化 Agent 推荐）
+
+「密钥对由服务端生成、不经任何钱包签名」现在是**受支持的一等用法**（能力一直存在：
+`publishAgent({ publicKey })` 的公钥本就是入参，`generateKeyPair()` 是公开 API），README §5.12
+新增该节，含标准配置（`unpack` / `aesKeyHex`）、安全建议（KMS/HSM 存放、轮换、审计）与
+**不可迁移性硬性提示**（`tokenURI` 铸后不可改 ⇒ 私钥丢失 = 载荷永久解不开）。
+
+### 文档更正：签名路径的固有边界
+
+README §5.12 现在明确写出：**只要 IKM 来自签名，「公开 / 无时效 / 可复用」就是必然代价**，
+v1 与 v2 同样适用；加时间戳/nonce 会让密钥不可复原；在 typed data 里加「来源域名」字符串
+**不构成密码学绑定**（字段公开可复现、钱包对离线 typed data 不做 origin 校验）。
+同时已删除 0.18.0 README 中「v2 请求来源在钱包里可验证」这句错误表述。
+
+### 升级动作
+
+- `npm install @actora/sdk@0.19.0`；
+- 发布流程加 `verifyWithPrivateKey`（有私钥可用时）并补写 `payload_key_mode` 属性；
+- 若发布流程必须只弹一次签名 → 显式传 `assertDeterministic: false`；
+- 用托管密钥的集成方：按 README「托管密钥」一节的**密钥备份与恢复**检查项自查一遍。
+
+---
+
 ## v0.17.1 → v0.18.0（2026-09-25，建议升级）
 
 > payload 密钥派生新增 **v2：EIP-712 模式（`eip712-hkdf`）**。把「被签的东西」从自由文本换成 EIP-712 typed data，

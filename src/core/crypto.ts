@@ -403,6 +403,18 @@ export interface PublishAgentConfig {
   aesKeyHex?: string
   /** Agent name for IPFS metadata */
   agentName?: string
+  /**
+   * Pre-publish self-check: the payload private key that will be used to
+   * decrypt this agent. When provided, the ECIES-wrapped AES key is unwrapped
+   * with it before anything is uploaded, and a mismatch aborts with an error.
+   *
+   * This is the cheapest way to catch a wrong key or a derivation-`mode`
+   * mismatch **before minting** — `tokenURI` is immutable, so an agent minted
+   * with the wrong key can never be decrypted. Recommended whenever the private
+   * key is available at publish time (e.g. straight from
+   * `deriveKeyPairFromWallet()`).
+   */
+  verifyWithPrivateKey?: string
 }
 
 export interface PublishAgentResult {
@@ -441,6 +453,27 @@ export async function publishAgent(config: PublishAgentConfig): Promise<PublishA
 
   const key = aesKeyHex ?? generateAesKey()
   const eciesEncryptedKeyHex = eciesEncrypt(key, publicKey)
+
+  // Pre-publish self-check — must run before any upload/mint, because a wrong
+  // private key (or a v1/v2 derivation mismatch) is only discoverable here.
+  if (config.verifyWithPrivateKey) {
+    let unwrapped: string
+    try {
+      unwrapped = eciesDecrypt(eciesEncryptedKeyHex, config.verifyWithPrivateKey)
+    } catch (err) {
+      throw new Error(
+        'Pre-publish self-check failed: the supplied private key cannot unwrap the AES key ' +
+        `(${(err as Error).message}). Check that it matches \`publicKey\` and that the publish ` +
+        'and decrypt paths use the same derivation mode. Nothing was uploaded.'
+      )
+    }
+    if (unwrapped !== key) {
+      throw new Error(
+        'Pre-publish self-check failed: the unwrapped AES key does not match the one used to ' +
+        'encrypt the payload. Nothing was uploaded.'
+      )
+    }
+  }
 
   // Split into private (encrypted) and public payloads
   const privatePayload: import('./types').AgentPrivatePayload = {
@@ -650,6 +683,37 @@ export function buildPayloadKeyTypedData(
 /** Stop after this many HKDF attempts to find a valid secp256k1 scalar. */
 const DEFAULT_DERIVATION_MAX_ATTEMPTS = 8
 
+/** Fixed plaintext used by the pre-return ECIES round-trip self-check. */
+const SELF_CHECK_PROBE = '6163746f72612d73656c662d636865636b' // utf8 "actora-self-check"
+
+/** Narrow an untrusted value (e.g. an on-chain attribute) to `DerivationMode`. */
+export function isDerivationMode(value: unknown): value is DerivationMode {
+  return value === 'personal-sign-hkdf' || value === 'eip712-hkdf'
+}
+
+/**
+ * On-chain attribute key recording which derivation mode an agent was published
+ * with. Read it to decide how to derive the payload key before attempting a
+ * decrypt — without it a third-party runner has to guess (and guessing wrong
+ * looks exactly like "the payload is corrupt").
+ *
+ * Write it with `AgentRegistry.setPayloadKeyMode()` (or `setAttributes`).
+ */
+export const PAYLOAD_KEY_MODE_ATTRIBUTE = 'payload_key_mode'
+
+/**
+ * Read the recorded derivation mode off a link/attribute map. Returns
+ * `undefined` when absent — or when the value was written by a newer SDK
+ * version that this one does not understand (check the raw attribute to tell
+ * those two cases apart).
+ */
+export function readPayloadKeyMode(
+  attributes: Record<string, string | undefined>
+): DerivationMode | undefined {
+  const raw = attributes[PAYLOAD_KEY_MODE_ATTRIBUTE]
+  return isDerivationMode(raw) ? raw : undefined
+}
+
 export interface WalletKeyDerivationParams {
   /**
    * Which signature the payload key is derived from. Defaults to
@@ -731,12 +795,21 @@ export interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
   /** Signer address (any case) — bound into the HKDF info string. */
   address: string
   /**
-   * Opt-in safety check: sign twice and require identical signatures. Catches
-   * non-deterministic (non-RFC-6979) wallets, whose published agents could
-   * never be decrypted again. Costs one extra prompt — recommended for the
-   * publishing path, unnecessary for decryption.
+   * **Default `true`** (since 0.19.0): sign twice and require identical
+   * signatures. Catches non-deterministic (non-RFC-6979) wallets, whose
+   * published agents could never be decrypted again — a *silent* data-loss bug
+   * that only surfaces weeks later. Costs one extra prompt; pass `false` to
+   * skip it (e.g. when the signer is already known to be deterministic, or the
+   * flow must not prompt twice).
    */
   assertDeterministic?: boolean
+  /**
+   * **Default `true`**: ECIES round-trip the derived pair (wrap + unwrap a
+   * probe) before returning, so a public key whose private key cannot unwrap
+   * the AES key fails here instead of after minting. Pure computation, no extra
+   * prompt.
+   */
+  selfCheck?: boolean
 }
 
 /**
@@ -747,8 +820,13 @@ export interface DeriveKeyPairFromWalletArgs extends WalletKeyDerivationParams {
  * structured, domain-scoped prompt instead of a blind `personal_sign`.
  *
  * Publishing: `publishAgent({ agent, publicKey, uploader })` with the returned
- * `publicKey`. Decrypting: pass the returned `privateKey` to `AgentRunner` via
- * `WalletSigner.deriveEncryptionKey()` (or `unpackAgent()` directly).
+ * `publicKey`; pass `verifyWithPrivateKey: <privateKey>` there to dry-run the
+ * unwrap before anything is minted. Decrypting: pass the returned `privateKey`
+ * to `AgentRunner` via `WalletSigner.deriveEncryptionKey()` (or `unpackAgent()`
+ * directly).
+ *
+ * Two safety checks run by default (`assertDeterministic`, `selfCheck`) — both
+ * guard against publishing an agent that can never be decrypted again.
  */
 export async function deriveKeyPairFromWallet(
   args: DeriveKeyPairFromWalletArgs
@@ -770,7 +848,7 @@ export async function deriveKeyPairFromWallet(
 
   const signature = await sign()
 
-  if (args.assertDeterministic) {
+  if (args.assertDeterministic ?? true) {
     const second = await sign()
     if (second.toLowerCase() !== signature.toLowerCase()) {
       throw new Error(
@@ -783,5 +861,17 @@ export async function deriveKeyPairFromWallet(
   }
 
   const privateKey = derivePrivateKeyFromSignature(signature, args.address, args)
-  return { privateKey, publicKey: getPublicKey(privateKey) }
+  const publicKey = getPublicKey(privateKey)
+
+  if (args.selfCheck ?? true) {
+    const probe = SELF_CHECK_PROBE
+    if (eciesDecrypt(eciesEncrypt(probe, publicKey), privateKey) !== probe) {
+      throw new Error(
+        'Self-check failed: the derived key pair cannot round-trip ECIES. ' +
+        'Do not publish with this key — the agent would be undecryptable.'
+      )
+    }
+  }
+
+  return { privateKey, publicKey }
 }

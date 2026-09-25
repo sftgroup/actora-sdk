@@ -1,4 +1,4 @@
-# @actora/sdk v0.18.0
+# @actora/sdk v0.19.0
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
@@ -100,7 +100,7 @@ const { planId } = await sub.createPlan({
 ```bash
 npm install @actora/sdk
 # 或锁定版本
-npm install @actora/sdk@0.18.0
+npm install @actora/sdk@0.19.0
 ```
 
 > 包内含 `examples/`（B 端可运行样例）与 `UPGRADE.md`（逐版本迁移指南），安装后可从
@@ -534,6 +534,7 @@ const { finalText } = await loop.run('帮我做这件事')
 - **`generateKeyPair()`** → `{ privateKey, publicKey }`；**`getPublicKey(privateKey)`**
 - **`derivePrivateKeyFromSignature(signature, address, params?)`** / **`deriveKeyPairFromWallet({ mode?, signMessage, signTypedData?, address, … })`** —— 浏览器钱包密钥派生（v1 `personal_sign` / v2 EIP-712 + HKDF-SHA256，见 §5.12）；配套 **`buildPayloadKeyTypedData(address, overrides?)`** 与 `DEFAULT_EIP712_DOMAIN` / `DEFAULT_EIP712_TYPES` / `DEFAULT_EIP712_PRIMARY_TYPE` / `DEFAULT_DERIVATION_INFO_PREFIX_V2`
 - **`generateAesKey()`**；高级封装：`encryptPayload / decryptPayload / packAgentForPublish / publishAgent / unpackAgent`
+- **发布绑定与自检**：`publishAgent({ ..., verifyWithPrivateKey })`（铸造前 dry-run 解包）；`PAYLOAD_KEY_MODE_ATTRIBUTE` / `readPayloadKeyMode(attrs)` / `isDerivationMode(v)` / `AgentRegistry.setPayloadKeyMode(agentId, mode)`
 
 ```ts
 import { generateKeyPair, aesEncrypt, aesDecrypt, eciesEncrypt, eciesDecrypt } from '@actora/sdk'
@@ -586,6 +587,11 @@ v1 的 `personal_sign` 有两个先天问题：钱包一律按**文本盲签**�
 且文案**公开固定、可无限复用**（任何钓鱼站让用户签同一串文本即可派生出该用户的 payload 私钥）。v2 把「被签的东西」
 换成 EIP-712 typed data，**派生算法不变**，钱包会展示结构化、带 domain 的签名请求。
 
+> ⚠️ **v2 只解决「呈现」，不解决「可复用」**：typed data 依然是公开常量、无时效、可无限重放，
+> 上面那条攻击路径照旧成立（见「前置条件与失败语义」）。**换编码消不掉 IKM 是签名这个事实**；
+> 要消掉它必须换密钥来源 —— 首选托管密钥（见「托管密钥」一节），或未来的 passkey（WebAuthn PRF）
+> 路线（选型评估中，尚未交付）。
+
 默认值（SDK 内置，**刻意不含时间戳**）：
 
 ```ts
@@ -604,12 +610,13 @@ message     = { address: <地址小写>, purpose: 'agent-payload-encryption', ve
 ```ts
 import { deriveKeyPairFromWallet } from '@actora/sdk'
 
-const { publicKey } = await deriveKeyPairFromWallet({
+const { privateKey, publicKey } = await deriveKeyPairFromWallet({
   mode: 'eip712-hkdf',
   signTypedData: (typedData) => walletClient.signTypedData({ account, ...typedData }),
   address: account.address,
-  assertDeterministic: true,   // 发布路径建议开启：多签一次即可拦下非确定性钱包
+  // assertDeterministic 自 0.19.0 起默认开启；如需关掉：assertDeterministic: false
 })
+// 铸造前自检：把 privateKey 传给 publishAgent({ ..., verifyWithPrivateKey: privateKey })
 ```
 
 运行侧（默认值即上表；`domain` / `types` / `primaryType` 可覆盖，覆盖后同样进入冻结面）：
@@ -628,16 +635,35 @@ const { ctx, error } = useAgentRunner({
 import { deriveKeyPairFromWallet, publishAgent } from '@actora/sdk'
 
 // v1（沿用既有档案）
-const { publicKey } = await deriveKeyPairFromWallet({
+const { privateKey, publicKey } = await deriveKeyPairFromWallet({
   signMessage: (message) => walletClient.signMessage({ account, message }),
   address: account.address,
-  assertDeterministic: true,   // 发布路径建议开启：多签一次即可拦下非确定性钱包
+  // 0.19.0 起默认开启（多签一次即拦下非确定性钱包）；确认钱包确定性时可关掉
+  // assertDeterministic: true,
 })
 // v2（新档案推荐）：见上一节 `mode: 'eip712-hkdf'`
 
-const result = await publishAgent({ agent, publicKey, uploader })
+// 铸造前自检：私钥解不开就不上传、不铸造（tokenURI 铸后不可改）
+const result = await publishAgent({
+  agent, publicKey, uploader,
+  verifyWithPrivateKey: privateKey,
+})
 // result.encryptedCid → 链上 tokenURI；result.eciesEncryptedKeyHex → 元数据属性
+
+// 铸造后记录派生 mode —— 跨实现的标准字段，第三方 runner 据此选解包方式
+await registry.setPayloadKeyMode(agentId, 'personal-sign-hkdf')   // 或 'eip712-hkdf'
 ```
+
+发布链路上有三道**铸造前**护栏，都会在「已经不可回退」之前拦住你：
+
+| 护栏 | 何时触发 | 默认 |
+|---|---|---|
+| `assertDeterministic` | 钱包对同一载荷返回不同签名（非 RFC 6979）⇒ 将来必然解不开 | **开**（0.19.0+） |
+| `selfCheck` | 派生出的密钥对无法 ECIES 往返（密钥本身有问题） | **开**（0.19.0+） |
+| `verifyWithPrivateKey` | 传入的私钥解不开本次包裹的 AES key（**含 v1/v2 mode 用错**） | 传了才查 |
+
+读取模式用 `readPayloadKeyMode(await registry.getAttributes(agentId))`（属性名常量 `PAYLOAD_KEY_MODE_ATTRIBUTE` = `payload_key_mode`；
+未知值返回 `undefined`，不要猜 —— 「用错 mode」与「载荷损坏」现象完全一样）。
 
 #### 运行 / 解密（浏览器）
 
@@ -667,12 +693,64 @@ new AgentRunner({ reader, wallet, aesKeyHex: sessionAesKey })
 
 密钥来源优先级：`config.unpack` → `config.aesKeyHex` → `wallet.deriveEncryptionKey()` → `wallet.getPrivateKey()`。
 
+#### 托管密钥：不经钱包派生（服务端生成密钥对）—— 受支持的一等用法
+
+**「密钥对由服务端生成、不经任何钱包签名」是受支持的发布形态**，不是 hack：`publishAgent({ publicKey })` 的公钥本来就是入参，
+`generateKeyPair()` 也是公开 API。**服务化 Agent（咨询走自有后端）建议优先用这条路径** —— 它没有「可复用签名」问题
+（根本没有签名），也不受钱包确定性、盲签提示、`personal_sign` 文案复用的影响。
+
+```ts
+import { generateKeyPair, publishAgent, AgentRegistry } from '@actora/sdk'
+
+// ① 服务端生成密钥对（私钥只留在你的 KMS / HSM，永不进浏览器）
+const { privateKey, publicKey } = generateKeyPair()
+
+// ② 用公钥发布；顺便做铸造前自检 —— 私钥能解开才算通过
+const result = await publishAgent({
+  agent, publicKey, uploader,
+  verifyWithPrivateKey: privateKey,        // 0.19.0+：不通过就不上传、不铸造
+})
+
+// ③ 铸造并记录派生 mode（第三方 runner 据此选解包方式）
+const { agentId } = await registry.register(result.encryptedCid, {
+  eciesEncryptedKey: result.eciesEncryptedKeyHex,
+})
+await registry.setPayloadKeyMode(agentId, 'personal-sign-hkdf')   // 或 'eip712-hkdf'
+```
+
+运行侧（**只在这两类位置持有密钥**，不要下发到浏览器）：
+
+```ts
+// A. 后端解包后自行使用（推荐）：完全自定义解包
+new AgentRunner({
+  reader, wallet,
+  unpack: async (encryptedPayload, eciesEncryptedKey) => {
+    const aesKeyHex = await kms.unwrapAgentKey(agentId)   // 你的 KMS / HSM
+    return decryptPayload(encryptedPayload, aesKeyHex)
+  },
+})
+// B. 让 SDK 用托管私钥做 ECIES 解包（私钥需从安全存储短期取出）
+new AgentRunner({ reader, wallet, aesKeyHex: await kms.getAgentAesKey(agentId) })
+```
+
+**安全建议**
+
+| 项 | 建议 |
+|---|---|
+| 存放 | 私钥进 KMS / HSM / 云 KMS（`unpack` 路径下私钥**无需离开 KMS**）；绝不写进前端、CDN、仓库或日志；`.env` 只放引用 ID，不放密钥本体 |
+| 轮换 | **每个档案一把密钥**（`generateKeyPair()` 每次调用都新生成），不要跨档案复用；单个档案的密钥**不能轮换** —— 见下一条 |
+| 审计 | 记录「谁在何时用哪个 keyId 解包了哪个 agentId」；解包是敏感操作，建议限流 + 告警 |
+| ⚠️ 不可迁移 | `tokenURI` / 链上属性**铸造后不可改**，而 payload 的 AES key 是用**发布时的公钥**包裹的 —— 所以**这把私钥丢了就是载荷永久解不开，且不能换**（不能像钱包派生那样「换个设备重新派生」）。请把「密钥备份与恢复」当成上线前的硬性检查项 |
+| 与签名派生对比 | 托管密钥：无签名可复用、可服务端审计，但**中心化托管**（你的运维即信任边界）；签名派生：非托管、用户自持，但有上述固有边界。按业务选择，SDK 两条都支持 |
+
 #### 前置条件与失败语义
 
 | 项 | 说明 |
 |---|---|
-| 确定性签名 | 必须满足 RFC 6979（MetaMask / Ledger / Trezor 满足；部分 MPC / 托管钱包不满足），v1 的 `personal_sign` 与 v2 的 `eth_signTypedData_v4` 同样适用。非确定性钱包一旦发布，Agent 就再也解不开，故发布路径务必开 `assertDeterministic` |
-| 域隔离 | 派生载荷只在 Actora 使用：任何能让同一地址对**同一载荷**签名的场景都等价于拿到内容密钥；换地址即失效。v1 是自由文本（任何站点都能复现该提示词）；**v2 的 EIP-712 domain + `types` 把「同一载荷」限定为本 SDK 的固定结构**，请求来源在钱包里可验证 |
+| 确定性签名 | 必须满足 RFC 6979（MetaMask / Ledger / Trezor 满足；部分 MPC / 托管钱包不满足），v1 的 `personal_sign` 与 v2 的 `eth_signTypedData_v4` 同样适用。非确定性钱包一旦发布，Agent 就再也解不开（**静默数据损坏**），故 `deriveKeyPairFromWallet()` 自 0.19.0 起**默认开启** `assertDeterministic`（多一次签名提示）；确认签名为确定性时可显式关掉 |
+| 域隔离 | 派生载荷只在 Actora 使用：任何能让同一地址对**同一载荷**签名的场景都等价于拿到内容密钥；换地址即失效。v1 是自由文本（任何站点都能复现该提示词）；**v2 的 EIP-712 `domain` + `types` 让钱包渲染结构化、带域分隔符的请求**，比盲签可辨 |
+| ⚠️ 签名路径的固有边界（v1 与 v2 同样适用） | **只要 IKM 来自签名，「公开 / 无时效 / 可复用」就是必然代价**：文案与 typed data 都是公开常量，钓鱼站让用户签同一份载荷即可派生出其 payload 私钥，配合公开的 `encryptedPayloadCid` 解开私有载荷。这不是 v1 的 bug，换编码消不掉 —— 加时间戳 / nonce 会**直接让密钥不可复原**（载荷永久解不开），所以「抗重放」与「可复原」在这条路径上互斥。**在 typed data 里加「来源域名」字符串也不构成密码学绑定**：字段值公开可复现、当前主流钱包对离线 typed data 不做 origin 校验（origin 仅用于 UI 展示）。真正做到来源绑定需要非签名密钥来源（见「托管密钥」一节） |
+| 密钥来源（除签名外） | ① **托管密钥**（服务端生成密钥对，见上一节）；② 签名派生（v1 / v2）。前者没有「可复用签名」问题，因为根本没有签名 |
 | 错误码 | 钱包不提供任何密钥来源 → `WALLET_NOT_CONNECTED`（**不再**被包成 `DECRYPTION_FAILED`）；密钥不对/密文损坏 → `DECRYPTION_FAILED`，原始错误见 `error.cause` |
 | 订阅者能否解密 | **不能**。payload 的 AES key 由**发布时的公钥**包裹，只有持有对应私钥的发布方解得开。订阅者侧要拿到明文 prompt/skills，需走托管对话，或由发布方经 MCP 下发 |
 
@@ -1024,6 +1102,7 @@ POST /api/v1/payments
 | 0.17.0 | **链上属性写入助手**：`registry.setAttributes()`（读回合并后整组写回，补写公开 `skills` 不必手写合约调用）/ `overwriteAttributes()` / `toAttributes()`；配套**托管对话多链修复**（`agentId` 模式的 BSC / Ethereum / Base 404 与 403，见 §5.12） |
 | 0.17.1 | **DX 修复**：`eciesDecrypt()` / `unpackAgent()` / `getPublicKey()` 的 `privateKey` 接受可选 `0x` 前缀（此前抛底层库的模糊错误），非法格式时报 `Invalid private key: expected 32-byte hex…`；`UPGRADE.md` 加入 npm 包 `files`（此前包内缺失）；修正 `package-lock.json` 残留旧包名 `@agentxv2/sdk`。**无 API 破坏** |
 | 0.18.0 | **payload 密钥派生 v2（EIP-712）**：`encryptionKeyDerivation: { mode: 'eip712-hkdf' }` 与 `deriveKeyPairFromWallet({ mode, signTypedData })`，把「被签的东西」从自由文本换成 EIP-712 typed data（`buildPayloadKeyTypedData` + `DEFAULT_EIP712_*`），HKDF 构造与 IKM 不变、`infoPrefix` 版本化为 `agent-payload-encryption/v2`；**v1（`personal-sign-hkdf`）保留且行为不变**，旧档案继续可解 |
+| 0.19.0 | **密钥来源与发布护栏**：① 托管密钥（服务端生成密钥对）写成**受支持的一等用法**（含安全建议 / 不可迁移性）；② `deriveKeyPairFromWallet()` 默认开启 `assertDeterministic`（可关）并新增默认开启的 `selfCheck`；③ `publishAgent({ verifyWithPrivateKey })` **铸造前** dry-run 解包校验（含 v1/v2 mode 用错）；④ 新增跨实现的派生绑定字段 `payload_key_mode`（`PAYLOAD_KEY_MODE_ATTRIBUTE` / `readPayloadKeyMode()` / `isDerivationMode()` / `AgentRegistry.setPayloadKeyMode()`）；⑤ README 明确「签名路径固有边界」并收回 v2「来源可验证」的过度声明。**若发布流程依赖单次签名提示，请显式传 `assertDeterministic: false`** |
 
 ---
 
