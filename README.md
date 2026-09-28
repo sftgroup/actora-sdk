@@ -859,6 +859,16 @@ new AgentRunner({ reader, wallet, aesKeyHex: await kms.getAgentAesKey(agentId) }
 | ⚠️ 不可迁移 | `tokenURI` / 链上属性**铸造后不可改**，而 payload 的 AES key 是用**发布时的公钥**包裹的 —— 所以**这把私钥丢了就是载荷永久解不开，且不能换**（不能像钱包派生那样「换个设备重新派生」）。请把「密钥备份与恢复」当成上线前的硬性检查项 |
 | 与签名派生对比 | 托管密钥：无签名可复用、可服务端审计，但**中心化托管**（你的运维即信任边界）；签名派生：非托管、用户自持，但有上述固有边界。按业务选择，SDK 两条都支持 |
 
+> **参考实现（Actora 平台自带）**：平台侧已按本节形态落地一条托管链路，可直接对照 —— 网关
+> `POST /api/v1/agents/payload-keys` 为**每个 Agent 生成一把独立密钥对**（`keyId` + 公钥返回，
+> 私钥用环境主密钥 `PAYLOAD_KEY_KEK` 经 AES-256-GCM 封装后落库，明文不回传、不上链），
+> 前端用公钥 `eciesEncrypt(aesKey, publicKey)` 包裹后把 `eciesEncryptedKey` 与 `payload_key_id`
+> 写进链上属性（**不需要第二笔交易** —— `agentId → keyId → 公钥` 的绑定随铸造元数据一并上链），
+> 作者可随时 `POST /api/v1/agents/payload-keys/:keyId/export` **可重复导出**私钥（带 `export_count` /
+> `last_exported_at` 审计）。落库表见 `gateway/db/migrations/039_agent_payload_keys.sql`。
+> 注意：该链路用 `payload_key_mode = 'hosted'` 标注，**不属于** v1/v2/v3 三个 `DerivationMode`
+> （`readPayloadKeyMode()` 对未知值返回 `undefined`，第三方 runner 见此值应改用「调用平台/导出私钥解包」而非派生）。
+
 #### 前置条件与失败语义
 
 | 项 | 说明 |
