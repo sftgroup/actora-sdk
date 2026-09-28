@@ -591,7 +591,7 @@ infoPrefix = "agent-payload-encryption/v1"    // v1
 - **Runner 在终端用户浏览器**（用户自持访问权、去中心化叙事）⇒ 服务端私钥下不到浏览器，
   只能在 v1 / v2 / v3 之间选。
 
-| | v1 `personal-sign-hkdf` | v2 `eip712-hkdf` | v3 `webauthn-prf-hkdf` | **私钥托管** |
+| 维度 | v1 `personal-sign-hkdf` | v2 `eip712-hkdf` | v3 `webauthn-prf-hkdf` | **私钥托管** |
 |---|---|---|---|---|
 | IKM 来源 | `personal_sign` 签名 | `eth_signTypedData_v4` 签名 | WebAuthn PRF 输出（**非签名**） | **无**（服务端 `generateKeyPair()`） |
 | 对浏览器/设备的依赖 | 注入式钱包 | 注入式钱包 + EIP-712 | **WebAuthn + PRF**（移动端钱包内置浏览器普遍没有） | **无**（解密在服务端） |
