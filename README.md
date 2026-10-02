@@ -869,6 +869,37 @@ new AgentRunner({ reader, wallet, aesKeyHex: await kms.getAgentAesKey(agentId) }
 > 注意：该链路用 `payload_key_mode = 'hosted'` 标注，**不属于** v1/v2/v3 三个 `DerivationMode`
 > （`readPayloadKeyMode()` 对未知值返回 `undefined`，第三方 runner 见此值应改用「调用平台/导出私钥解包」而非派生）。
 
+**读取闭环（用托管私钥把 Agent 跑起来）**：发布方（owner）在 `payload_key_mode === 'hosted'` 时按下面的路径取回私钥并解包：
+
+```ts
+import { unpackAgent, eciesDecrypt } from '@actora/sdk/core'
+import { AgentRunner } from '@actora/sdk'
+
+// 1) 链上取密文引用（eciesEncryptedKey 是用托管公钥包裹的 AES key）
+const attrs = await reader.getAttributes(agentId)
+//   → { encryptedPayloadCid, eciesEncryptedKey, payload_key_mode, payload_key_id }
+const encryptedPayload = await ipfsFetcher.fetchEncryptedPayload(attrs.encryptedPayloadCid)
+
+// 2) owner 向平台按 agentId 取回私钥（可重复导出 + 审计；需登录该 Agent 的钱包）
+const res = await fetch(
+  `${GATEWAY}/api/v1/agents/payload-keys/by-agent/${agentId}/export?chain=oxachain`,
+  { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
+)
+const { key } = await res.json()   // { privateKey, keyId, publicKey, exportCount, ... }
+
+// 3a) 一步解包得到 { prompt, skills, mcp }
+const privatePayload = unpackAgent(encryptedPayload, attrs.eciesEncryptedKey, key.privateKey)
+
+// 3b) 或把 AES key 交给 Runner（私钥只在内存短暂存在，不落盘）
+const runner = new AgentRunner({
+  reader, wallet,
+  aesKeyHex: eciesDecrypt(attrs.eciesEncryptedKey, key.privateKey),
+})
+```
+
+> 网关不可用时，Studio 会**本地兜底**生成密钥对（`payload_key_mode = 'local'`，平台不托管）并在发布成功后
+> 立即下载私钥；此时改用 `unpack` / `aesKeyHex` 传入该本地私钥即可（`by-agent` 导出对它是 404）。
+
 #### 前置条件与失败语义
 
 | 项 | 说明 |
