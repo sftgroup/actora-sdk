@@ -77,7 +77,7 @@ describe('SubscriptionPayments', () => {
       expect(url).toBe('https://gw.example.com/api/v1/payments')
       expect(method).toBe('POST')
       expect(body).toMatchObject({
-        method: 'fiat', subscriber: '0xabc', period: 'month', currency: 'usd', chain: 'oxachain',
+        method: 'fiat', subscriber: '0xabc', period: 'month', currency: 'usd', chain: 'bsc',
         amountCents: 499, pricing: { planId: 2 }, metadata: { agentId: 3, planId: 2 },
         successUrl: 'https://x.app/success',
       })
@@ -92,7 +92,7 @@ describe('SubscriptionPayments', () => {
       const res = await make().pay({ method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc' })
       expect(res.redirect).toBe(true)
       const { body } = firstCall(fetchMock.mock.calls[0]!)
-      expect(body).toMatchObject({ subscriber: '0xabc', period: 'month', currency: 'usd', chain: 'oxachain' })
+      expect(body).toMatchObject({ subscriber: '0xabc', period: 'month', currency: 'usd', chain: 'bsc' })
       expect(body.amountCents).toBeUndefined()
     })
 
@@ -152,7 +152,7 @@ describe('SubscriptionPayments', () => {
       expect(url).toContain('/api/v1/payments/access?')
       expect(url).toContain('subscriber=0xabc')
       expect(url).toContain('agentId=3')
-      expect(url).toContain('chain=oxachain')
+      expect(url).toContain('chain=bsc')
     })
 
     it('requires a gatewayUrl', async () => {

@@ -2,7 +2,7 @@ import { Address, PublicClient } from 'viem';
 
 /**
  * MultiEndpointRegistry SDK
- * OxaChain L1 + Sepolia — multi-endpoint management for AI Agents
+ * Multi-chain (BSC / Ethereum / Base + Sepolia) — multi-endpoint management for AI Agents
  */
 
 interface EndpointRecord {

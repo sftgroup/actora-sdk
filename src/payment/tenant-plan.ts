@@ -22,7 +22,7 @@ export interface TenantPlanPaymentsConfig {
   gatewayUrl: string
   /** Optional gateway bearer token (B-end wallet JWT). */
   accessToken?: string
-  /** Which chain to verify on-chain payments on (default: oxachain). */
+  /** Which chain to verify on-chain payments on (default: bsc). */
   chain?: ChainKey
 }
 
@@ -56,7 +56,7 @@ export class TenantPlanPayments {
       purpose: 'tenant-plan',
       tenantPlanId: input.tenantPlanId,
       subscriber: input.subscriber,
-      chain: this.config.chain ?? 'oxachain',
+      chain: this.config.chain ?? 'bsc',
       txHash: input.txHash,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,

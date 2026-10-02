@@ -32,7 +32,7 @@ export interface SubscriptionPaymentsConfig {
   subscriptionManager?: SubscriptionManager
   /** Wallet used to automatically fund an x402 payment (if txHash is not supplied). */
   walletClient?: WalletClient
-  /** Which chain to verify x402 payments on (default: oxachain). */
+  /** Which chain to verify x402 payments on (default: bsc). */
   chain?: ChainKey
 }
 
@@ -112,7 +112,7 @@ export class SubscriptionPayments {
     if (!this.client) {
       throw new Error('hasAccess() requires a gatewayUrl')
     }
-    const res = await this.client.access(subscriber, agentId, (this.config.chain ?? 'oxachain') as PaymentsChainKey)
+    const res = await this.client.access(subscriber, agentId, (this.config.chain ?? 'bsc') as PaymentsChainKey)
     return res.active === true
   }
 
@@ -127,7 +127,7 @@ export class SubscriptionPayments {
       priceWei: info.x402?.priceWei ?? '0',
       payTo: info.x402?.payTo ?? '',
       network: info.x402?.network ?? '',
-      chain: (info.x402?.chain ?? this.config.chain ?? 'oxachain') as ChainKey,
+      chain: (info.x402?.chain ?? this.config.chain ?? 'bsc') as ChainKey,
     }
   }
 
@@ -151,7 +151,7 @@ export class SubscriptionPayments {
       subscriber: input.subscriber,
       period: input.period ?? 'month',
       currency: input.currency ?? 'usd',
-      chain: (this.config.chain ?? 'oxachain') as PaymentsChainKey,
+      chain: (this.config.chain ?? 'bsc') as PaymentsChainKey,
       // amountCents is optional — the Gateway derives the USD amount from the
       // on-chain plan price when omitted (FIAT_TOKEN_USD_PRICE on the Gateway).
       amountCents: input.amountCents,
@@ -194,7 +194,7 @@ export class SubscriptionPayments {
         planId: input.planId,
         period: input.period ?? 'month',
         txHash,
-        chain: this.config.chain ?? 'oxachain',
+        chain: this.config.chain ?? 'bsc',
       }),
     })
     return {

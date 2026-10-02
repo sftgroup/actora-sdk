@@ -14,7 +14,6 @@ Agent = Prompt + Skills + MCP
 
 | 链 | chainId | IdentityRegistry | SubscriptionManager | 原生代币 | RPC |
 |----|---------|------------------|---------------------|----------|-----|
-| OxaChain L1 | 19505 | `0xbf5F9db266c8c97E3334466C88597Eb758AfE212` | `0x019AC9d945467478Dd371CDbD70cb2f325800E6B` | OXA | `https://rpc-oxa.0xainet.top` |
 | BSC | 56 | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` | `0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b` | BNB | `https://bsc-rpc.publicnode.com` |
 | Ethereum | 1 | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE` | ETH | `https://ethereum-rpc.publicnode.com` |
 | Base | 8453 | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` | `0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29` | ETH | `https://base-rpc.publicnode.com` |
@@ -24,25 +23,16 @@ Agent = Prompt + Skills + MCP
 
 ### 各链完整合约地址（6 个核心合约）
 
-4 条市场链（OxaChain / BSC / Ethereum / Base）均已部署全套 6 个合约，可直接用于链上铸造 / 订阅 / A2A。下表与 `KNOWN_CHAINS[chainId].contracts` 一一对应：
+3 条对外市场链（BSC / Ethereum / Base）均已部署全套 6 个合约，可直接用于链上铸造 / 订阅 / A2A。下表与 `KNOWN_CHAINS[chainId].contracts` 一一对应：
 
-| 合约 | OxaChain (19505) | BSC (56) |
-|------|------------------|----------|
-| IdentityRegistry | `0xbf5F9db266c8c97E3334466C88597Eb758AfE212` | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` |
-| SubscriptionManager | `0x019AC9d945467478Dd371CDbD70cb2f325800E6B` | `0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b` |
-| A2AProtocolRegistry | `0x7F42a7dC4A0F3C107664C3750bE1B5B6fa6BEb86` | `0x842F0B9E85f5aBd9752B5ea20Cc888b94dBb5E16` |
-| ReputationRegistry | `0x6a18C2664E1b42063860d864b6448b824d7B843F` | `0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee` |
-| ConfigurationRegistry | `0x07280674ccc2898Fd038A9e3C22005CA83ffD2F8` | `0xd9B984cF591dc1C3663991e7D75c44C2bDE1a9BB` |
-| MultiEndpointRegistry | `0xB361d04F49000013FC131D3C59C41c8486C64f8c` | `0x80Bc36634693d7935109f5cdbc95E64a9c1bdA6a` |
-
-| 合约 | Ethereum (1) | Base (8453) |
-|------|---------------|-------------|
-| IdentityRegistry | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` |
-| SubscriptionManager | `0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE` | `0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29` |
-| A2AProtocolRegistry | `0x09f6C8f9AE6CEf12C4a078c91aeb2EcCb7CbD012` | `0x2172145F2A8f7A66019A4F4048Af46844243607E` |
-| ReputationRegistry | `0x72C1236bc425b1A6129b76400aE7b26c1fbFAeFE` | `0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e` |
-| ConfigurationRegistry | `0x2Bf6962301164A301e4fEC9036aB97edcBcE1bCa` | `0x5EF8c35738311B971A64de64487E1E304Ae53993` |
-| MultiEndpointRegistry | `0xE93fbED3Df2a5D357856f2f2712B3c1Ebb8d026f` | `0xB8065829dBb450B8fC7375D910521EA641EC6Ee5` |
+| 合约 | BSC (56) | Ethereum (1) | Base (8453) |
+|------|----------|--------------|-------------|
+| IdentityRegistry | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` |
+| SubscriptionManager | `0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b` | `0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE` | `0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29` |
+| A2AProtocolRegistry | `0x842F0B9E85f5aBd9752B5ea20Cc888b94dBb5E16` | `0x09f6C8f9AE6CEf12C4a078c91aeb2EcCb7CbD012` | `0x2172145F2A8f7A66019A4F4048Af46844243607E` |
+| ReputationRegistry | `0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee` | `0x72C1236bc425b1A6129b76400aE7b26c1fbFAeFE` | `0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e` |
+| ConfigurationRegistry | `0xd9B984cF591dc1C3663991e7D75c44C2bDE1a9BB` | `0x2Bf6962301164A301e4fEC9036aB97edcBcE1bCa` | `0x5EF8c35738311B971A64de64487E1E304Ae53993` |
+| MultiEndpointRegistry | `0x80Bc36634693d7935109f5cdbc95E64a9c1bdA6a` | `0xE93fbED3Df2a5D357856f2f2712B3c1Ebb8d026f` | `0xB8065829dBb450B8fC7375D910521EA641EC6Ee5` |
 
 > 部署起始块（网关索引 `*_SYNC_FROM_BLOCK` 用）：BSC SM `122277574`、Ethereum SM `25992521`、Base SM `51401326`。
 > 程序化访问请直接读 `KNOWN_CHAINS[chainId].contracts`（六个字段同名），避免复制粘贴出错。
@@ -83,7 +73,7 @@ const { planId } = await sub.createPlan({
 
 - **B 端优先 Base / Ethereum**：Gas 便宜或生态成熟，原生币即 ETH；
 - **测试联调用 Sepolia**：无真实资金风险；
-- **OxaChain L1 为主链**：平台默认支付/验证链（`SubscriptionPayments` 的 `chain` 参数默认 `'oxachain'`）；
+- **BSC 为对外默认链**：平台默认支付/验证链（`SubscriptionPayments` 的 `chain` 参数默认 `'bsc'`）；
 - 每链的 `SubscriptionManager` 独立托管各自链上的订阅计划与资金，**订阅与铸造必须在同一链上完成**（`agentId` 是链内 ID）。
 
 ### RPC 注意事项
@@ -196,7 +186,7 @@ const sub = new SubscriptionManager({
   walletClient,
 })
 
-// 原生币计划（OXA / BNB / ETH）
+// 原生币计划（BNB / ETH）
 const { planId, txHash } = await sub.createPlan({
   agentId,
   price: parseEther('0.01'),          // 原生币 wei
@@ -311,7 +301,7 @@ function makeChainClients(chainId: number) {
 
 ### 价格单位
 
-- 原生币计划：`price` 为该链原生代币的 wei（OXA / BNB / ETH）；
+- 原生币计划：`price` 为该链原生代币的 wei（BNB / ETH）；
 - ERC20 计划：`price` 为代币最小单位 —— **ETH/Base 的 USDT/USDC 是 6 位（1e6），BSC 的 USDT/USDC 是 18 位（1e18）**；
 - 跨链比较价格时统一用 `getPlan(planId).price` + `plan.payToken` 判断计价币种；
 - 中心化 Agent 的价格以 `priceWei` 字符串返回（见 `CentralPlan`），避免 JS 精度丢失。
@@ -330,14 +320,14 @@ const subManagerAddr = base.contracts.subscriptionManager
 链上模块（`AgentRegistry` / `SubscriptionManager`）是「哪条链的合约就读哪条链」，但**托管对话（`ConversationClient`,
 `agentId` 模式）相反**：你只要给出 `agentId`，平台会自己判断该 Agent 在哪条链、以及你在哪条链上有权。
 
-- 平台从 `agents` 表列出该 `agentId` 存在的**全部候选链**（按 `oxachain → central → bsc → ethereum → base`
+- 平台从 `agents` 表列出该 `agentId` 存在的**全部候选链**（按平台内部固定的链优先序：内部测试链 → 中心化 → BSC → Ethereum → Base
   排序），逐链判定你（`X-End-User-Id` 或租户钱包）**是否拥有 / 已订阅**，取**第一条放行的链**；
 - 这条链会一路贯穿「访问判定 → 取 Agent 上下文 → 组装工具」，所以不会出现「按 A 链判权、按 B 链取到别人的同名 Agent」；
-- **为什么必须这样**：各链**独立编号**，同一个数字 ID 可同时在多条链存在（实测 oxachain 与 bsc 都有 `id=2`，
+- **为什么必须这样**：各链**独立编号**，同一个数字 ID 可同时在多条链存在（实测 BSC 与 Ethereum 都有 `id=2`，
   且是**两个不同的 Agent**）。只看「优先序第一条」会取错，故按「你在哪条链有权」来锚定；
 - 该判定发生在平台侧，**托管对话请求里不接受调用方指定链**（`chat` / `stream` / `createTask` 均无需、
   也无法传 `chain`）；只有只读的 `GET /api/v1/agents/:id?chain=` 可以显式指定链；
-- 历史行为（`0.16.0` 及以前）：该路径只认 `oxachain` / `central`，Agent 发在 BSC / Ethereum / Base 时
+- 历史行为（`0.16.0` 及以前）：该路径只认内部测试链 / 中心化市场，Agent 发在 BSC / Ethereum / Base 时
   详情接口直接 **404**、或判权失败 **403** —— 已在 `0.17.0` 随平台侧修复。
 
 > 实践建议：集成时**不要猜链、也不要声明链**，直接给出 `agentId` 调 `POST /api/v1/agent/runs` 或
@@ -407,7 +397,7 @@ const detail = await sub.getSubscriptionDetail(subscriptionId)
 
 - **用途**：三条支付轨道统一入口。`chain` = 链上 SubscriptionManager；`fiat` = Stripe 卡；`x402` = 原生币按期支付（走网关统一端点）。
 - **构造**：`new SubscriptionPayments({ gatewayUrl?, accessToken?, subscriptionManager?, walletClient?, chain? })`
-  - `chain` 取值：`'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base'`（默认 `'oxachain'`）
+  - `chain` 取值：`'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base'`（默认 `'bsc'`）
 - **关键方法**：`pay(PaySubscriptionInput)`、`hasAccess(agentId, subscriber)`（跨轨道访问检查）、`fetchX402Info()`（x402 发现：price/payTo/network）
 - **`PaySubscriptionInput` 字段**（以源码为准）：`planId, agentId, method, subscriber?, valueWei?, approveTokenFirst?, amountCents?, currency?, successUrl?, cancelUrl?, txHash?, priceWei?, period?`
   - `priceWei`：中心化 Agent（无链上计划）时直接指定价格；
@@ -462,7 +452,7 @@ const { plan } = await central.createPlan(agent.id, { priceWei: '100000000000000
 
 | 类 | 用途 | 构造 | 关键方法 |
 |----|------|------|----------|
-| `BillingClient` | B 端余额预检（x402 台账，委托前判断余额是否够按次付费） | `{ gatewayUrl, apiKey?, accessToken?, endUserId? }` | `getBalance({ endUserId? })` → `{ balance, balanceWei, currency: 'OXA', subject, payTo?, priceWei? }` |
+| `BillingClient` | B 端余额预检（x402 台账，委托前判断余额是否够按次付费） | `{ gatewayUrl, apiKey?, accessToken?, endUserId? }` | `getBalance({ endUserId? })` → `{ balance, balanceWei, currency, subject, payTo?, priceWei? }`（`currency` 为该链原生币符号） |
 | `TenantPlanPayments` | 购买平台订阅档位（`purpose='tenant-plan'`，绑定租户配额） | `{ gatewayUrl, accessToken?, chain? }` | `buy({ tenantPlanId, subscriber, method, txHash?, successUrl?, cancelUrl? })` |
 | `AgentWalletConfig` | agent 自主 MPC 钱包管理（A2A 按次付费自动代付） | `{ baseUrl, adminKey? \| apiKey? }` | `bindWallet(...)`、`authorizePaymentSession(...)`、`status(agentId)`、`list()`、`unbind(agentId)` |
 | `A2AClient` | a2a-pay 支付意图两段式（create → pay → settle） | `{ baseUrl, accessToken? }`（`ClientOptions`） | `create({ payer, amountWei, payee?, chain?, metadata? })`、`settle({ paymentId, txHash, chain? })` |
@@ -882,7 +872,7 @@ const encryptedPayload = await ipfsFetcher.fetchEncryptedPayload(attrs.encrypted
 
 // 2) owner 向平台按 agentId 取回私钥（可重复导出 + 审计；需登录该 Agent 的钱包）
 const res = await fetch(
-  `${GATEWAY}/api/v1/agents/payload-keys/by-agent/${agentId}/export?chain=oxachain`,
+  `${GATEWAY}/api/v1/agents/payload-keys/by-agent/${agentId}/export?chain=bsc`,
   { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
 )
 const { key } = await res.json()   // { privateKey, keyId, publicKey, exportCount, ... }
@@ -965,13 +955,13 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
   写入后等网关 fallback 全量同步（`AGENTS_SYNC_INTERVAL_SEC`，默认 120s；或直接 `POST /api/v1/agents-sync`），
   再等 Conversation Service 上下文缓存 TTL（`CONTEXT_CACHE_TTL_SEC`，默认 300s）过期。
   注意：网关**未监听** `MetadataUpdated` 事件（只监听 `AgentRegistered` / `Transfer`）⇒ 属性变更只能靠上述轮询或手动触发；
-- **多链（0.17.0 起）**：托管对话的 `agentId` 模式已支持 OxaChain / BSC / Ethereum / Base 全链。调用方**不需要、
+- **多链（0.17.0 起）**：托管对话的 `agentId` 模式已支持 BSC / Ethereum / Base 全链。调用方**不需要、
   也无法**声明链（详见 §4「托管对话：链由平台解析」）：网关从 `agents` 表列出该 `agentId` 存在的候选链
-  （按 `oxachain → central → bsc → ethereum → base` 排序），逐链判定调用方是否拥有 / 已订阅，取**第一条放行的链**，
+  （按平台内部固定的链优先序：内部测试链 → 中心化 → BSC → Ethereum → Base 排序），逐链判定调用方是否拥有 / 已订阅，取**第一条放行的链**，
   并把它一路下传到 Conversation Service（SSE 单轮与后台任务两条路径都下传，后台任务在 `chat_tasks.chain` 落库）。
-  因此同 ID 跨链冲突（各链独立编号，实测 oxachain 与 bsc 都存在 id=2）不会被取错：只要你在其中一条链上有权，
+  因此同 ID 跨链冲突（各链独立编号，实测 BSC 与 Ethereum 都存在 id=2）不会被取错：只要你在其中一条链上有权，
   系统就会命中那条链。只读的 `GET /api/v1/agents/:id` 支持 `?chain=` 精确指定；不带时按上述优先序跨链解析
-  （历史行为：只命中 `oxachain` / `central`，BSC / Base 会 404 —— 已修复）。
+  （历史行为：只命中内部测试链 / 中心化，BSC / Base 会 404 —— 已修复）。
 
 #### `skills[].execution`：可选，托管对话支持的类型与调用约定
 
@@ -1075,7 +1065,7 @@ partner 租户注册时**不带套餐**（`quota_daily=0`），平台模型列�
 - **托管对话请求里没有 `chain` 参数**（`chat` / `stream` / `createTask` 都一样）——链是平台解析的，不是调用方声明的。
   只有只读的 `GET /api/v1/agents/:id?chain=` 可以显式指定链；
 - **链上操作仍然必须明确链**：`AgentRegistry` / `SubscriptionManager` / `A2AProtocol` 都是「哪条链的合约就读哪条链」，
-  而 `agentId` 是**链内编号**（各链独立，实测 oxachain 与 bsc 都有 `id=2` 且是不同 Agent）⇒ 换链 = 换 ID，需重新铸造 / 订阅。
+  而 `agentId` 是**链内编号**（各链独立，实测 BSC 与 Ethereum 都有 `id=2` 且是不同 Agent）⇒ 换链 = 换 ID，需重新铸造 / 订阅。
 
 ### 托管对话里 Agent 的工具（skills）是空的？
 
@@ -1154,8 +1144,8 @@ BYOK（自带模型 Key）另用三个头逐请求覆盖：`X-LLM-Api-Key` / `X-
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/v1/agents` | 市场列表，支持 `?chain=oxachain\|bsc\|ethereum\|base`、分页 / 标签过滤 |
-| `GET` | `/api/v1/agents/:id` | 详情。缺省**跨链解析**该 ID 所属链（`oxachain → central → bsc → ethereum → base` 优先序）；`?chain=` 可精确指定 |
+| `GET` | `/api/v1/agents` | 市场列表，支持 `?chain=bsc\|ethereum\|base`、分页 / 标签过滤 |
+| `GET` | `/api/v1/agents/:id` | 详情。缺省**跨链解析**该 ID 所属链（平台内部链优先序：内部测试链 → 中心化 → BSC → Ethereum → Base）；`?chain=` 可精确指定 |
 | `GET` | `/api/v1/agents/check-subscription` | 校验订阅态（`subscriber` + `agentId`，可选 `chain`） |
 | `GET` | `/api/v1/chain/health?chain=bsc` | 链索引健康（`status: ok \| degraded \| pending`） |
 | `GET` | `/api/v1/chain/plans/:planId` · `/chain/total` · `/chain/agents` | 实时链上读（SDK 直读合约） |
@@ -1183,11 +1173,11 @@ BYOK（自带模型 Key）另用三个头逐请求覆盖：`X-LLM-Api-Key` / `X-
 // 1) 购买平台档位（partner 开通平台 LLM）
 POST /api/v1/payments
 { "method": "chain", "purpose": "tenant-plan", "tenantPlanId": "<plans.id>",
-  "subscriber": "0xWallet", "chain": "oxachain", "txHash": "0x..." }
+  "subscriber": "0xWallet", "chain": "bsc", "txHash": "0x..." }
 
 // 2) 购买 token 加油包（超出日额度后自动消耗，先到期先用）
 { "method": "chain", "purpose": "token-pack", "packId": "<pack id>",
-  "subscriber": "0xWallet", "chain": "oxachain", "txHash": "0x..." }
+  "subscriber": "0xWallet", "chain": "bsc", "txHash": "0x..." }
 
 // 3) 订阅链上 Agent（原生币 / ERC20）
 { "method": "chain", "purpose": "agent-subscription",

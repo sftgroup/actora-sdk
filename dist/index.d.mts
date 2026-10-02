@@ -94,7 +94,7 @@ interface SubscriptionPaymentsConfig {
     subscriptionManager?: SubscriptionManager;
     /** Wallet used to automatically fund an x402 payment (if txHash is not supplied). */
     walletClient?: WalletClient;
-    /** Which chain to verify x402 payments on (default: oxachain). */
+    /** Which chain to verify x402 payments on (default: bsc). */
     chain?: ChainKey;
 }
 interface PaySubscriptionInput {
@@ -175,7 +175,7 @@ interface TenantPlanPaymentsConfig {
     gatewayUrl: string;
     /** Optional gateway bearer token (B-end wallet JWT). */
     accessToken?: string;
-    /** Which chain to verify on-chain payments on (default: oxachain). */
+    /** Which chain to verify on-chain payments on (default: bsc). */
     chain?: ChainKey;
 }
 interface BuyTenantPlanInput {
@@ -269,7 +269,7 @@ interface BillingClientConfig {
     endUserId?: string;
 }
 interface BalanceResult {
-    /** Balance in OXA as a high-precision decimal string, e.g. "1.500000000000000000". "0" when never funded. */
+    /** Balance (ledger native token) as a high-precision decimal string, e.g. "1.500000000000000000". "0" when never funded. */
     balance: string;
     /** Raw balance in wei (string) — use for exact programmatic comparison against priceWei. */
     balanceWei: string;

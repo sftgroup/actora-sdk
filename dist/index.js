@@ -6265,7 +6265,7 @@ var SubscriptionPayments = class {
     if (!this.client) {
       throw new Error("hasAccess() requires a gatewayUrl");
     }
-    const res = await this.client.access(subscriber, agentId, this.config.chain ?? "oxachain");
+    const res = await this.client.access(subscriber, agentId, this.config.chain ?? "bsc");
     return res.active === true;
   }
   /** x402 protocol discovery (price / pay-to wallet / network). */
@@ -6279,7 +6279,7 @@ var SubscriptionPayments = class {
       priceWei: info.x402?.priceWei ?? "0",
       payTo: info.x402?.payTo ?? "",
       network: info.x402?.network ?? "",
-      chain: info.x402?.chain ?? this.config.chain ?? "oxachain"
+      chain: info.x402?.chain ?? this.config.chain ?? "bsc"
     };
   }
   // ── Rails ───────────────────────────────────────────────────────────────
@@ -6300,7 +6300,7 @@ var SubscriptionPayments = class {
       subscriber: input.subscriber,
       period: input.period ?? "month",
       currency: input.currency ?? "usd",
-      chain: this.config.chain ?? "oxachain",
+      chain: this.config.chain ?? "bsc",
       // amountCents is optional — the Gateway derives the USD amount from the
       // on-chain plan price when omitted (FIAT_TOKEN_USD_PRICE on the Gateway).
       amountCents: input.amountCents,
@@ -6336,7 +6336,7 @@ var SubscriptionPayments = class {
         planId: input.planId,
         period: input.period ?? "month",
         txHash,
-        chain: this.config.chain ?? "oxachain"
+        chain: this.config.chain ?? "bsc"
       })
     });
     return {
@@ -6411,7 +6411,7 @@ var TenantPlanPayments = class {
       purpose: "tenant-plan",
       tenantPlanId: input.tenantPlanId,
       subscriber: input.subscriber,
-      chain: this.config.chain ?? "oxachain",
+      chain: this.config.chain ?? "bsc",
       txHash: input.txHash,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl
@@ -7149,11 +7149,9 @@ var KNOWN_CHAINS = {
     },
     ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"]
   },
-  // OxaChain L1 Mainnet
-  // Chain ID 19505, Clique PoA, Shanghai+Cancun, gas token OXA
+  // 内部测试链（Internal Testnet L1，非对外链）
+  // Chain ID 19505, Clique PoA, Shanghai+Cancun
   // Deployer: 0x8E869A0624fF9e766Df71b5B08897d00E4d260ba
-  // RPC: https://rpc-oxa.0xainet.top
-  // Explorer: https://explorer-oxa.0xainet.top
   // All 6 core contracts deployed 2026-07-14
   19505: {
     chainId: 19505,

@@ -25,7 +25,7 @@ export interface BillingClientConfig {
 }
 
 export interface BalanceResult {
-  /** Balance in OXA as a high-precision decimal string, e.g. "1.500000000000000000". "0" when never funded. */
+  /** Balance (ledger native token) as a high-precision decimal string, e.g. "1.500000000000000000". "0" when never funded. */
   balance: string
   /** Raw balance in wei (string) — use for exact programmatic comparison against priceWei. */
   balanceWei: string

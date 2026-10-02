@@ -1,6 +1,6 @@
 /**
  * MultiEndpointRegistry SDK
- * OxaChain L1 + Sepolia — multi-endpoint management for AI Agents
+ * Multi-chain (BSC / Ethereum / Base + Sepolia) — multi-endpoint management for AI Agents
  */
 import { type PublicClient, type WalletClient, type Address, type Hash, type Chain } from 'viem'
 
