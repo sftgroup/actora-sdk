@@ -107,7 +107,6 @@ const identityRegistryTools: PlatformToolDef[] = [
         tokenURI: str('IPFS URI of the agent public metadata (ipfs://...)'),
         encryptedPayloadCid: str('IPFS CID of the encrypted agent payload'),
         eciesEncryptedKey: str('Hex-encoded ECIES-encrypted AES key for the payload'),
-        aesKeyHex: str('Hex-encoded AES key (stored as metadata)'),
       }, required(['tokenURI', 'encryptedPayloadCid', 'eciesEncryptedKey'])),
     },
   },

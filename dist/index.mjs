@@ -4005,8 +4005,7 @@ var identityRegistryTools = [
       parameters: object({
         tokenURI: str("IPFS URI of the agent public metadata (ipfs://...)"),
         encryptedPayloadCid: str("IPFS CID of the encrypted agent payload"),
-        eciesEncryptedKey: str("Hex-encoded ECIES-encrypted AES key for the payload"),
-        aesKeyHex: str("Hex-encoded AES key (stored as metadata)")
+        eciesEncryptedKey: str("Hex-encoded ECIES-encrypted AES key for the payload")
       }, required(["tokenURI", "encryptedPayloadCid", "eciesEncryptedKey"]))
     }
   },
@@ -4421,12 +4420,11 @@ async function executePlatformTool(toolName, args, ctx) {
     switch (toolName) {
       // ── Identity ──────────────────────────────────
       case "actora_identity_register": {
-        const { tokenURI, encryptedPayloadCid, eciesEncryptedKey, aesKeyHex } = args;
+        const { tokenURI, encryptedPayloadCid, eciesEncryptedKey } = args;
         const metadata = [
           { key: "encryptedPayloadCid", value: encryptedPayloadCid },
           { key: "eciesEncryptedKey", value: eciesEncryptedKey }
         ];
-        if (aesKeyHex) metadata.push({ key: "aesKeyHex", value: aesKeyHex });
         return ctx.agentRegistry.register(tokenURI, metadata);
       }
       case "actora_identity_get":

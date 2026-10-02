@@ -1,6 +1,6 @@
 {
   "name": "@actora/sdk",
-  "version": "0.20.1",
+  "version": "0.20.2",
   "description": "Actora — Decentralized AI Agent SDK with ReAct AgentLoop + Multi-Tenant LLM Providers",
   "main": "dist/index.js",
   "types": "dist/index.d.mts",

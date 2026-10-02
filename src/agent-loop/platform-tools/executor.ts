@@ -13,12 +13,16 @@ export async function executePlatformTool(
     switch (toolName) {
       // ── Identity ──────────────────────────────────
       case 'actora_identity_register': {
-        const { tokenURI, encryptedPayloadCid, eciesEncryptedKey, aesKeyHex } = args as any
+        const { tokenURI, encryptedPayloadCid, eciesEncryptedKey } = args as any
+        // 安全：绝不把明文 AES 密钥（`aesKeyHex`）写入链上元数据。链上元数据公开
+        // 且无法删除，一旦上链即等同泄露、不可回收；需要授权读取时应写
+        // `eciesEncryptedKey`（用所有者公钥 ECIES 包裹后的密文）。
+        // 历史版本曾把传入的 aesKeyHex 原样上链，已在此移除；即使调用方仍传入
+        // 该参数也会被忽略。
         const metadata = [
           { key: 'encryptedPayloadCid', value: encryptedPayloadCid },
           { key: 'eciesEncryptedKey', value: eciesEncryptedKey },
         ]
-        if (aesKeyHex) metadata.push({ key: 'aesKeyHex', value: aesKeyHex })
         return ctx.agentRegistry.register(tokenURI, metadata)
       }
       case 'actora_identity_get':
