@@ -29,7 +29,8 @@ export type {
 // gateway now delegates to the module rails while keeping the HTTP contract
 // identical, so A2AClient / PeriodClient keep their public signatures and
 // B-side callers see zero change.
-export { MPPClient, X402Client, PaymentsClient } from '@0xinfrax/payments'
+// 0.3.0：@0xinfrax/payments 移除 MPP（以及 fiat/Stripe）两条 rail，MPPClient 不再导出。
+export { X402Client, PaymentsClient } from '@0xinfrax/payments'
 export { A2AClient } from './a2a-client'
 export { PeriodClient } from './period-client'
 export type { ClientOptions } from '@0xinfrax/payments'
@@ -39,16 +40,4 @@ export type { ClientOptions } from '@0xinfrax/payments'
 export { BillingClient } from './billing'
 export type { BillingClientConfig, BalanceResult } from './billing'
 
-// t9 (2026-08-17): agent 自主钱包（InfraX MPC）管理客户端 — 绑定/解锁/查询。
-// A2A 委派自动代付由 gateway agent-payer 服务端完成。
-export { AgentWalletConfig } from './agent-wallet'
-export type {
-  AgentWalletConfigOptions,
-  AgentWalletInfo,
-  BindAgentWalletInput,
-  AuthorizePaymentSessionInput,
-  AuthorizePaymentSessionResult,
-  AgentWalletStatus,
-} from './agent-wallet'
-
-export const PAYMENT_VERSION = '0.1.3'
+export const PAYMENT_VERSION = '0.3.0'

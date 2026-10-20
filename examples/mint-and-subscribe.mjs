@@ -12,7 +12,7 @@
  *   2. 环境变量：
  *      - PRIVATE_KEY  铸造/订阅钱包私钥（必填，0x 前缀可选）
  *      - CHAIN_ID     目标链 chainId，默认 8453（Base）。
- *                     可用：19505（OxaChain L1）/ 56（BSC）/ 1（Ethereum）/ 8453（Base）/ 11155111（Sepolia）
+ *                     可用：56（BSC）/ 1（Ethereum）/ 8453（Base）/ 11155111（Sepolia）
  *      - PAY_TOKEN    可选，稳定币计价：'usdt' | 'usdc'（仅 BSC/Ethereum/Base）。
  *                     不设则用原生币（BNB/ETH）计价。
  *   3. 链的 RPC / 合约地址自动从 KNOWN_CHAINS 读取（生产勿硬编码）。
@@ -33,7 +33,6 @@ const CHAIN_ID = Number(process.env.CHAIN_ID ?? 8453)
 const PAY_TOKEN = process.env.PAY_TOKEN?.toLowerCase() || ''
 
 const CHAIN_META = {
-  19505: { name: 'OxaChain L1', symbol: 'OXA' },
   56: { name: 'BNB Smart Chain', symbol: 'BNB' },
   1: { name: 'Ethereum', symbol: 'ETH' },
   8453: { name: 'Base', symbol: 'ETH' },

@@ -13,7 +13,7 @@
 //   1. IdentityRegistry  — register / get / list / exists / metadata
 //   2. SubscriptionManager — plans / subscribe / check / cancel / detail
 //   3. A2AProtocol        — createTask / getTask / completeTask / getUserTasks / card
-//   4. ReputationRegistry — rate / getRating / getReviews
+//   4. ReputationRegistry — get / reviews（只读双模式适配器；写入直接调注册表）
 //   5. ConfigurationRegistry — getConfig / getAgentConfigs / setConfig
 //   6. MultiEndpointRegistry — getEndpoints / getBestEndpoint
 //   7. Gateway API         — chat / tenant / history
@@ -24,6 +24,7 @@ import type { AgentRunner } from '../../agent/agent-runner'
 import type { A2AProtocol } from '../../a2a/a2a'
 import type { SubscriptionManager } from '../../subscription/subscription'
 import type { AgentRegistry } from '../../registry/agent-registry'
+import type { ReputationRegistry } from '../../reputation/reputation'
 import type { IPFSUploader } from '../../ipfs/ipfs-uploader'
 
 // ── Tool Definition Types ──────────────────────────────────────────────────
@@ -42,11 +43,7 @@ export interface PlatformToolContext {
   a2a: A2AProtocol
   subscriptionManager: SubscriptionManager
   agentRegistry: AgentRegistry
-  reputationRegistry?: {
-    rateAgent(agentId: number, rating: number, comment: string): Promise<unknown>
-    getRating(agentId: number): Promise<{ averageRating: number; totalRatings: number }>
-    getReviews(agentId: number): Promise<unknown[]>
-  }
+  reputationRegistry?: ReputationRegistry
   configurationRegistry?: {
     getConfig(agentId: number, key: string): Promise<{ value: string; dataType: string }>
     getAgentConfigs(agentId: number): Promise<unknown[]>

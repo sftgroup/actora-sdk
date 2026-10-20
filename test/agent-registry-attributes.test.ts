@@ -88,7 +88,9 @@ describe('AgentRegistry.setAttributes', () => {
       skills: [{ name: 'consult', inputSchema: { type: 'object' } }],
     })
 
-    expect(readContract).toHaveBeenCalledTimes(1)
+    // 首次读回会先做一次 flavor 探测（legacy `totalAgents`），真正的属性读取是
+    // `getAgentMetadata`；这里只断言属性读取发生了一次。
+    expect(readContract.mock.calls.filter((c) => c[0].functionName === 'getAgentMetadata')).toHaveLength(1)
     expect(argsOf(simulateContract).attrs).toEqual({
       name: 'MyAgent',
       description: 'desc',
@@ -111,5 +113,94 @@ describe('AgentRegistry.setAttributes', () => {
 
     expect(await registry.setAttributes(7, { x: 'y' })).toBe('0xtx')
     expect(writeContract).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── canonical ERC-8004 标准（setAgentURI 系列）────────────────────────────────
+
+describe('AgentRegistry — canonical standard (setAgentURI 系列)', () => {
+  function makeStdRegistry() {
+    const readContract = vi.fn(async (req: { functionName: string }) => {
+      switch (req.functionName) {
+        case 'getMetadata':
+          return '0x68656c6c6f' // "hello"
+        case 'getAgentWallet':
+        case 'ownerOf':
+          return '0x00000000000000000000000000000000000000a1'
+        case 'isAuthorizedOrOwner':
+          return true
+        case 'getVersion':
+          return '2.0.0'
+        default:
+          return null
+      }
+    })
+    const simulateContract = vi.fn(async (_req: unknown) => ({ request: { __sim: true } }))
+    const writeContract = vi.fn(async (_req: unknown) => '0xtx')
+
+    const registry = new AgentRegistry({
+      contractAddress: '0x0000000000000000000000000000000000000001',
+      publicClient: {
+        readContract,
+        simulateContract,
+        waitForTransactionReceipt: vi.fn(async () => ({ status: 'success' })),
+      } as never,
+      walletClient: {
+        getAddresses: vi.fn(async () => ['0xowner']),
+        writeContract,
+      } as never,
+    })
+
+    return { registry, readContract, simulateContract, writeContract }
+  }
+
+  it('setAgentURI 以 (agentId, newURI) 调用标准方法', async () => {
+    const { registry, simulateContract } = makeStdRegistry()
+
+    expect(await registry.setAgentURI(0, 'ipfs://new')).toBe('0xtx')
+    expect(simulateContract.mock.calls[0][0]).toMatchObject({
+      functionName: 'setAgentURI',
+      args: [0n, 'ipfs://new'],
+    })
+  })
+
+  it('setMetadata 以 (agentId, key, stringToHex(value)) 调用，值按 UTF-8 编码', async () => {
+    const { registry, simulateContract } = makeStdRegistry()
+
+    await registry.setMetadata(3, 'skills', '[{"name":"x"}]')
+
+    const req = simulateContract.mock.calls[0][0] as { functionName: string; args: [bigint, string, string] }
+    expect(req.functionName).toBe('setMetadata')
+    expect(req.args[0]).toBe(3n)
+    expect(req.args[1]).toBe('skills')
+    expect(Buffer.from(req.args[2].slice(2), 'hex').toString('utf8')).toBe('[{"name":"x"}]')
+  })
+
+  it('setAgentWallet / unsetAgentWallet 走标准 ABI', async () => {
+    const { registry, simulateContract } = makeStdRegistry()
+
+    await registry.setAgentWallet(1, '0x00000000000000000000000000000000000000b2', 1_800_000_000, '0xdead')
+    expect(simulateContract.mock.calls[0][0]).toMatchObject({
+      functionName: 'setAgentWallet',
+      args: [1n, '0x00000000000000000000000000000000000000b2', 1_800_000_000n, '0xdead'],
+    })
+
+    await registry.unsetAgentWallet(1)
+    expect(simulateContract.mock.calls[1][0]).toMatchObject({ functionName: 'unsetAgentWallet', args: [1n] })
+  })
+
+  it('getMetadata 把 bytes 解码为 UTF-8 文本', async () => {
+    const { registry, readContract } = makeStdRegistry()
+
+    expect(await registry.getMetadata(1, 'name')).toBe('hello')
+    expect(readContract.mock.calls[0][0]).toMatchObject({ functionName: 'getMetadata', args: [1n, 'name'] })
+  })
+
+  it('getAgentWallet / isAuthorizedOrOwner / getVersion 返回标准读取结果', async () => {
+    const { registry } = makeStdRegistry()
+
+    expect(await registry.getAgentWallet(2)).toBe('0x00000000000000000000000000000000000000a1')
+    expect(await registry.isAuthorizedOrOwner('0xowner', 2)).toBe(true)
+    expect(await registry.getVersion()).toBe('2.0.0')
   })
 })

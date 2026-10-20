@@ -1,12 +1,12 @@
-import { M as McpConnection, b as AgentReview, c as AgentReputation } from './types-CX4o7N9P.mjs';
-export { d as A2AAgentCard, e as A2ASkillExecution, f as A2ATask, g as A2ATaskStatus, h as AGENT_CATEGORIES, i as ActoraConfig, j as ActoraContracts, k as ActoraError, l as ActoraErrorCode, m as AgentCategory, A as AgentPayload, n as AgentPricing, a as AgentPrivatePayload, o as AgentPublicPayload, p as AgentSearchQuery, q as AgentSearchResult, r as AgentSubscription, E as EncryptedPayload, J as JSONSchema, s as JSONSchemaProperty, t as McpTransport, O as OnChainAgentMetadata, P as PackResult, u as PricingType, R as RegisteredAgent, S as SkillDef, v as SkillExecutionMode, w as SkillExecutionRemote, x as SubscriptionRequired, y as SubscriptionStatus, U as UnpackResult } from './types-CX4o7N9P.mjs';
-export { a as DEFAULT_DERIVATION_INFO_PREFIX, b as DEFAULT_DERIVATION_INFO_PREFIX_V2, c as DEFAULT_DERIVATION_INFO_PREFIX_V3, d as DEFAULT_DERIVATION_MESSAGE, e as DEFAULT_DERIVATION_SALT, f as DEFAULT_EIP712_DOMAIN, g as DEFAULT_EIP712_MESSAGE_VERSION, h as DEFAULT_EIP712_PRIMARY_TYPE, i as DEFAULT_EIP712_PURPOSE, j as DEFAULT_EIP712_TYPES, k as DEFAULT_PRF_SALT, D as DerivationMode, l as DeriveKeyPairFromWalletArgs, m as Eip712DerivationOverrides, n as Eip712TypeEntry, o as Eip712TypedData, E as Eip712Types, P as PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE, p as PAYLOAD_KEY_MODE_ATTRIBUTE, q as PayloadKeyCredential, r as PublishAgentConfig, s as PublishAgentResult, W as WalletKeyDerivationParams, t as aesDecrypt, u as aesEncrypt, v as buildPayloadKeyTypedData, w as decryptPayload, x as decryptWithKey, y as defaultInfoPrefixFor, z as deriveKeyPairFromWallet, A as derivePrivateKeyFromIkm, B as derivePrivateKeyFromSignature, C as eciesDecrypt, F as eciesEncrypt, G as encryptPayload, H as encryptWithKey, I as generateAesKey, J as generateKeyPair, K as getPublicKey, L as isDerivationMode, M as packAgentForPublish, N as prfSaltBytes, O as publishAgent, Q as randomBytes, R as readPayloadKeyCredential, S as readPayloadKeyMode, T as serializePayloadKeyCredential, U as unpackAgent } from './crypto-DD1vVh_c.mjs';
+import { M as McpConnection } from './types-ATMM4oRG.mjs';
+export { b as A2AAgentCard, c as A2ASkillExecution, d as A2ATask, e as A2ATaskStatus, f as AGENT_CATEGORIES, g as ActoraConfig, h as ActoraContracts, i as ActoraError, j as ActoraErrorCode, k as AgentCategory, A as AgentPayload, l as AgentPricing, a as AgentPrivatePayload, m as AgentPublicPayload, n as AgentReputation, o as AgentReview, p as AgentSearchQuery, q as AgentSearchResult, r as AgentSubscription, E as EncryptedPayload, J as JSONSchema, s as JSONSchemaProperty, t as McpTransport, O as OnChainAgentMetadata, P as PackResult, u as PricingType, R as RegisteredAgent, S as SkillDef, v as SkillExecutionMode, w as SkillExecutionRemote, x as SubscriptionRequired, y as SubscriptionStatus, U as UnpackResult } from './types-ATMM4oRG.mjs';
+export { a as DEFAULT_DERIVATION_INFO_PREFIX, b as DEFAULT_DERIVATION_INFO_PREFIX_V2, c as DEFAULT_DERIVATION_INFO_PREFIX_V3, d as DEFAULT_DERIVATION_MESSAGE, e as DEFAULT_DERIVATION_SALT, f as DEFAULT_EIP712_DOMAIN, g as DEFAULT_EIP712_MESSAGE_VERSION, h as DEFAULT_EIP712_PRIMARY_TYPE, i as DEFAULT_EIP712_PURPOSE, j as DEFAULT_EIP712_TYPES, k as DEFAULT_PRF_SALT, D as DerivationMode, l as DeriveKeyPairFromWalletArgs, m as Eip712DerivationOverrides, n as Eip712TypeEntry, o as Eip712TypedData, E as Eip712Types, P as PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE, p as PAYLOAD_KEY_MODE_ATTRIBUTE, q as PayloadKeyCredential, r as PublishAgentConfig, s as PublishAgentResult, W as WalletKeyDerivationParams, t as aesDecrypt, u as aesEncrypt, v as buildPayloadKeyTypedData, w as decryptPayload, x as decryptWithKey, y as defaultInfoPrefixFor, z as deriveKeyPairFromWallet, A as derivePrivateKeyFromIkm, B as derivePrivateKeyFromSignature, C as eciesDecrypt, F as eciesEncrypt, G as encryptPayload, H as encryptWithKey, I as generateAesKey, J as generateKeyPair, K as getPublicKey, L as isDerivationMode, M as packAgentForPublish, N as prfSaltBytes, O as publishAgent, Q as randomBytes, R as readPayloadKeyCredential, S as readPayloadKeyMode, T as serializePayloadKeyCredential, U as unpackAgent } from './crypto-DcBuG_jD.mjs';
 export { CreatePrfCredentialOptions, EvaluatePrfOptions, PrfCapability, PrfCredential, PrfError, PrfErrorCode, createPrfCredential, evaluatePrf, getPrfCapability } from './core/index.mjs';
 import { Hash, Address, PublicClient, WalletClient } from 'viem';
-export { a as A2ASkillResult, A as AgentRunContext, b as AgentRunner, c as AgentRunnerConfig, I as IPFSFetcher, d as IPFSFetcherConfig, O as OnChainReader, R as RunnableSkill, W as WalletSigner, e as defaultIPFSFetcher } from './agent-runner-Cc5ZzQ4b.mjs';
-import { S as SubscriptionManager } from './index-Bg5RBGgm.mjs';
-export { A as A2AConfig, a as A2ADaemon, b as A2ADaemonConfig, c as A2AProtocol, d as A2ATaskResult, e as AgentLoop, f as AgentRegistry, g as AgentRegistryConfig, h as AgentSummary, i as AgentSummaryMetadata, C as ContextCompactor, j as CreatePlanParams, k as CreatePlanResult, F as FactExtractor, G as GetAllAgentsOptions, L as LoopTraceEmitter, M as MetadataAttribute, P as PlanDetail, l as PlatformToolContext, m as PlatformToolDef, n as SUBSCRIPTION_PERIODS, o as StructuredAgentMetadata, p as SubscribeResult, q as SubscriptionConfig, r as SubscriptionDetail, s as SubscriptionPeriod, T as ToolExecutor, Z as ZERO_ADDRESS, t as buildPlatformTools, u as buildSystemPrompt, v as buildTools, w as cidFromURI, x as executePlatformTool, y as getAllPlatformToolNames, z as guardSubscription, B as parseTokenURIJSON, D as toAttributes, E as wrapPlatformToolsAsSkills } from './index-Bg5RBGgm.mjs';
-export { A as AgentLoopConfig, a as AgentLoopResult, C as ChatRequest, b as ChatStreamEvent, L as LLMMessage, c as LLMProvider, d as LLMToolCall, e as LoopRunContext, O as OpenAIToolDef, T as ToolCallRecord, f as ToolCallResult, g as ToolCallStart } from './types-DpXIt-fi.mjs';
+export { a as A2ASkillResult, A as AgentRunContext, b as AgentRunner, c as AgentRunnerConfig, I as IPFSFetcher, d as IPFSFetcherConfig, O as OnChainReader, R as RunnableSkill, W as WalletSigner, e as defaultIPFSFetcher } from './agent-runner-CVpGoUs7.mjs';
+import { S as SubscriptionManager } from './index-BmVZFnux.mjs';
+export { A as A2AConfig, a as A2ADaemon, b as A2ADaemonConfig, c as A2AProtocol, d as A2ATaskResult, e as AgentLoop, f as AgentRegistry, g as AgentRegistryConfig, h as AgentSummary, i as AgentSummaryMetadata, C as ContextCompactor, j as CreatePlanParams, k as CreatePlanResult, F as FactExtractor, G as GetAllAgentsOptions, L as LoopTraceEmitter, M as MetadataAttribute, P as PlanDetail, l as PlatformToolContext, m as PlatformToolDef, R as ReputationConfig, n as ReputationFeedback, o as ReputationFlavor, p as ReputationRegistry, q as ReputationSummary, r as STANDARD_IDENTITY_ABI, s as SUBSCRIPTION_PERIODS, t as StructuredAgentMetadata, u as SubscribeResult, v as SubscriptionConfig, w as SubscriptionDetail, x as SubscriptionPeriod, T as ToolExecutor, Z as ZERO_ADDRESS, y as buildPlatformTools, z as buildSystemPrompt, B as buildTools, D as cidFromURI, E as executePlatformTool, H as getAllPlatformToolNames, I as guardSubscription, J as parseTokenURIJSON, K as toAttributes, N as wrapPlatformToolsAsSkills } from './index-BmVZFnux.mjs';
+export { A as AgentLoopConfig, a as AgentLoopResult, C as ChatRequest, b as ChatStreamEvent, L as LLMMessage, c as LLMProvider, d as LLMToolCall, e as LoopRunContext, O as OpenAIToolDef, T as ToolCallRecord, f as ToolCallResult, g as ToolCallStart } from './types-6ttfEKn5.mjs';
 export { GatewayProvider, GatewayProviderConfig, OpenAIProvider, OpenAIProviderConfig, ProviderFactoryConfig, createLLMProvider } from './llm/index.mjs';
 export { EndpointRecord, MultiEndpointClient, MultiEndpointConfig } from './endpoint/index.mjs';
 export { ConfigEntry, ConfigurationClient, ConfigurationConfig } from './configuration/index.mjs';
@@ -21,7 +21,7 @@ export { C as ChainConfig, a as ConfigRegistryOpts, b as ConfigurationRegistry, 
 export { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 import 'events';
 
-type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'PlanCreated' | 'Subscribed';
+type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'Registered' | 'PlanCreated' | 'Subscribed';
 interface ActoraChainEvent {
     type: ActoraEventType;
     args: Record<string, unknown>;
@@ -84,7 +84,7 @@ declare const SUBSCRIPTION_VERSION = "0.3.0";
 
 type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402';
 type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year';
-type ChainKey = 'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base';
+type ChainKey = 'sepolia' | 'bsc' | 'ethereum' | 'base';
 interface SubscriptionPaymentsConfig {
     /** Actora Gateway base URL (required for fiat / x402 rails). */
     gatewayUrl?: string;
@@ -308,70 +308,6 @@ declare class BillingClient {
     }): Promise<BalanceResult>;
 }
 
-/** AgentWalletConfig 客户端配置。 */
-interface AgentWalletConfigOptions {
-    /** Gateway 地址（如 https://actora.codes）。 */
-    baseUrl: string;
-    /** Gateway ADMIN_KEY（admin 路由鉴权，平台全量）。与 apiKey 二选一。 */
-    adminKey?: string;
-    /** 租户 API Key（actora_...，租户作用域，仅限自有 agent）。与 adminKey 二选一。 */
-    apiKey?: string;
-}
-interface AgentWalletInfo {
-    agentId: number;
-    email: string;
-    walletAddress: string;
-    chain: string;
-    sessionUnlocked: boolean;
-    sessionExpiresAt: string | null;
-}
-interface BindAgentWalletInput {
-    agentId: number;
-    /** MPC 钱包注册邮箱（sendCode/register 所用）。 */
-    email: string;
-    /** MPC 钱包地址。 */
-    walletAddress: string;
-    /** 链名，默认 'oxachain'。 */
-    chain?: string;
-}
-interface AuthorizePaymentSessionInput {
-    agentId: number;
-    email: string;
-    /** 邮箱收到的 6 位验证码（MPC session.unlock）。 */
-    code: string;
-}
-interface AuthorizePaymentSessionResult {
-    address: string;
-    expiresAt: string;
-}
-interface AgentWalletStatus extends AgentWalletInfo {
-    chainBalanceWei: string | null;
-}
-/**
- * agent 自主钱包管理客户端：绑定 MPC 钱包 / 授权付款会话 / 查询状态。
- * 绑定 + 解锁完成后，A2A 委派由 gateway 服务端自动代付，SDK 侧无需再参与付款。
- */
-declare class AgentWalletConfig {
-    private opts;
-    constructor(opts: AgentWalletConfigOptions);
-    /** 绑定 agent 与 MPC 钱包（agent_id 唯一，重复绑定覆盖 email/地址/链）。 */
-    bindWallet(input: BindAgentWalletInput): Promise<{
-        success: boolean;
-    }>;
-    /** 邮箱验证码解锁 MPC 会话（令牌由 gateway 加密存储，服务端自动代付使用）。 */
-    authorizePaymentSession(input: AuthorizePaymentSessionInput): Promise<AuthorizePaymentSessionResult>;
-    /** 查询单个 agent 自主钱包状态（含链上原生币余额）。 */
-    status(agentId: number): Promise<AgentWalletStatus>;
-    /** 列出已绑定 agent 钱包（apiKey 模式下仅返回自有 agent）。 */
-    list(): Promise<{
-        wallets: AgentWalletInfo[];
-    }>;
-    /** 解绑（清除钱包绑定与会话）。 */
-    unbind(agentId: number): Promise<{
-        success: boolean;
-    }>;
-}
-
 declare const PAYMENT_VERSION = "0.1.3";
 
 declare const A2A_VERSION = "0.1.0";
@@ -419,30 +355,6 @@ declare class MCPConnector {
 }
 
 declare const MCP_VERSION = "0.1.0";
-
-interface ReputationConfig {
-    contractAddress: Address;
-    publicClient: PublicClient;
-    walletClient: WalletClient;
-}
-declare class ReputationRegistry {
-    private address;
-    private publicClient;
-    private walletClient;
-    constructor(config: ReputationConfig);
-    private get account();
-    /** Submit a rating (1-5) with optional comment. */
-    rate(agentId: number, rating: number, comment?: string): Promise<Hash>;
-    /** Get average rating and total count. */
-    getRating(agentId: number): Promise<{
-        averageRating: number;
-        totalRatings: number;
-    }>;
-    /** Get all reviews for an agent. */
-    getReviews(agentId: number): Promise<AgentReview[]>;
-    /** Get full reputation summary. */
-    getReputation(agentId: number): Promise<AgentReputation>;
-}
 
 declare const REPUTATION_VERSION = "0.1.0";
 
@@ -606,4 +518,4 @@ declare class CentralAgentClient {
     }>;
 }
 
-export { A2AClient, A2A_VERSION, Actora402, type Actora402Config, type ActoraChainEvent, type ActoraEventType, AgentReputation, AgentReview, AgentWalletConfig, type AgentWalletConfigOptions, type AgentWalletInfo, type AgentWalletStatus, type AuthorizePaymentSessionInput, type AuthorizePaymentSessionResult, type BalanceResult, BillingClient, type BillingClientConfig, type BindAgentWalletInput, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, CentralAgentClient, type CentralAgentClientOptions, type CentralAgentListFilters, type CentralAgentSummary, type CentralPlan, type CentralPlanRow, type CentralSubscription, type CreateCentralAgentInput, type CreateCentralPlanInput, type EventListenerOptions, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, type ReputationConfig, ReputationRegistry, SUBSCRIPTION_VERSION, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type UpdateCentralAgentInput, type X402Info, subscribeToEvents };
+export { A2AClient, A2A_VERSION, Actora402, type Actora402Config, type ActoraChainEvent, type ActoraEventType, type BalanceResult, BillingClient, type BillingClientConfig, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, CentralAgentClient, type CentralAgentClientOptions, type CentralAgentListFilters, type CentralAgentSummary, type CentralPlan, type CentralPlanRow, type CentralSubscription, type CreateCentralAgentInput, type CreateCentralPlanInput, type EventListenerOptions, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, SUBSCRIPTION_VERSION, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type UpdateCentralAgentInput, type X402Info, subscribeToEvents };

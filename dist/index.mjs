@@ -3039,6 +3039,9 @@ var TRANSFER_EVENT = parseAbiItem(
 var AGENT_REGISTERED_EVENT = parseAbiItem(
   "event AgentRegistered(uint256 indexed agentId, address indexed creator, string tokenURI)"
 );
+var REGISTERED_EVENT = parseAbiItem(
+  "event Registered(uint256 indexed agentId, string agentURI, address indexed owner)"
+);
 var PLAN_CREATED_EVENT = parseAbiItem(
   "event PlanCreated(uint256 indexed planId, uint256 indexed agentId, uint256 price, string period, address payToken, uint256 trialDays)"
 );
@@ -3048,11 +3051,13 @@ var SUBSCRIBED_EVENT = parseAbiItem(
 var EVENT_ABI = {
   Transfer: TRANSFER_EVENT,
   AgentRegistered: AGENT_REGISTERED_EVENT,
+  Registered: REGISTERED_EVENT,
   PlanCreated: PLAN_CREATED_EVENT,
   Subscribed: SUBSCRIBED_EVENT
 };
 var CONTRACT_EVENTS = {
-  identityRegistryAddress: ["Transfer", "AgentRegistered"],
+  // Transfer 两个实现都有；AgentRegistered=历史实现，Registered=canonical 标准
+  identityRegistryAddress: ["Transfer", "AgentRegistered", "Registered"],
   subscriptionManagerAddress: ["PlanCreated", "Subscribed"]
 };
 function subscribeToEvents(publicClient, options) {
@@ -4478,14 +4483,29 @@ async function executePlatformTool(toolName, args, ctx) {
         return ctx.a2a.getAgentCard(args.agentId);
       // ── Reputation ─────────────────────────────────
       case "actora_reputation_rate":
-        if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
-        return ctx.reputationRegistry.rateAgent(args.agentId, args.rating, args.comment ?? "");
+        throw new Error("reputation writes are not supported by the read adapter");
       case "actora_reputation_get":
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
-        return ctx.reputationRegistry.getRating(args.agentId);
-      case "actora_reputation_reviews":
+        return ctx.reputationRegistry.getReputationSummary(
+          args.agentId,
+          args.clients ?? [],
+          args.tag1 ?? "",
+          args.tag2 ?? ""
+        );
+      case "actora_reputation_reviews": {
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
-        return ctx.reputationRegistry.getReviews(args.agentId);
+        const agentId = args.agentId;
+        const clients = await ctx.reputationRegistry.getClients(agentId);
+        const reviews = [];
+        for (const client of clients) {
+          const lastIndex = await ctx.reputationRegistry.getLastIndex(agentId, client);
+          for (let i = 1; i <= lastIndex; i++) {
+            const fb = await ctx.reputationRegistry.readFeedback(agentId, client, i);
+            reviews.push({ reviewer: client, ...fb });
+          }
+        }
+        return reviews;
+      }
       // ── Configuration ──────────────────────────────
       case "actora_config_get":
         if (!ctx.configurationRegistry) throw new Error("ConfigurationRegistry not configured");
@@ -5540,6 +5560,16 @@ async function guardSubscription(manager, user, agentId) {
 }
 
 // src/registry/agent-registry.ts
+function isRevertError(err) {
+  let cur = err;
+  for (let i = 0; i < 6 && cur; i++) {
+    const e = cur;
+    if (typeof e.name === "string" && /revert/i.test(e.name)) return true;
+    if (typeof e.message === "string" && /revert/i.test(e.message)) return true;
+    cur = e.cause;
+  }
+  return false;
+}
 var IDENTITY_REGISTRY_ABI = {
   // Register
   register: {
@@ -5641,6 +5671,100 @@ var IDENTITY_REGISTRY_ABI = {
     type: "function"
   }
 };
+var STANDARD_IDENTITY_ABI = {
+  setAgentURI: {
+    inputs: [{ name: "agentId", type: "uint256" }, { name: "newURI", type: "string" }],
+    name: "setAgentURI",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
+  },
+  setMetadata: {
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "metadataKey", type: "string" },
+      { name: "metadataValue", type: "bytes" }
+    ],
+    name: "setMetadata",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
+  },
+  getMetadata: {
+    inputs: [{ name: "agentId", type: "uint256" }, { name: "metadataKey", type: "string" }],
+    name: "getMetadata",
+    outputs: [{ name: "", type: "bytes" }],
+    stateMutability: "view",
+    type: "function"
+  },
+  setAgentWallet: {
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "newWallet", type: "address" },
+      { name: "deadline", type: "uint256" },
+      { name: "signature", type: "bytes" }
+    ],
+    name: "setAgentWallet",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
+  },
+  getAgentWallet: {
+    inputs: [{ name: "agentId", type: "uint256" }],
+    name: "getAgentWallet",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function"
+  },
+  unsetAgentWallet: {
+    inputs: [{ name: "agentId", type: "uint256" }],
+    name: "unsetAgentWallet",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function"
+  },
+  isAuthorizedOrOwner: {
+    inputs: [{ name: "spender", type: "address" }, { name: "agentId", type: "uint256" }],
+    name: "isAuthorizedOrOwner",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function"
+  },
+  ownerOf: {
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    name: "ownerOf",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function"
+  },
+  getVersion: {
+    inputs: [],
+    name: "getVersion",
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "pure",
+    type: "function"
+  }
+};
+var TRANSFER_EVENT2 = parseAbiItem(
+  "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
+);
+var REGISTERED_EVENT2 = parseAbiItem(
+  "event Registered(uint256 indexed agentId, string agentURI, address indexed owner)"
+);
+var KNOWN_ATTRIBUTE_KEYS = [
+  "name",
+  "description",
+  "category",
+  "tags",
+  "capabilities",
+  "skills",
+  "encryptedPayloadCid",
+  "eciesEncryptedKey",
+  "publicPayloadCid",
+  "payload_key_id",
+  PAYLOAD_KEY_MODE_ATTRIBUTE,
+  PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE
+];
 function decodeBase64(b64) {
   if (typeof Buffer !== "undefined") {
     return Buffer.from(b64, "base64").toString("utf-8");
@@ -5690,6 +5814,15 @@ function parseCreatedAt(parsed) {
   }
   return 0;
 }
+function decodeBytesLenient(value) {
+  if (!value || value === "0x") return "";
+  try {
+    const text = hexToString(value);
+    return text.includes("\uFFFD") ? value : text;
+  } catch {
+    return value;
+  }
+}
 function toAttributes(patch) {
   return Object.entries(patch).filter(([, v]) => v !== void 0 && v !== null).map(([key, v]) => ({
     key,
@@ -5700,10 +5833,75 @@ var AgentRegistry = class {
   address;
   publicClient;
   walletClient;
+  /** 日志派生读取的起始区块。 */
+  fromBlock;
+  /** 实现风格探测结果（缓存）：standard=canonical / legacy=历史实现。 */
+  flavor;
+  /** `maxAgentId()` 的短时缓存（避免每次列表都重扫日志）。 */
+  maxIdCache;
   constructor(config) {
     this.address = config.contractAddress;
     this.publicClient = config.publicClient;
     this.walletClient = config.walletClient;
+    this.fromBlock = BigInt(config.fromBlock ?? 0);
+  }
+  // ── Implementation flavor detection ─────────────────────────────────────
+  /**
+   * 尝试读取 legacy 视图 `totalAgents()`：
+   *   - 成功 → 判定 `'legacy'` 并返回计数值（= 单调最大 agentId）
+   *   - revert → 判定 `'standard'`（canonical 无该视图）并返回 `null`
+   * 结果缓存在实例上，因此 legacy 链**不会**因探测产生额外调用。
+   */
+  async legacyCounter() {
+    if (this.flavor === "standard") return null;
+    try {
+      const n = Number(await this.publicClient.readContract({
+        address: this.address,
+        abi: [IDENTITY_REGISTRY_ABI.totalAgents],
+        functionName: "totalAgents"
+      }));
+      this.flavor = "legacy";
+      return n;
+    } catch (err) {
+      if (!isRevertError(err)) throw err;
+      this.flavor = "standard";
+      return null;
+    }
+  }
+  /**
+   * 注册表实现风格（缓存）：
+   *   - `'standard'`：canonical ERC-8004（无 `totalAgents` 等旧视图，用日志/`ownerOf` 派生）
+   *   - `'legacy'`  ：历史一代 / 早期 draft（读取走旧视图）
+   */
+  async getFlavor() {
+    return await this.legacyCounter() === null ? "standard" : "legacy";
+  }
+  getRegisteredLogs() {
+    return this.publicClient.getLogs({ address: this.address, event: REGISTERED_EVENT2, fromBlock: this.fromBlock });
+  }
+  getTransferLogs() {
+    return this.publicClient.getLogs({ address: this.address, event: TRANSFER_EVENT2, fromBlock: this.fromBlock });
+  }
+  /** 由 `Registered` 日志派生最大 agentId；无日志返回 -1。 */
+  async deriveMaxFromLogs() {
+    const logs = await this.getRegisteredLogs();
+    return logs.reduce(
+      (max, l) => Math.max(max, Number(l.args.agentId)),
+      -1
+    );
+  }
+  /**
+   * 当前最大 agentId；无 agent 时返回 `-1`。
+   *   - legacy  ：`totalAgents()`（= 单调最大 ID）
+   *   - standard：由 `Registered` 日志派生（标准合约没有计数器视图）
+   * 结果短时缓存（15s）。
+   */
+  async maxAgentId() {
+    if (this.maxIdCache && Date.now() - this.maxIdCache.at < 15e3) return this.maxIdCache.value;
+    const n = await this.legacyCounter();
+    const value = n !== null ? n > 0 ? n : -1 : await this.deriveMaxFromLogs();
+    this.maxIdCache = { value, at: Date.now() };
+    return value;
   }
   // ── Write: Register Agent ───────────────────────────────────────────────
   /**
@@ -5832,35 +6030,194 @@ var AgentRegistry = class {
     const agentId = this._parseAgentIdFromReceipt(receipt);
     return { agentId, txHash: hash2 };
   }
-  // ── Read: Query ──────────────────────────────────────────────────────────
-  /** Get all agent IDs owned by an address. */
-  async getAgentsByOwner(owner) {
-    const result = await this.publicClient.readContract({
+  // ── Canonical ERC-8004 standard: setAgentURI 系列 ────────────────────────
+  // 仅当目标链部署的是 canonical 标准注册表时可用（历史 / 早期 draft 注册表没有这些方法）。
+  /** 更新 agent 的 URI（canonical `setAgentURI`）。owner / approved 方可调用。 */
+  async setAgentURI(agentId, newURI) {
+    const [account] = await this.walletClient.getAddresses();
+    if (!account) throw new Error("Wallet not connected");
+    const { request: request2 } = await this.publicClient.simulateContract({
+      account,
       address: this.address,
-      abi: [IDENTITY_REGISTRY_ABI.getAgentsByOwner],
-      functionName: "getAgentsByOwner",
-      args: [owner]
+      abi: [STANDARD_IDENTITY_ABI.setAgentURI],
+      functionName: "setAgentURI",
+      args: [BigInt(agentId), newURI]
     });
-    return result.map(Number);
+    const hash2 = await this.walletClient.writeContract(request2);
+    await this.publicClient.waitForTransactionReceipt({ hash: hash2 });
+    return hash2;
   }
-  /** Get the current total agent count. */
-  async getCurrentAgentId() {
-    const result = await this.publicClient.readContract({
+  /** 写入/更新单个链上属性（canonical `setMetadata`；非破坏性——不影响其他键）。 */
+  async setMetadata(agentId, key, value) {
+    const [account] = await this.walletClient.getAddresses();
+    if (!account) throw new Error("Wallet not connected");
+    const { request: request2 } = await this.publicClient.simulateContract({
+      account,
       address: this.address,
-      abi: [IDENTITY_REGISTRY_ABI.getCurrentAgentId],
-      functionName: "getCurrentAgentId"
+      abi: [STANDARD_IDENTITY_ABI.setMetadata],
+      functionName: "setMetadata",
+      args: [BigInt(agentId), key, stringToHex(value)]
     });
-    return Number(result);
+    const hash2 = await this.walletClient.writeContract(request2);
+    await this.publicClient.waitForTransactionReceipt({ hash: hash2 });
+    return hash2;
   }
-  /** Check if an agent exists. */
-  async agentExists(agentId) {
+  /**
+   * 绑定 agent 的验证钱包（canonical `setAgentWallet`）。
+   * `signature` 为 newWallet 对 EIP-712 `AgentWalletSet(agentId,newWallet,owner,deadline)`
+   * 的签名（EOA 走 ECDSA / 智能合约钱包走 ERC-1271）；`deadline` 为 Unix 秒且不得超过
+   * 当前时间 5 分钟。owner 转让时合约会自动清除绑定。
+   */
+  async setAgentWallet(agentId, newWallet, deadline, signature) {
+    const [account] = await this.walletClient.getAddresses();
+    if (!account) throw new Error("Wallet not connected");
+    const { request: request2 } = await this.publicClient.simulateContract({
+      account,
+      address: this.address,
+      abi: [STANDARD_IDENTITY_ABI.setAgentWallet],
+      functionName: "setAgentWallet",
+      args: [BigInt(agentId), newWallet, BigInt(deadline), signature]
+    });
+    const hash2 = await this.walletClient.writeContract(request2);
+    await this.publicClient.waitForTransactionReceipt({ hash: hash2 });
+    return hash2;
+  }
+  /** 清除 agent 的验证钱包绑定（canonical `unsetAgentWallet`）。 */
+  async unsetAgentWallet(agentId) {
+    const [account] = await this.walletClient.getAddresses();
+    if (!account) throw new Error("Wallet not connected");
+    const { request: request2 } = await this.publicClient.simulateContract({
+      account,
+      address: this.address,
+      abi: [STANDARD_IDENTITY_ABI.unsetAgentWallet],
+      functionName: "unsetAgentWallet",
+      args: [BigInt(agentId)]
+    });
+    const hash2 = await this.walletClient.writeContract(request2);
+    await this.publicClient.waitForTransactionReceipt({ hash: hash2 });
+    return hash2;
+  }
+  /** 读取单个链上属性（canonical `getMetadata`）；UTF-8 解码，非法字节回退原始 hex。 */
+  async getMetadata(agentId, key) {
     const result = await this.publicClient.readContract({
       address: this.address,
-      abi: [IDENTITY_REGISTRY_ABI.agentExists],
-      functionName: "agentExists",
+      abi: [STANDARD_IDENTITY_ABI.getMetadata],
+      functionName: "getMetadata",
+      args: [BigInt(agentId), key]
+    });
+    return decodeBytesLenient(result);
+  }
+  /** 读取 agent 的验证钱包（canonical `getAgentWallet`；未绑定返回 0x0）。 */
+  async getAgentWallet(agentId) {
+    const result = await this.publicClient.readContract({
+      address: this.address,
+      abi: [STANDARD_IDENTITY_ABI.getAgentWallet],
+      functionName: "getAgentWallet",
       args: [BigInt(agentId)]
     });
     return result;
+  }
+  /** spender 是否为 agent 的 owner 或被授权方（canonical `isAuthorizedOrOwner`）。 */
+  async isAuthorizedOrOwner(spender, agentId) {
+    const result = await this.publicClient.readContract({
+      address: this.address,
+      abi: [STANDARD_IDENTITY_ABI.isAuthorizedOrOwner],
+      functionName: "isAuthorizedOrOwner",
+      args: [spender, BigInt(agentId)]
+    });
+    return result;
+  }
+  /** agent 的 owner（ERC-721 `ownerOf`；不存在则 revert）。 */
+  async ownerOf(agentId) {
+    const result = await this.publicClient.readContract({
+      address: this.address,
+      abi: [STANDARD_IDENTITY_ABI.ownerOf],
+      functionName: "ownerOf",
+      args: [BigInt(agentId)]
+    });
+    return result;
+  }
+  /** 注册表实现版本（canonical `getVersion`，标准实现返回 "2.0.0"）。 */
+  async getVersion() {
+    const result = await this.publicClient.readContract({
+      address: this.address,
+      abi: [STANDARD_IDENTITY_ABI.getVersion],
+      functionName: "getVersion"
+    });
+    return result;
+  }
+  // ── Read: Query ──────────────────────────────────────────────────────────
+  /**
+   * Get all agent IDs owned by an address.
+   * legacy ：直接读 `getAgentsByOwner`；
+   * standard：标准注册表没有该视图 → 由 `Transfer` 日志推导每个 token 的最新持有者。
+   */
+  async getAgentsByOwner(owner) {
+    if (this.flavor !== "standard") {
+      try {
+        const result = await this.publicClient.readContract({
+          address: this.address,
+          abi: [IDENTITY_REGISTRY_ABI.getAgentsByOwner],
+          functionName: "getAgentsByOwner",
+          args: [owner]
+        });
+        this.flavor = "legacy";
+        return result.map(Number);
+      } catch (err) {
+        if (!isRevertError(err)) throw err;
+        this.flavor = "standard";
+      }
+    }
+    const logs = await this.getTransferLogs();
+    const latest = /* @__PURE__ */ new Map();
+    for (const l of logs) {
+      const args = l.args;
+      latest.set(Number(args.tokenId), args.to);
+    }
+    const target = owner.toLowerCase();
+    return [...latest.entries()].filter(([, to]) => to.toLowerCase() === target && to.toLowerCase() !== ZERO_ADDRESS).map(([id]) => id).sort((a, b) => a - b);
+  }
+  /** Get the current agent counter（legacy `getCurrentAgentId`；standard 0-based → maxId+1）。 */
+  async getCurrentAgentId() {
+    if (this.flavor !== "standard") {
+      try {
+        const result = await this.publicClient.readContract({
+          address: this.address,
+          abi: [IDENTITY_REGISTRY_ABI.getCurrentAgentId],
+          functionName: "getCurrentAgentId"
+        });
+        this.flavor = "legacy";
+        return Number(result);
+      } catch (err) {
+        if (!isRevertError(err)) throw err;
+        this.flavor = "standard";
+      }
+    }
+    return this.totalAgents();
+  }
+  /** Check if an agent exists（legacy `agentExists`；standard 用 `ownerOf` 试探）。 */
+  async agentExists(agentId) {
+    if (this.flavor !== "standard") {
+      try {
+        const result = await this.publicClient.readContract({
+          address: this.address,
+          abi: [IDENTITY_REGISTRY_ABI.agentExists],
+          functionName: "agentExists",
+          args: [BigInt(agentId)]
+        });
+        this.flavor = "legacy";
+        return result;
+      } catch (err) {
+        if (!isRevertError(err)) throw err;
+        this.flavor = "standard";
+      }
+    }
+    try {
+      await this.ownerOf(agentId);
+      return true;
+    } catch {
+      return false;
+    }
   }
   /** Get the tokenURI for an agent. */
   async tokenURI(agentId) {
@@ -5874,6 +6231,19 @@ var AgentRegistry = class {
   }
   /** Get all metadata attributes for an agent as key-value pairs. */
   async getAttributes(agentId) {
+    if (await this.getFlavor() === "standard") {
+      const attrs2 = {};
+      await Promise.all(
+        KNOWN_ATTRIBUTE_KEYS.map(async (key) => {
+          try {
+            const v = await this.getMetadata(agentId, key);
+            if (v && v !== "0x") attrs2[key] = v;
+          } catch {
+          }
+        })
+      );
+      return attrs2;
+    }
     const result = await this.publicClient.readContract({
       address: this.address,
       abi: [IDENTITY_REGISTRY_ABI.getAgentMetadata],
@@ -5882,12 +6252,16 @@ var AgentRegistry = class {
     });
     const attrs = {};
     for (const item of result) {
-      attrs[item.key] = hexToString(item.value);
+      attrs[item.key] = decodeBytesLenient(item.value);
     }
     return attrs;
   }
-  /** Total number of registered agents (monotonic max agent ID). */
+  /** Total number of registered agents（standard 0-based → maxId+1；legacy 计数器）。 */
   async totalAgents() {
+    if (await this.getFlavor() === "standard") {
+      const max = await this.maxAgentId();
+      return max < 0 ? 0 : max + 1;
+    }
     const result = await this.publicClient.readContract({
       address: this.address,
       abi: [IDENTITY_REGISTRY_ABI.totalAgents],
@@ -5925,9 +6299,11 @@ var AgentRegistry = class {
    * Replaces the manual binary-search + per-ID ownerOf loop used by chain-sync.
    */
   async getAllAgents(options = {}) {
-    const { fromId = 1, batchSize = 10, activeOnly = false, capabilities } = options;
-    const toId = options.toId ?? await this.totalAgents();
-    if (toId < fromId || toId <= 0) return [];
+    const flavor = await this.getFlavor();
+    const { batchSize = 10, activeOnly = false, capabilities } = options;
+    const fromId = options.fromId ?? (flavor === "standard" ? 0 : 1);
+    const toId = options.toId ?? await this.maxAgentId();
+    if (toId < fromId || toId < 0) return [];
     const agents = [];
     for (let start = fromId; start <= toId; start += batchSize) {
       const end = Math.min(start + batchSize - 1, toId);
@@ -5937,10 +6313,18 @@ var AgentRegistry = class {
         ids.map(async (agentId) => {
           try {
             const [owner, tokenURI] = await Promise.all([
-              this.publicClient.readContract({
+              // legacy 用 `getAgentOwner`（与历史版本完全一致）；canonical 无该视图，用 ERC-721
+              // `ownerOf`（不存在时 revert → 外层 catch 返回 null）。两者均为 ERC-721，仅在
+              // NFT 转移后语义不同（getAgentOwner=注册者，ownerOf=当前持有人）。
+              flavor === "legacy" ? this.publicClient.readContract({
                 address: this.address,
                 abi: [IDENTITY_REGISTRY_ABI.getAgentOwner],
                 functionName: "getAgentOwner",
+                args: [BigInt(agentId)]
+              }) : this.publicClient.readContract({
+                address: this.address,
+                abi: [STANDARD_IDENTITY_ABI.ownerOf],
+                functionName: "ownerOf",
                 args: [BigInt(agentId)]
               }),
               this.tokenURI(agentId)
@@ -6442,64 +6826,6 @@ var BillingClient = class {
   }
 };
 
-// src/payment/agent-wallet.ts
-async function adminRequest(opts, path, init) {
-  const base = opts.baseUrl.replace(/\/$/, "");
-  const headers = {
-    ...opts.adminKey ? { "X-Admin-Key": opts.adminKey } : {},
-    ...opts.apiKey ? { "X-Api-Key": opts.apiKey } : {},
-    ...init?.headers ?? {}
-  };
-  const resp = await fetch(`${base}${path}`, { ...init, headers });
-  if (!resp.ok) {
-    let message = `AgentWalletConfig request failed (${resp.status}): ${path}`;
-    try {
-      const body = await resp.json();
-      if (body.error) message = body.error;
-    } catch {
-    }
-    throw new Error(message);
-  }
-  return resp.json();
-}
-var AgentWalletConfig = class {
-  constructor(opts) {
-    this.opts = opts;
-    if (!opts.adminKey && !opts.apiKey) {
-      throw new Error("AgentWalletConfig: adminKey or apiKey is required");
-    }
-  }
-  opts;
-  /** 绑定 agent 与 MPC 钱包（agent_id 唯一，重复绑定覆盖 email/地址/链）。 */
-  async bindWallet(input) {
-    return adminRequest(this.opts, "/api/v1/admin/agent-payers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input)
-    });
-  }
-  /** 邮箱验证码解锁 MPC 会话（令牌由 gateway 加密存储，服务端自动代付使用）。 */
-  async authorizePaymentSession(input) {
-    return adminRequest(
-      this.opts,
-      `/api/v1/admin/agent-payers/${input.agentId}/unlock`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: input.code }) }
-    );
-  }
-  /** 查询单个 agent 自主钱包状态（含链上原生币余额）。 */
-  async status(agentId) {
-    return adminRequest(this.opts, `/api/v1/admin/agent-payers/${agentId}`);
-  }
-  /** 列出已绑定 agent 钱包（apiKey 模式下仅返回自有 agent）。 */
-  async list() {
-    return adminRequest(this.opts, "/api/v1/admin/agent-payers");
-  }
-  /** 解绑（清除钱包绑定与会话）。 */
-  async unbind(agentId) {
-    return adminRequest(this.opts, `/api/v1/admin/agent-payers/${agentId}`, { method: "DELETE" });
-  }
-};
-
 // src/payment/index.ts
 var PAYMENT_VERSION = "0.1.3";
 
@@ -6880,43 +7206,113 @@ var MCPConnector = class _MCPConnector {
 var MCP_VERSION = "0.1.0";
 
 // src/reputation/reputation.ts
-var REPUTATION_ABI = {
-  rateAgent: {
+var ZERO32 = `0x${"0".repeat(64)}`;
+function isRevertError2(err) {
+  let cur = err;
+  for (let i = 0; i < 6 && cur; i++) {
+    const e = cur;
+    if (typeof e.name === "string" && /revert/i.test(e.name)) return true;
+    if (typeof e.message === "string" && /revert/i.test(e.message)) return true;
+    cur = e.cause;
+  }
+  return false;
+}
+function tagToBytes32(tag) {
+  if (!tag) return ZERO32;
+  const bytes = Buffer.from(tag, "utf8");
+  if (bytes.length > 32) throw new Error("reputation tag exceeds 32 bytes");
+  return `0x${bytes.toString("hex").padEnd(64, "0")}`;
+}
+function bytes32ToString(v) {
+  const hex = v.slice(2);
+  let end = hex.length;
+  while (end > 0 && hex.slice(end - 2, end) === "00") end -= 2;
+  const trimmed = hex.slice(0, end);
+  return trimmed ? Buffer.from(trimmed, "hex").toString("utf8") : "";
+}
+var LEGACY_ABI = {
+  getReputationSummary: {
     inputs: [
       { name: "agentId", type: "uint256" },
-      { name: "rating", type: "uint8" },
-      { name: "comment", type: "string" }
+      { name: "clientAddresses", type: "address[]" },
+      { name: "tag1", type: "bytes32" },
+      { name: "tag2", type: "bytes32" }
     ],
-    name: "rateAgent",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function"
-  },
-  getRating: {
-    inputs: [{ name: "agentId", type: "uint256" }],
-    name: "getRating",
+    name: "getReputationSummary",
     outputs: [
-      { name: "averageRating", type: "uint256" },
-      { name: "totalRatings", type: "uint256" }
+      { name: "count", type: "uint64" },
+      { name: "averageScore", type: "uint8" }
     ],
     stateMutability: "view",
     type: "function"
   },
-  getReviews: {
-    inputs: [{ name: "agentId", type: "uint256" }],
-    name: "getReviews",
-    outputs: [
-      {
-        name: "",
-        type: "tuple[]",
-        components: [
-          { name: "reviewer", type: "address" },
-          { name: "rating", type: "uint8" },
-          { name: "comment", type: "string" },
-          { name: "timestamp", type: "uint256" }
-        ]
-      }
+  readFeedback: {
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "clientAddress", type: "address" },
+      { name: "index", type: "uint64" }
     ],
+    name: "readFeedback",
+    outputs: [
+      { name: "score", type: "uint8" },
+      { name: "tag1", type: "bytes32" },
+      { name: "tag2", type: "bytes32" },
+      { name: "isRevoked", type: "bool" }
+    ],
+    stateMutability: "view",
+    type: "function"
+  }
+};
+var STANDARD_ABI = {
+  getSummary: {
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "clientAddresses", type: "address[]" },
+      { name: "tag1", type: "string" },
+      { name: "tag2", type: "string" }
+    ],
+    name: "getSummary",
+    outputs: [
+      { name: "count", type: "uint64" },
+      { name: "summaryValue", type: "int128" },
+      { name: "summaryValueDecimals", type: "uint8" }
+    ],
+    stateMutability: "view",
+    type: "function"
+  },
+  readFeedback: {
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "clientAddress", type: "address" },
+      { name: "feedbackIndex", type: "uint64" }
+    ],
+    name: "readFeedback",
+    outputs: [
+      { name: "value", type: "int128" },
+      { name: "valueDecimals", type: "uint8" },
+      { name: "tag1", type: "string" },
+      { name: "tag2", type: "string" },
+      { name: "isRevoked", type: "bool" }
+    ],
+    stateMutability: "view",
+    type: "function"
+  }
+};
+var COMMON_ABI = {
+  getClients: {
+    inputs: [{ name: "agentId", type: "uint256" }],
+    name: "getClients",
+    outputs: [{ name: "", type: "address[]" }],
+    stateMutability: "view",
+    type: "function"
+  },
+  getLastIndex: {
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "clientAddress", type: "address" }
+    ],
+    name: "getLastIndex",
+    outputs: [{ name: "", type: "uint64" }],
     stateMutability: "view",
     type: "function"
   }
@@ -6924,66 +7320,142 @@ var REPUTATION_ABI = {
 var ReputationRegistry = class {
   address;
   publicClient;
-  walletClient;
+  /** 实现风格探测结果（缓存）：standard=canonical / legacy=历史实现。 */
+  flavor;
   constructor(config) {
     this.address = config.contractAddress;
     this.publicClient = config.publicClient;
-    this.walletClient = config.walletClient;
   }
-  get account() {
-    return this.walletClient.getAddresses().then((a) => {
-      if (!a[0]) throw new Error("Wallet not connected");
-      return a[0];
-    });
+  // ── Implementation flavor detection ─────────────────────────────────────
+  /**
+   * 尝试读取 legacy 视图 `getReputationSummary()`：
+   *   - 成功 → 判定 `'legacy'`
+   *   - 确定 revert → 判定 `'standard'`（canonical 无该视图，只有 `getSummary`）
+   * 结果缓存在实例上，因此 legacy 链**不会**因探测产生额外调用。
+   */
+  async legacyProbe() {
+    if (this.flavor === "legacy") return true;
+    if (this.flavor === "standard") return false;
+    try {
+      await this.publicClient.readContract({
+        address: this.address,
+        abi: [LEGACY_ABI.getReputationSummary],
+        functionName: "getReputationSummary",
+        args: [0n, [], ZERO32, ZERO32]
+      });
+      this.flavor = "legacy";
+      return true;
+    } catch (err) {
+      if (!isRevertError2(err)) throw err;
+      this.flavor = "standard";
+      return false;
+    }
   }
-  /** Submit a rating (1-5) with optional comment. */
-  async rate(agentId, rating, comment = "") {
-    if (rating < 1 || rating > 5) throw new Error("Rating must be 1-5");
-    const acct = await this.account;
-    const { request: request2 } = await this.publicClient.simulateContract({
-      account: acct,
-      address: this.address,
-      abi: [REPUTATION_ABI.rateAgent],
-      functionName: "rateAgent",
-      args: [BigInt(agentId), rating, comment]
-    });
-    return this.walletClient.writeContract(request2);
+  /** 实现风格（缓存）：`'standard'`=官方 canonical / `'legacy'`=历史实现。 */
+  async getFlavor() {
+    return await this.legacyProbe() ? "legacy" : "standard";
   }
-  /** Get average rating and total count. */
-  async getRating(agentId) {
+  // ── 读：聚合 ─────────────────────────────────────────────────────────
+  /**
+   * 聚合读取（标准形参）。
+   * @dev legacy：转调 `getReputationSummary`（uint8 均分）→ 归一化为 `valueDecimals=0`；
+   *      standard：转调标准 `getSummary`。
+   *      注意：standard 下 `clients` 为空会 revert（标准要求显式传入客户地址）。
+   */
+  async getSummary(agentId, clients = [], tag1 = "", tag2 = "") {
+    if (await this.legacyProbe()) {
+      const r2 = await this.publicClient.readContract({
+        address: this.address,
+        abi: [LEGACY_ABI.getReputationSummary],
+        functionName: "getReputationSummary",
+        args: [BigInt(agentId), clients, tagToBytes32(tag1), tagToBytes32(tag2)]
+      });
+      return { count: Number(r2[0]), value: BigInt(r2[1]), valueDecimals: 0 };
+    }
     const r = await this.publicClient.readContract({
       address: this.address,
-      abi: [REPUTATION_ABI.getRating],
-      functionName: "getRating",
-      args: [BigInt(agentId)]
+      abi: [STANDARD_ABI.getSummary],
+      functionName: "getSummary",
+      args: [BigInt(agentId), clients, tag1, tag2]
     });
-    const [avg, total] = r;
-    return { averageRating: Number(avg), totalRatings: Number(total) };
+    return { count: Number(r[0]), value: r[1], valueDecimals: Number(r[2]) };
   }
-  /** Get all reviews for an agent. */
-  async getReviews(agentId) {
+  /** legacy 兼容聚合（uint8 均分）。standard 下由 `getSummary` 归一到 0-100。 */
+  async getReputationSummary(agentId, clients = [], tag1 = "", tag2 = "") {
+    if (await this.legacyProbe()) {
+      const r = await this.publicClient.readContract({
+        address: this.address,
+        abi: [LEGACY_ABI.getReputationSummary],
+        functionName: "getReputationSummary",
+        args: [BigInt(agentId), clients, tagToBytes32(tag1), tagToBytes32(tag2)]
+      });
+      return { count: Number(r[0]), averageScore: Number(r[1]) };
+    }
+    const { count, value, valueDecimals } = await this.getSummary(agentId, clients, tag1, tag2);
+    return { count, averageScore: normalizeScore(value, valueDecimals) };
+  }
+  // ── 读：明细 / 枚举 ──────────────────────────────────────────────────
+  /** 单条反馈（标准形参）。 */
+  async readFeedback(agentId, clientAddress, index) {
+    if (await this.legacyProbe()) {
+      const r2 = await this.publicClient.readContract({
+        address: this.address,
+        abi: [LEGACY_ABI.readFeedback],
+        functionName: "readFeedback",
+        args: [BigInt(agentId), clientAddress, BigInt(index)]
+      });
+      return {
+        value: BigInt(r2[0]),
+        valueDecimals: 0,
+        tag1: bytes32ToString(r2[1]),
+        tag2: bytes32ToString(r2[2]),
+        isRevoked: r2[3]
+      };
+    }
     const r = await this.publicClient.readContract({
       address: this.address,
-      abi: [REPUTATION_ABI.getReviews],
-      functionName: "getReviews",
+      abi: [STANDARD_ABI.readFeedback],
+      functionName: "readFeedback",
+      args: [BigInt(agentId), clientAddress, BigInt(index)]
+    });
+    return {
+      value: r[0],
+      valueDecimals: Number(r[1]),
+      tag1: r[2],
+      tag2: r[3],
+      isRevoked: r[4]
+    };
+  }
+  /** 给出反馈的客户地址列表（两版同签名）。 */
+  async getClients(agentId) {
+    const r = await this.publicClient.readContract({
+      address: this.address,
+      abi: [COMMON_ABI.getClients],
+      functionName: "getClients",
       args: [BigInt(agentId)]
     });
-    return r.map((x) => ({
-      reviewer: x.reviewer,
-      rating: x.rating,
-      comment: x.comment,
-      timestamp: Number(x.timestamp)
-    }));
+    return [...r];
   }
-  /** Get full reputation summary. */
-  async getReputation(agentId) {
-    const [rating, reviews] = await Promise.all([
-      this.getRating(agentId),
-      this.getReviews(agentId)
-    ]);
-    return { agentId, ...rating, reviews };
+  /** 某客户在 agent 上的最后反馈索引（0 表示没有）。 */
+  async getLastIndex(agentId, clientAddress) {
+    const r = await this.publicClient.readContract({
+      address: this.address,
+      abi: [COMMON_ABI.getLastIndex],
+      functionName: "getLastIndex",
+      args: [BigInt(agentId), clientAddress]
+    });
+    return Number(r);
   }
 };
+function normalizeScore(value, valueDecimals) {
+  let v = value;
+  if (valueDecimals > 0) {
+    v = v / 10n ** BigInt(valueDecimals);
+  }
+  if (v <= 0n) return 0;
+  if (v >= 100n) return 100;
+  return Number(v);
+}
 
 // src/reputation/index.ts
 var REPUTATION_VERSION = "0.1.0";
@@ -7026,23 +7498,6 @@ var KNOWN_CHAINS = {
       multiEndpointRegistry: "0xEB5e866f186d4B73F97aa0d70B86f2C6e2e21Cb7"
     },
     ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"]
-  },
-  // 内部测试链（Internal Testnet L1，非对外链）
-  // Chain ID 19505, Clique PoA, Shanghai+Cancun
-  // Deployer: 0x8E869A0624fF9e766Df71b5B08897d00E4d260ba
-  // All 6 core contracts deployed 2026-07-14
-  19505: {
-    chainId: 19505,
-    contracts: {
-      identityRegistry: "0xbf5F9db266c8c97E3334466C88597Eb758AfE212",
-      subscriptionManager: "0x019AC9d945467478Dd371CDbD70cb2f325800E6B",
-      a2aProtocolRegistry: "0x7F42a7dC4A0F3C107664C3750bE1B5B6fa6BEb86",
-      reputationRegistry: "0x6a18C2664E1b42063860d864b6448b824d7B843F",
-      configurationRegistry: "0x07280674ccc2898Fd038A9e3C22005CA83ffD2F8",
-      multiEndpointRegistry: "0xB361d04F49000013FC131D3C59C41c8486C64f8c"
-    },
-    ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"],
-    rpcUrl: "https://rpc-oxa.0xainet.top"
   },
   // BNB Smart Chain (BSC) Mainnet
   // Chain ID 56, EIP-1559, gas token BNB
@@ -8193,7 +8648,6 @@ export {
   AgentLoop,
   AgentRegistry,
   AgentRunner,
-  AgentWalletConfig,
   BillingClient,
   CONFIG_VERSION,
   CentralAgentClient,
@@ -8235,6 +8689,7 @@ export {
   REGISTRY_VERSION,
   REPUTATION_VERSION,
   ReputationRegistry,
+  STANDARD_IDENTITY_ABI,
   SUBSCRIPTION_PERIODS,
   SUBSCRIPTION_VERSION,
   SubscriptionManager,

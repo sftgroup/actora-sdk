@@ -67,24 +67,6 @@ export const KNOWN_CHAINS: Record<number, ChainConfig> = {
     ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
   },
 
-  // 内部测试链（Internal Testnet L1，非对外链）
-  // Chain ID 19505, Clique PoA, Shanghai+Cancun
-  // Deployer: 0x8E869A0624fF9e766Df71b5B08897d00E4d260ba
-  // All 6 core contracts deployed 2026-07-14
-  19505: {
-    chainId: 19505,
-    contracts: {
-      identityRegistry: '0xbf5F9db266c8c97E3334466C88597Eb758AfE212',
-      subscriptionManager: '0x019AC9d945467478Dd371CDbD70cb2f325800E6B',
-      a2aProtocolRegistry: '0x7F42a7dC4A0F3C107664C3750bE1B5B6fa6BEb86',
-      reputationRegistry: '0x6a18C2664E1b42063860d864b6448b824d7B843F',
-      configurationRegistry: '0x07280674ccc2898Fd038A9e3C22005CA83ffD2F8',
-      multiEndpointRegistry: '0xB361d04F49000013FC131D3C59C41c8486C64f8c',
-    },
-    ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
-    rpcUrl: 'https://rpc-oxa.0xainet.top',
-  },
-
   // BNB Smart Chain (BSC) Mainnet
   // Chain ID 56, EIP-1559, gas token BNB
   // Agent 市场开通 2026-09-17（DeployBsc.s.sol，部署者 0x8017925F7eEcA3713F03983113788321891F7D1f）

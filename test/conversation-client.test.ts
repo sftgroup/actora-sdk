@@ -225,9 +225,9 @@ describe('ConversationClient — parallel tasks (P8/P9)', () => {
     })
 
     it('getSessionKeyInfo returns engine capability info', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({ enabled: true, chain: 'oxachain', chainId: 19505, baseUrl: 'https://sk.example' }))
+      fetchMock.mockResolvedValue(jsonResponse({ enabled: true, chain: 'bsc', chainId: 56, baseUrl: 'https://sk.example' }))
       const res = await makeClient().getSessionKeyInfo()
-      expect(res).toMatchObject({ enabled: true, chain: 'oxachain', chainId: 19505 })
+      expect(res).toMatchObject({ enabled: true, chain: 'bsc', chainId: 56 })
       const { url } = firstCall(fetchMock.mock.calls[0]!)
       expect(url).toBe('https://gw.example.com/api/v1/a2a/session-key/info')
     })

@@ -4,7 +4,7 @@
 // A single entry point for subscribing across all Actora payment rails:
 //
 //   method: 'chain'  → on-chain SubscriptionManager (native / ERC20, escrow)
-//   method: 'fiat'   → unified payments endpoint (Stripe card, no wallet)
+//   method: 'fiat'   → 已退役（@0xinfrax/payments 0.3.0 移除 Stripe rail，运行时抛错）
 //   method: 'x402'   → native-token period payment via the unified endpoint
 //
 // 0.9.0: the fiat / x402 / access rails now talk to the generic
@@ -21,7 +21,9 @@ import { SubscriptionManager } from '../subscription/subscription'
 
 export type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402'
 export type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year'
-export type ChainKey = 'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base'
+// @0xinfrax/payments 自 0.2.0 起 ChainKey = string（不再枚举具体链），
+// SDK 直接沿用引擎类型，避免自维护枚举与新链不同步。
+export type ChainKey = PaymentsChainKey
 
 export interface SubscriptionPaymentsConfig {
   /** Actora Gateway base URL (required for fiat / x402 rails). */
@@ -143,29 +145,10 @@ export class SubscriptionPayments {
     return { method: 'chain', subscriptionId: result.subscriptionId, txHash: result.txHash }
   }
 
-  private async _payFiat(input: PaySubscriptionInput): Promise<PaySubscriptionResult> {
-    if (!this.client) throw new Error('method "fiat" requires a gatewayUrl')
-    if (!input.subscriber) throw new Error('method "fiat" requires a subscriber address')
-    const data = await this.client.create({
-      method: 'fiat',
-      subscriber: input.subscriber,
-      period: input.period ?? 'month',
-      currency: input.currency ?? 'usd',
-      chain: (this.config.chain ?? 'bsc') as PaymentsChainKey,
-      // amountCents is optional — the Gateway derives the USD amount from the
-      // on-chain plan price when omitted (FIAT_TOKEN_USD_PRICE on the Gateway).
-      amountCents: input.amountCents,
-      pricing: { planId: input.planId },
-      // Actora business context rides in metadata (the unified endpoint reads
-      // it back out — the generic module never interprets it).
-      metadata: { agentId: input.agentId, planId: input.planId },
-      successUrl: input.successUrl,
-      cancelUrl: input.cancelUrl,
-    })
-    if (data.method !== 'fiat' || !data.sessionUrl) {
-      throw new Error('Fiat checkout returned no redirect URL')
-    }
-    return { method: 'fiat', sessionUrl: data.sessionUrl, sessionId: data.sessionId, redirect: true }
+  private async _payFiat(_input: PaySubscriptionInput): Promise<PaySubscriptionResult> {
+    // @0xinfrax/payments 0.3.0 移除 Stripe rail：保留方法名以维持类型兼容，
+    // 运行时显式失败，避免静默走不存在的通道。
+    throw new Error('method "fiat" was retired in @0xinfrax/payments 0.3.0; use "chain" or "x402"')
   }
 
   private async _payX402(input: PaySubscriptionInput): Promise<PaySubscriptionResult> {

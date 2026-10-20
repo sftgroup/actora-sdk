@@ -14,7 +14,7 @@
 
 ```bash
 export PRIVATE_KEY=0x...            # 必填：铸造/订阅钱包私钥
-export CHAIN_ID=8453                # 可选：默认 8453（Base）；19505/56/1/8453/11155111
+export CHAIN_ID=8453                # 可选：默认 8453（Base）；56/1/8453/11155111
 node examples/mint-and-subscribe.mjs
 ```
 

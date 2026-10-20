@@ -56,7 +56,7 @@ describe('CentralAgentClient', () => {
   })
 
   it('checkSubscription() encodes subscriber and agentId', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ chain: 'oxachain', subscriber: '0xabc', agentId: -3, active: true }))
+    fetchMock.mockResolvedValue(jsonResponse({ chain: 'bsc', subscriber: '0xabc', agentId: -3, active: true }))
     const res = await makeClient().checkSubscription('0xAbC123', -3)
     const { url } = firstCall(fetchMock.mock.calls[0]!)
     expect(url).toBe('https://gw.example.com/api/v1/chain/check-subscription?subscriber=0xAbC123&agentId=-3')

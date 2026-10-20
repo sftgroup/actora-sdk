@@ -397,7 +397,7 @@ const detail = await sub.getSubscriptionDetail(subscriptionId)
 
 - **用途**：三条支付轨道统一入口。`chain` = 链上 SubscriptionManager；`fiat` = Stripe 卡；`x402` = 原生币按期支付（走网关统一端点）。
 - **构造**：`new SubscriptionPayments({ gatewayUrl?, accessToken?, subscriptionManager?, walletClient?, chain? })`
-  - `chain` 取值：`'oxachain' | 'sepolia' | 'bsc' | 'ethereum' | 'base'`（默认 `'bsc'`）
+  - `chain` 取值：`'sepolia' | 'bsc' | 'ethereum' | 'base'`（默认 `'bsc'`）
 - **关键方法**：`pay(PaySubscriptionInput)`、`hasAccess(agentId, subscriber)`（跨轨道访问检查）、`fetchX402Info()`（x402 发现：price/payTo/network）
 - **`PaySubscriptionInput` 字段**（以源码为准）：`planId, agentId, method, subscriber?, valueWei?, approveTokenFirst?, amountCents?, currency?, successUrl?, cancelUrl?, txHash?, priceWei?, period?`
   - `priceWei`：中心化 Agent（无链上计划）时直接指定价格；
@@ -448,13 +448,12 @@ const { agent } = await central.create({ name: '行情分析助手', description
 const { plan } = await central.createPlan(agent.id, { priceWei: '10000000000000000', period: 'month' })
 ```
 
-### 5.6 BillingClient / TenantPlanPayments / AgentWalletConfig / A2AClient / PeriodClient
+### 5.6 BillingClient / TenantPlanPayments / A2AClient / PeriodClient
 
 | 类 | 用途 | 构造 | 关键方法 |
 |----|------|------|----------|
 | `BillingClient` | B 端余额预检（x402 台账，委托前判断余额是否够按次付费） | `{ gatewayUrl, apiKey?, accessToken?, endUserId? }` | `getBalance({ endUserId? })` → `{ balance, balanceWei, currency, subject, payTo?, priceWei? }`（`currency` 为该链原生币符号） |
 | `TenantPlanPayments` | 购买平台订阅档位（`purpose='tenant-plan'`，绑定租户配额） | `{ gatewayUrl, accessToken?, chain? }` | `buy({ tenantPlanId, subscriber, method, txHash?, successUrl?, cancelUrl? })` |
-| `AgentWalletConfig` | agent 自主 MPC 钱包管理（A2A 按次付费自动代付） | `{ baseUrl, adminKey? \| apiKey? }` | `bindWallet(...)`、`authorizePaymentSession(...)`、`status(agentId)`、`list()`、`unbind(agentId)` |
 | `A2AClient` | a2a-pay 支付意图两段式（create → pay → settle） | `{ baseUrl, accessToken? }`（`ClientOptions`） | `create({ payer, amountWei, payee?, chain?, metadata? })`、`settle({ paymentId, txHash, chain? })` |
 | `PeriodClient` | 周期授权（P4）：按周期扣款/读状态 | `{ baseUrl, accessToken? }`（`ClientOptions`） | `charge(authorizationId)`、`authorization(authorizationId)` |
 
@@ -1031,7 +1030,6 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
 |------|-----|-----------|
 | 租户 API Key（推荐 B 端） | `X-Api-Key: actora_...` | `ConversationClient` / `BillingClient` / `CentralAgentClient`（发布管理） |
 | 钱包签名 JWT | `Authorization: Bearer <jwt>` | 同上（`accessToken` 字段） |
-| 平台管理员 | `X-Admin-Key: <ADMIN_KEY>` | `AgentWalletConfig`（平台全量作用域） |
 | 钱包/私钥（链上交易） | 无头，viem `WalletClient` 签名 | `AgentRegistry` / `SubscriptionManager` / `A2AProtocol` |
 
 > `ConversationClient` 必须二选一提供 `apiKey` 或 `accessToken`，否则构造后请求即抛错。
@@ -1164,7 +1162,6 @@ BYOK（自带模型 Key）另用三个头逐请求覆盖：`X-LLM-Api-Key` / `X-
 | `POST` | `/api/v1/payments/mpp/open` · `/voucher` · `/topup` · `/settle` · `/close` · `GET /mpp/session` | MPP 通道（按量结算） |
 | `GET` | `/api/v1/billing/balance` | 余额 / token 包余量 / Session Key 授权态（`BillingClient.getBalance`） |
 | `GET` | `/api/v1/billing/token-packs` | 加油包列表（5M/$9.9、20M/$29.9、100M/$99.9，30 天有效） |
-| `GET`/`POST` | `/api/v1/billing/agent-wallets` | agent 自主 MPC 钱包绑定 / 解锁 / 解绑（A2A 自动代付） |
 | `GET` | `/api/v1/x402/info` · `/balance` · `/paywall` | x402 支付发现与台账（公开 / 租户） |
 
 **`purpose` 与关键字段**：

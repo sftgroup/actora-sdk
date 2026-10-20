@@ -1506,14 +1506,29 @@ async function executePlatformTool(toolName, args, ctx) {
         return ctx.a2a.getAgentCard(args.agentId);
       // ── Reputation ─────────────────────────────────
       case "actora_reputation_rate":
-        if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
-        return ctx.reputationRegistry.rateAgent(args.agentId, args.rating, args.comment ?? "");
+        throw new Error("reputation writes are not supported by the read adapter");
       case "actora_reputation_get":
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
-        return ctx.reputationRegistry.getRating(args.agentId);
-      case "actora_reputation_reviews":
+        return ctx.reputationRegistry.getReputationSummary(
+          args.agentId,
+          args.clients ?? [],
+          args.tag1 ?? "",
+          args.tag2 ?? ""
+        );
+      case "actora_reputation_reviews": {
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
-        return ctx.reputationRegistry.getReviews(args.agentId);
+        const agentId = args.agentId;
+        const clients = await ctx.reputationRegistry.getClients(agentId);
+        const reviews = [];
+        for (const client of clients) {
+          const lastIndex = await ctx.reputationRegistry.getLastIndex(agentId, client);
+          for (let i = 1; i <= lastIndex; i++) {
+            const fb = await ctx.reputationRegistry.readFeedback(agentId, client, i);
+            reviews.push({ reviewer: client, ...fb });
+          }
+        }
+        return reviews;
+      }
       // ── Configuration ──────────────────────────────
       case "actora_config_get":
         if (!ctx.configurationRegistry) throw new Error("ConfigurationRegistry not configured");

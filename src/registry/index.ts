@@ -1,7 +1,7 @@
 // @actora/sdk — Registry module
 // Agent registration, query, and IPFS fetching.
 
-export { AgentRegistry, cidFromURI, parseTokenURIJSON, toAttributes } from './agent-registry'
+export { AgentRegistry, cidFromURI, parseTokenURIJSON, toAttributes, STANDARD_IDENTITY_ABI } from './agent-registry'
 export type {
   AgentRegistryConfig,
   AgentSummary,

@@ -79,14 +79,30 @@ export async function executePlatformTool(
 
       // ── Reputation ─────────────────────────────────
       case 'actora_reputation_rate':
-        if (!ctx.reputationRegistry) throw new Error('ReputationRegistry not configured')
-        return ctx.reputationRegistry.rateAgent(args.agentId as number, args.rating as number, (args.comment as string) ?? '')
+        // 信誉适配器为只读桥；写入须直接对底层注册表调用 giveFeedback（legacy/canonical 签名不同）
+        throw new Error('reputation writes are not supported by the read adapter')
       case 'actora_reputation_get':
         if (!ctx.reputationRegistry) throw new Error('ReputationRegistry not configured')
-        return ctx.reputationRegistry.getRating(args.agentId as number)
-      case 'actora_reputation_reviews':
+        return ctx.reputationRegistry.getReputationSummary(
+          args.agentId as number,
+          (args.clients as `0x${string}`[]) ?? [],
+          (args.tag1 as string) ?? '',
+          (args.tag2 as string) ?? ''
+        )
+      case 'actora_reputation_reviews': {
         if (!ctx.reputationRegistry) throw new Error('ReputationRegistry not configured')
-        return ctx.reputationRegistry.getReviews(args.agentId as number)
+        const agentId = args.agentId as number
+        const clients = await ctx.reputationRegistry.getClients(agentId)
+        const reviews: unknown[] = []
+        for (const client of clients) {
+          const lastIndex = await ctx.reputationRegistry.getLastIndex(agentId, client)
+          for (let i = 1; i <= lastIndex; i++) {
+            const fb = await ctx.reputationRegistry.readFeedback(agentId, client, i)
+            reviews.push({ reviewer: client, ...fb })
+          }
+        }
+        return reviews
+      }
 
       // ── Configuration ──────────────────────────────
       case 'actora_config_get':

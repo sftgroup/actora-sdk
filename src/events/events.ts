@@ -18,6 +18,10 @@ const TRANSFER_EVENT = parseAbiItem(
 const AGENT_REGISTERED_EVENT = parseAbiItem(
   'event AgentRegistered(uint256 indexed agentId, address indexed creator, string tokenURI)'
 )
+/** canonical ERC-8004 标准注册事件（历史实现用 `AgentRegistered`）。 */
+const REGISTERED_EVENT = parseAbiItem(
+  'event Registered(uint256 indexed agentId, string agentURI, address indexed owner)'
+)
 const PLAN_CREATED_EVENT = parseAbiItem(
   'event PlanCreated(uint256 indexed planId, uint256 indexed agentId, uint256 price, string period, address payToken, uint256 trialDays)'
 )
@@ -28,13 +32,14 @@ const SUBSCRIBED_EVENT = parseAbiItem(
 const EVENT_ABI = {
   Transfer: TRANSFER_EVENT,
   AgentRegistered: AGENT_REGISTERED_EVENT,
+  Registered: REGISTERED_EVENT,
   PlanCreated: PLAN_CREATED_EVENT,
   Subscribed: SUBSCRIBED_EVENT,
 } as const
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'PlanCreated' | 'Subscribed'
+export type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'Registered' | 'PlanCreated' | 'Subscribed'
 
 export interface ActoraChainEvent {
   type: ActoraEventType
@@ -57,7 +62,8 @@ export interface EventListenerOptions {
 
 // Which events each contract can emit.
 const CONTRACT_EVENTS: Record<'identityRegistryAddress' | 'subscriptionManagerAddress', readonly ActoraEventType[]> = {
-  identityRegistryAddress: ['Transfer', 'AgentRegistered'],
+  // Transfer 两个实现都有；AgentRegistered=历史实现，Registered=canonical 标准
+  identityRegistryAddress: ['Transfer', 'AgentRegistered', 'Registered'],
   subscriptionManagerAddress: ['PlanCreated', 'Subscribed'],
 }
 

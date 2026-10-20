@@ -1,9 +1,9 @@
-import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-DpXIt-fi.mjs';
-import { R as RunnableSkill, b as AgentRunner } from './agent-runner-Cc5ZzQ4b.mjs';
+import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-6ttfEKn5.mjs';
+import { R as RunnableSkill, b as AgentRunner } from './agent-runner-CVpGoUs7.mjs';
 import { TraceConfig, TraceEvent } from './traces/index.mjs';
 import { Address, PublicClient, WalletClient, Hash } from 'viem';
-import { d as A2AAgentCard, f as A2ATask, r as AgentSubscription } from './types-CX4o7N9P.mjs';
-import { D as DerivationMode, q as PayloadKeyCredential } from './crypto-DD1vVh_c.mjs';
+import { b as A2AAgentCard, d as A2ATask, r as AgentSubscription } from './types-ATMM4oRG.mjs';
+import { D as DerivationMode, q as PayloadKeyCredential } from './crypto-DcBuG_jD.mjs';
 import { IPFSUploader } from './ipfs/index.mjs';
 import { EventEmitter } from 'events';
 
@@ -237,6 +237,134 @@ declare class SubscriptionManager {
 }
 declare function guardSubscription(manager: SubscriptionManager, user: Address, agentId: number): Promise<AgentSubscription>;
 
+declare const STANDARD_IDENTITY_ABI: {
+    readonly setAgentURI: {
+        readonly inputs: readonly [{
+            readonly name: "agentId";
+            readonly type: "uint256";
+        }, {
+            readonly name: "newURI";
+            readonly type: "string";
+        }];
+        readonly name: "setAgentURI";
+        readonly outputs: readonly [];
+        readonly stateMutability: "nonpayable";
+        readonly type: "function";
+    };
+    readonly setMetadata: {
+        readonly inputs: readonly [{
+            readonly name: "agentId";
+            readonly type: "uint256";
+        }, {
+            readonly name: "metadataKey";
+            readonly type: "string";
+        }, {
+            readonly name: "metadataValue";
+            readonly type: "bytes";
+        }];
+        readonly name: "setMetadata";
+        readonly outputs: readonly [];
+        readonly stateMutability: "nonpayable";
+        readonly type: "function";
+    };
+    readonly getMetadata: {
+        readonly inputs: readonly [{
+            readonly name: "agentId";
+            readonly type: "uint256";
+        }, {
+            readonly name: "metadataKey";
+            readonly type: "string";
+        }];
+        readonly name: "getMetadata";
+        readonly outputs: readonly [{
+            readonly name: "";
+            readonly type: "bytes";
+        }];
+        readonly stateMutability: "view";
+        readonly type: "function";
+    };
+    readonly setAgentWallet: {
+        readonly inputs: readonly [{
+            readonly name: "agentId";
+            readonly type: "uint256";
+        }, {
+            readonly name: "newWallet";
+            readonly type: "address";
+        }, {
+            readonly name: "deadline";
+            readonly type: "uint256";
+        }, {
+            readonly name: "signature";
+            readonly type: "bytes";
+        }];
+        readonly name: "setAgentWallet";
+        readonly outputs: readonly [];
+        readonly stateMutability: "nonpayable";
+        readonly type: "function";
+    };
+    readonly getAgentWallet: {
+        readonly inputs: readonly [{
+            readonly name: "agentId";
+            readonly type: "uint256";
+        }];
+        readonly name: "getAgentWallet";
+        readonly outputs: readonly [{
+            readonly name: "";
+            readonly type: "address";
+        }];
+        readonly stateMutability: "view";
+        readonly type: "function";
+    };
+    readonly unsetAgentWallet: {
+        readonly inputs: readonly [{
+            readonly name: "agentId";
+            readonly type: "uint256";
+        }];
+        readonly name: "unsetAgentWallet";
+        readonly outputs: readonly [];
+        readonly stateMutability: "nonpayable";
+        readonly type: "function";
+    };
+    readonly isAuthorizedOrOwner: {
+        readonly inputs: readonly [{
+            readonly name: "spender";
+            readonly type: "address";
+        }, {
+            readonly name: "agentId";
+            readonly type: "uint256";
+        }];
+        readonly name: "isAuthorizedOrOwner";
+        readonly outputs: readonly [{
+            readonly name: "";
+            readonly type: "bool";
+        }];
+        readonly stateMutability: "view";
+        readonly type: "function";
+    };
+    readonly ownerOf: {
+        readonly inputs: readonly [{
+            readonly name: "tokenId";
+            readonly type: "uint256";
+        }];
+        readonly name: "ownerOf";
+        readonly outputs: readonly [{
+            readonly name: "";
+            readonly type: "address";
+        }];
+        readonly stateMutability: "view";
+        readonly type: "function";
+    };
+    readonly getVersion: {
+        readonly inputs: readonly [];
+        readonly name: "getVersion";
+        readonly outputs: readonly [{
+            readonly name: "";
+            readonly type: "string";
+        }];
+        readonly stateMutability: "pure";
+        readonly type: "function";
+    };
+};
 interface AgentRegistryConfig {
     /** IdentityRegistry contract address */
     contractAddress: Address;
@@ -244,6 +372,11 @@ interface AgentRegistryConfig {
     publicClient: PublicClient;
     /** viem WalletClient for write calls */
     walletClient: WalletClient;
+    /**
+     * 日志派生读取的起始区块（canonical 标准没有 `totalAgents`/`getAgentsByOwner`
+     * 视图，需从 `Registered`/`Transfer` 日志派生）。默认 0。
+     */
+    fromBlock?: number;
 }
 /** Public, human-readable subset of on-chain agent metadata. */
 interface AgentSummaryMetadata {
@@ -266,9 +399,9 @@ interface AgentSummary {
     createdAt: number;
 }
 interface GetAllAgentsOptions {
-    /** First agent ID to scan (default: 1). */
+    /** First agent ID to scan (default: 0 for canonical standard, 1 for legacy). */
     fromId?: number;
-    /** Last agent ID to scan (default: totalAgents()). */
+    /** Last agent ID to scan (default: the max agent ID on chain). */
     toId?: number;
     /** Only return agents whose metadata.isActive === true (default: false). */
     activeOnly?: boolean;
@@ -314,7 +447,37 @@ declare class AgentRegistry {
     private address;
     private publicClient;
     private walletClient;
+    /** 日志派生读取的起始区块。 */
+    private fromBlock;
+    /** 实现风格探测结果（缓存）：standard=canonical / legacy=历史实现。 */
+    private flavor?;
+    /** `maxAgentId()` 的短时缓存（避免每次列表都重扫日志）。 */
+    private maxIdCache?;
     constructor(config: AgentRegistryConfig);
+    /**
+     * 尝试读取 legacy 视图 `totalAgents()`：
+     *   - 成功 → 判定 `'legacy'` 并返回计数值（= 单调最大 agentId）
+     *   - revert → 判定 `'standard'`（canonical 无该视图）并返回 `null`
+     * 结果缓存在实例上，因此 legacy 链**不会**因探测产生额外调用。
+     */
+    private legacyCounter;
+    /**
+     * 注册表实现风格（缓存）：
+     *   - `'standard'`：canonical ERC-8004（无 `totalAgents` 等旧视图，用日志/`ownerOf` 派生）
+     *   - `'legacy'`  ：历史一代 / 早期 draft（读取走旧视图）
+     */
+    getFlavor(): Promise<'legacy' | 'standard'>;
+    private getRegisteredLogs;
+    private getTransferLogs;
+    /** 由 `Registered` 日志派生最大 agentId；无日志返回 -1。 */
+    private deriveMaxFromLogs;
+    /**
+     * 当前最大 agentId；无 agent 时返回 `-1`。
+     *   - legacy  ：`totalAgents()`（= 单调最大 ID）
+     *   - standard：由 `Registered` 日志派生（标准合约没有计数器视图）
+     * 结果短时缓存（15s）。
+     */
+    maxAgentId(): Promise<number>;
     /**
      * Register a new Agent NFT on-chain.
      *
@@ -382,17 +545,44 @@ declare class AgentRegistry {
         agentId: number;
         txHash: Hash;
     }>;
-    /** Get all agent IDs owned by an address. */
+    /** 更新 agent 的 URI（canonical `setAgentURI`）。owner / approved 方可调用。 */
+    setAgentURI(agentId: number, newURI: string): Promise<Hash>;
+    /** 写入/更新单个链上属性（canonical `setMetadata`；非破坏性——不影响其他键）。 */
+    setMetadata(agentId: number, key: string, value: string): Promise<Hash>;
+    /**
+     * 绑定 agent 的验证钱包（canonical `setAgentWallet`）。
+     * `signature` 为 newWallet 对 EIP-712 `AgentWalletSet(agentId,newWallet,owner,deadline)`
+     * 的签名（EOA 走 ECDSA / 智能合约钱包走 ERC-1271）；`deadline` 为 Unix 秒且不得超过
+     * 当前时间 5 分钟。owner 转让时合约会自动清除绑定。
+     */
+    setAgentWallet(agentId: number, newWallet: Address, deadline: number, signature: `0x${string}`): Promise<Hash>;
+    /** 清除 agent 的验证钱包绑定（canonical `unsetAgentWallet`）。 */
+    unsetAgentWallet(agentId: number): Promise<Hash>;
+    /** 读取单个链上属性（canonical `getMetadata`）；UTF-8 解码，非法字节回退原始 hex。 */
+    getMetadata(agentId: number, key: string): Promise<string>;
+    /** 读取 agent 的验证钱包（canonical `getAgentWallet`；未绑定返回 0x0）。 */
+    getAgentWallet(agentId: number): Promise<Address>;
+    /** spender 是否为 agent 的 owner 或被授权方（canonical `isAuthorizedOrOwner`）。 */
+    isAuthorizedOrOwner(spender: Address, agentId: number): Promise<boolean>;
+    /** agent 的 owner（ERC-721 `ownerOf`；不存在则 revert）。 */
+    ownerOf(agentId: number): Promise<Address>;
+    /** 注册表实现版本（canonical `getVersion`，标准实现返回 "2.0.0"）。 */
+    getVersion(): Promise<string>;
+    /**
+     * Get all agent IDs owned by an address.
+     * legacy ：直接读 `getAgentsByOwner`；
+     * standard：标准注册表没有该视图 → 由 `Transfer` 日志推导每个 token 的最新持有者。
+     */
     getAgentsByOwner(owner: Address): Promise<number[]>;
-    /** Get the current total agent count. */
+    /** Get the current agent counter（legacy `getCurrentAgentId`；standard 0-based → maxId+1）。 */
     getCurrentAgentId(): Promise<number>;
-    /** Check if an agent exists. */
+    /** Check if an agent exists（legacy `agentExists`；standard 用 `ownerOf` 试探）。 */
     agentExists(agentId: number): Promise<boolean>;
     /** Get the tokenURI for an agent. */
     tokenURI(agentId: number): Promise<string>;
     /** Get all metadata attributes for an agent as key-value pairs. */
     getAttributes(agentId: number): Promise<Record<string, string>>;
-    /** Total number of registered agents (monotonic max agent ID). */
+    /** Total number of registered agents（standard 0-based → maxId+1；legacy 计数器）。 */
     totalAgents(): Promise<number>;
     /**
      * Structured metadata for one agent.
@@ -412,6 +602,60 @@ declare class AgentRegistry {
 /** Extract IPFS CID from an ipfs:// URI. */
 declare function cidFromURI(uri: string): string;
 
+interface ReputationConfig {
+    contractAddress: Address;
+    publicClient: PublicClient;
+}
+type ReputationFlavor = 'legacy' | 'standard';
+/** 归一化的信誉聚合结果（标准形参）。 */
+interface ReputationSummary {
+    count: number;
+    value: bigint;
+    valueDecimals: number;
+}
+/** 归一化的单条反馈（标准形参）。 */
+interface ReputationFeedback {
+    value: bigint;
+    valueDecimals: number;
+    tag1: string;
+    tag2: string;
+    isRevoked: boolean;
+}
+declare class ReputationRegistry {
+    private address;
+    private publicClient;
+    /** 实现风格探测结果（缓存）：standard=canonical / legacy=历史实现。 */
+    private flavor?;
+    constructor(config: ReputationConfig);
+    /**
+     * 尝试读取 legacy 视图 `getReputationSummary()`：
+     *   - 成功 → 判定 `'legacy'`
+     *   - 确定 revert → 判定 `'standard'`（canonical 无该视图，只有 `getSummary`）
+     * 结果缓存在实例上，因此 legacy 链**不会**因探测产生额外调用。
+     */
+    private legacyProbe;
+    /** 实现风格（缓存）：`'standard'`=官方 canonical / `'legacy'`=历史实现。 */
+    getFlavor(): Promise<ReputationFlavor>;
+    /**
+     * 聚合读取（标准形参）。
+     * @dev legacy：转调 `getReputationSummary`（uint8 均分）→ 归一化为 `valueDecimals=0`；
+     *      standard：转调标准 `getSummary`。
+     *      注意：standard 下 `clients` 为空会 revert（标准要求显式传入客户地址）。
+     */
+    getSummary(agentId: number, clients?: Address[], tag1?: string, tag2?: string): Promise<ReputationSummary>;
+    /** legacy 兼容聚合（uint8 均分）。standard 下由 `getSummary` 归一到 0-100。 */
+    getReputationSummary(agentId: number, clients?: Address[], tag1?: string, tag2?: string): Promise<{
+        count: number;
+        averageScore: number;
+    }>;
+    /** 单条反馈（标准形参）。 */
+    readFeedback(agentId: number, clientAddress: Address, index: number): Promise<ReputationFeedback>;
+    /** 给出反馈的客户地址列表（两版同签名）。 */
+    getClients(agentId: number): Promise<Address[]>;
+    /** 某客户在 agent 上的最后反馈索引（0 表示没有）。 */
+    getLastIndex(agentId: number, clientAddress: Address): Promise<number>;
+}
+
 interface PlatformToolDef {
     type: 'function';
     function: {
@@ -425,14 +669,7 @@ interface PlatformToolContext {
     a2a: A2AProtocol;
     subscriptionManager: SubscriptionManager;
     agentRegistry: AgentRegistry;
-    reputationRegistry?: {
-        rateAgent(agentId: number, rating: number, comment: string): Promise<unknown>;
-        getRating(agentId: number): Promise<{
-            averageRating: number;
-            totalRatings: number;
-        }>;
-        getReviews(agentId: number): Promise<unknown[]>;
-    };
+    reputationRegistry?: ReputationRegistry;
     configurationRegistry?: {
         getConfig(agentId: number, key: string): Promise<{
             value: string;
@@ -512,4 +749,4 @@ declare class A2ADaemon extends EventEmitter {
     private processPendingTask;
 }
 
-export { type A2AConfig as A, parseTokenURIJSON as B, ContextCompactor as C, toAttributes as D, wrapPlatformToolsAsSkills as E, FactExtractor as F, type GetAllAgentsOptions as G, LoopTraceEmitter as L, type MetadataAttribute as M, type PlanDetail as P, SubscriptionManager as S, ToolExecutor as T, ZERO_ADDRESS as Z, A2ADaemon as a, type A2ADaemonConfig as b, A2AProtocol as c, type A2ATaskResult as d, AgentLoop as e, AgentRegistry as f, type AgentRegistryConfig as g, type AgentSummary as h, type AgentSummaryMetadata as i, type CreatePlanParams as j, type CreatePlanResult as k, type PlatformToolContext as l, type PlatformToolDef as m, SUBSCRIPTION_PERIODS as n, type StructuredAgentMetadata as o, type SubscribeResult as p, type SubscriptionConfig as q, type SubscriptionDetail as r, type SubscriptionPeriod as s, buildPlatformTools as t, buildSystemPrompt as u, buildTools as v, cidFromURI as w, executePlatformTool as x, getAllPlatformToolNames as y, guardSubscription as z };
+export { type A2AConfig as A, buildTools as B, ContextCompactor as C, cidFromURI as D, executePlatformTool as E, FactExtractor as F, type GetAllAgentsOptions as G, getAllPlatformToolNames as H, guardSubscription as I, parseTokenURIJSON as J, toAttributes as K, LoopTraceEmitter as L, type MetadataAttribute as M, wrapPlatformToolsAsSkills as N, type PlanDetail as P, type ReputationConfig as R, SubscriptionManager as S, ToolExecutor as T, ZERO_ADDRESS as Z, A2ADaemon as a, type A2ADaemonConfig as b, A2AProtocol as c, type A2ATaskResult as d, AgentLoop as e, AgentRegistry as f, type AgentRegistryConfig as g, type AgentSummary as h, type AgentSummaryMetadata as i, type CreatePlanParams as j, type CreatePlanResult as k, type PlatformToolContext as l, type PlatformToolDef as m, type ReputationFeedback as n, type ReputationFlavor as o, ReputationRegistry as p, type ReputationSummary as q, STANDARD_IDENTITY_ABI as r, SUBSCRIPTION_PERIODS as s, type StructuredAgentMetadata as t, type SubscribeResult as u, type SubscriptionConfig as v, type SubscriptionDetail as w, type SubscriptionPeriod as x, buildPlatformTools as y, buildSystemPrompt as z };

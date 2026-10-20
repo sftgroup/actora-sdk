@@ -1,5 +1,27 @@
 # @actora/sdk Upgrade Guide
 
+## payments 引擎 0.3.0（破坏性变更：移除 fiat / MPP）
+
+> 主题：**`@0xinfrax/payments` 0.2.2 → 0.3.0 删除两条 rail**。
+> - **fiat（Stripe）**：`SubscriptionPayments.pay({ method: 'fiat' })` 保留方法签名但运行时抛错；
+>   Gateway 的 `POST /api/v1/fiat/checkout`、`POST /api/v1/fiat/webhook` 返回 `410`。
+> - **MPP**：`MPPClient` 不再导出，`/api/v1/payments/mpp/*` 路由已删除。
+> - `PAYMENT_VERSION` 同步升为 `'0.3.0'`；`ChainKey` 直接沿用引擎的 `string`（不再自维护联合类型）。
+>
+> 迁移：fiat 改用 `chain` / `x402`；MPP 的高频小额场景改用 x402 余额 / period 授权。
+
+## v0.20.x → 下一版本（未发布，破坏性变更）
+
+> 主题：**移除 `AgentWalletConfig`（agent 自主 MPC 钱包）**。
+> 背景：MPC 钱包服务（Email 2-of-2 TSS）已全面下线，Gateway 侧 `/api/v1/billing/agent-wallets`
+> 与 `agent-payers` 路由一并移除，SDK 不再提供对应客户端。
+
+- 删除导出：`AgentWalletConfig` 及 `AgentWalletConfigOptions` / `AgentWalletStatus` /
+  `AgentWalletListResult` 等相关类型。
+- 迁移：删除对 `bindWallet` / `authorizePaymentSession` / `status` / `list` / `unbind` 的调用；
+  A2A 自动代付改用 **Session Key** 路径（`rail: 'sessionKey'`），或由调用方自行预存 x402 台账。
+- 影响面：已接入 `AgentWalletConfig` 的调用方（如 AItrader）需在升级前完成上述替换。
+
 ## v0.19.0 → v0.20.0（2026-09-25，可选升级）
 
 > 主题：**payload 密钥派生 v3：WebAuthn PRF（`webauthn-prf-hkdf`）—— IKM 不再是签名**。
@@ -698,7 +720,7 @@ const payments = new SubscriptionPayments({
   gatewayUrl: 'https://gw.example.com', // required for fiat / x402 rails
   subscriptionManager: sm,              // required for chain rail & x402 auto-funding
   walletClient,
-  chain: 'oxachain',
+  chain: 'bsc',
 })
 
 // chain rail — on-chain escrow subscription
@@ -742,7 +764,7 @@ npm install @actora/sdk@0.9.0
 import { executeBrowserAction, extractAccessibleDOM, sleep } from '@actora/sdk/skills'
 
 executeBrowserAction({ type: 'hover', description: 'settings menu' })
-executeBrowserAction({ type: 'select', selector: '#chain', value: 'oxachain' })
+executeBrowserAction({ type: 'select', selector: '#chain', value: 'bsc' })
 executeBrowserAction({ type: 'press', value: 'Enter' })
 executeBrowserAction({ type: 'getInfo' })   // → { url, title, viewport, ... }
 await sleep(300)
@@ -776,7 +798,7 @@ const payments = new SubscriptionPayments({
   gatewayUrl: 'https://gw.example.com', // required for fiat / x402 rails
   subscriptionManager: sm,              // required for chain rail & x402 auto-funding
   walletClient,
-  chain: 'oxachain',
+  chain: 'bsc',
 })
 
 // chain rail — on-chain escrow subscription

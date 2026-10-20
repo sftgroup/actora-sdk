@@ -3,20 +3,20 @@
 // @0xinfrax/payments' PaymentsClient; chain stays on SubscriptionManager.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { SubscriptionPayments } from '../src/payment/payments'
-import { MPPClient, A2AClient, PeriodClient, X402Client, PaymentsClient, PAYMENT_VERSION } from '../src/payment'
+import { A2AClient, PeriodClient, X402Client, PaymentsClient, PAYMENT_VERSION } from '../src/payment'
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 describe('payment module exports (v0.9.3)', () => {
   it('re-exports the generic protocol clients from the SDK root', () => {
-    for (const Ctor of [MPPClient, A2AClient, PeriodClient, X402Client, PaymentsClient]) {
+    for (const Ctor of [A2AClient, PeriodClient, X402Client, PaymentsClient]) {
       expect(typeof Ctor).toBe('function')
       expect(new Ctor({ baseUrl: 'http://localhost' })).toBeInstanceOf(Ctor)
     }
   })
   it('tracks the aligned generic engine version', () => {
-    expect(PAYMENT_VERSION).toBe('0.1.3') // R17.6: 跟随演练 @0xinfrax/payments 0.1.2→0.1.3
+    expect(PAYMENT_VERSION).toBe('0.3.0') // 跟随 @0xinfrax/payments 0.3.0（移除 fiat / MPP）
   })
 })
 
@@ -61,52 +61,18 @@ describe('SubscriptionPayments', () => {
   })
 
   describe('fiat rail', () => {
-    it('creates a checkout through the unified endpoint and returns the Stripe redirect', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({
-        method: 'fiat', paymentId: 'pi_f1', url: 'https://checkout.stripe.com/c/s1',
-        sessionUrl: 'https://checkout.stripe.com/c/s1', sessionId: 'cs_1',
-        clientReference: '0xabc|3|2', redirect: true,
-      }, 200))
+    it('is retired in @0xinfrax/payments 0.3.0 and fails loudly without calling the gateway', async () => {
       const payments = make()
-      const res = await payments.pay({
-        method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc',
-        amountCents: 499, currency: 'usd', successUrl: 'https://x.app/success',
-      })
-      expect(res).toEqual({ method: 'fiat', sessionUrl: 'https://checkout.stripe.com/c/s1', sessionId: 'cs_1', redirect: true })
-      const { url, method, body } = firstCall(fetchMock.mock.calls[0]!)
-      expect(url).toBe('https://gw.example.com/api/v1/payments')
-      expect(method).toBe('POST')
-      expect(body).toMatchObject({
-        method: 'fiat', subscriber: '0xabc', period: 'month', currency: 'usd', chain: 'bsc',
-        amountCents: 499, pricing: { planId: 2 }, metadata: { agentId: 3, planId: 2 },
-        successUrl: 'https://x.app/success',
-      })
-    })
-
-    it('omits amountCents when not supplied (Gateway auto-prices from planId)', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({
-        method: 'fiat', paymentId: 'pi_f2', url: 'https://checkout.stripe.com/c/s2',
-        sessionUrl: 'https://checkout.stripe.com/c/s2', sessionId: 'cs_2',
-        clientReference: '0xabc|3|2', redirect: true,
-      }, 200))
-      const res = await make().pay({ method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc' })
-      expect(res.redirect).toBe(true)
-      const { body } = firstCall(fetchMock.mock.calls[0]!)
-      expect(body).toMatchObject({ subscriber: '0xabc', period: 'month', currency: 'usd', chain: 'bsc' })
-      expect(body.amountCents).toBeUndefined()
-    })
-
-    it('requires a gatewayUrl', async () => {
-      const payments = new SubscriptionPayments({})
-      await expect(payments.pay({ method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc', amountCents: 100 }))
-        .rejects.toThrow('gatewayUrl')
+      await expect(payments.pay({ method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc', amountCents: 499 }))
+        .rejects.toThrow('method "fiat" was retired')
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 
   describe('x402 rail', () => {
     it('POSTs the x402 subscription to the unified endpoint with the given txHash', async () => {
       fetchMock.mockResolvedValue(jsonResponse({ subscriptionId: 9, creditedWei: '1000' }, 200))
-      const payments = make({ chain: 'oxachain' })
+      const payments = make({ chain: 'bsc' })
       const res = await payments.pay({
         method: 'x402', planId: 2, agentId: 3, subscriber: '0xabc', txHash: '0xtx99', period: 'month',
       })
@@ -114,7 +80,7 @@ describe('SubscriptionPayments', () => {
       const { url, method, body } = firstCall(fetchMock.mock.calls[0]!)
       expect(url).toBe('https://gw.example.com/api/v1/payments')
       expect(method).toBe('POST')
-      expect(body).toMatchObject({ method: 'x402', subscriber: '0xabc', agentId: 3, planId: 2, period: 'month', txHash: '0xtx99', chain: 'oxachain' })
+      expect(body).toMatchObject({ method: 'x402', subscriber: '0xabc', agentId: 3, planId: 2, period: 'month', txHash: '0xtx99', chain: 'bsc' })
     })
 
     it('auto-funds the payment via the wallet client when no txHash is given', async () => {
@@ -122,8 +88,8 @@ describe('SubscriptionPayments', () => {
       const getPlan = vi.fn().mockResolvedValue({ price: 800n })
       fetchMock.mockResolvedValueOnce(jsonResponse({
         rails: { fiat: { enabled: true }, chain: { enabled: true }, x402: { enabled: true } },
-        x402: { enabled: true, priceWei: '500', payTo: '0xpay', network: 'eip155:1', chain: 'oxachain' },
-        chains: { chain: 'oxachain', chainId: 19505 },
+        x402: { enabled: true, priceWei: '500', payTo: '0xpay', network: 'eip155:56', chain: 'bsc' },
+        chains: { chain: 'bsc', chainId: 56 },
       }, 200))
       fetchMock.mockResolvedValue(jsonResponse({ subscriptionId: 11, creditedWei: '800' }, 200))
       const payments = make({ walletClient: { account: { address: '0xacc' }, sendTransaction }, subscriptionManager: { getPlan } as unknown as never })
