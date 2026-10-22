@@ -40,4 +40,17 @@ export type { ClientOptions } from '@0xinfrax/payments'
 export { BillingClient } from './billing'
 export type { BillingClientConfig, BalanceResult } from './billing'
 
+// P6.2: spend policy (business limits → Gator caveat mapping) + approval queue.
+export { SpendPolicyClient } from './spend-policy'
+export type {
+  SpendChain,
+  SpendPolicy,
+  SpendPolicyDoc,
+  SpendPolicyClientConfig,
+  SpendGateResult,
+  SpendApproval,
+  SpendDecisionCode,
+  GatorCaveat,
+} from './spend-policy'
+
 export const PAYMENT_VERSION = '0.3.0'
