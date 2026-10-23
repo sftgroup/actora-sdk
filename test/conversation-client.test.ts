@@ -232,18 +232,6 @@ describe('ConversationClient — parallel tasks (P8/P9)', () => {
       expect(url).toBe('https://gw.example.com/api/v1/a2a/session-key/info')
     })
 
-    it('getBalance returns ledger balance + sessionKey(REQ-3)', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({
-        balance: '0.000000000000000000', balanceWei: '0', currency: 'OXA', subject: '0xuser',
-        sessionKey: { enabled: true, authorized: true, maxTotal: '10', totalSpent: '2' },
-      }))
-      const res = await makeClient().getBalance()
-      expect(res.sessionKey?.authorized).toBe(true)
-      expect(res.sessionKey?.maxTotal).toBe('10')
-      const { url } = firstCall(fetchMock.mock.calls[0]!)
-      expect(url).toBe('https://gw.example.com/api/v1/billing/balance')
-    })
-
     it('throws ConversationTaskError on non-2xx', async () => {
       fetchMock.mockResolvedValue(jsonResponse({ error: 'Task not found' }, 404))
       await expect(makeClient().getA2ATaskResult(999)).rejects.toBeInstanceOf(ConversationTaskError)

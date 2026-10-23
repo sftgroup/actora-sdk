@@ -81,14 +81,22 @@ export async function executePlatformTool(
       case 'actora_reputation_rate':
         // 信誉适配器为只读桥；写入须直接对底层注册表调用 giveFeedback（legacy/canonical 签名不同）
         throw new Error('reputation writes are not supported by the read adapter')
-      case 'actora_reputation_get':
+      case 'actora_reputation_get': {
         if (!ctx.reputationRegistry) throw new Error('ReputationRegistry not configured')
+        const agentId = args.agentId as number
+        let clients = (args.clients as `0x${string}`[]) ?? []
+        // canonical 的 getSummary 在 clients 为空时直接 revert（legacy 空数组=全部），
+        // 未显式指定时回退为该 agent 的反馈方列表。
+        if (clients.length === 0) clients = await ctx.reputationRegistry.getClients(agentId)
+        // 仍为空 = 尚无任何反馈：直接返回零值，避免 canonical revert。
+        if (clients.length === 0) return { count: 0, averageScore: 0 }
         return ctx.reputationRegistry.getReputationSummary(
-          args.agentId as number,
-          (args.clients as `0x${string}`[]) ?? [],
+          agentId,
+          clients,
           (args.tag1 as string) ?? '',
           (args.tag2 as string) ?? ''
         )
+      }
       case 'actora_reputation_reviews': {
         if (!ctx.reputationRegistry) throw new Error('ReputationRegistry not configured')
         const agentId = args.agentId as number

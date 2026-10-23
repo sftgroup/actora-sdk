@@ -267,19 +267,6 @@ var ConversationClient = class {
     }
     return body;
   }
-  /** x402 ledger balance + Session Key authorization status (REQ-3). */
-  async getBalance() {
-    const res = await fetch(`${this.baseUrl}/api/v1/billing/balance`, { headers: this._headers() });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new ConversationTaskError(
-        res.status,
-        body?.error || `Balance lookup failed (HTTP ${res.status})`,
-        body?.code
-      );
-    }
-    return body;
-  }
 };
 export {
   A2A_STATUS,

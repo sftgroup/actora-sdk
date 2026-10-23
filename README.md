@@ -104,7 +104,7 @@ npm install @actora/sdk@0.20.1
 | `wagmi` | ^2.0 | React hooks 内部 |
 | `@tanstack/react-query` | ^5.0 | React hooks 内部 |
 
-> **`viem`（^2.0）不是 peer dependency**：仅链上模块（`AgentRegistry` / `SubscriptionManager` / `A2AProtocol` 等）需要 viem 的 `PublicClient` / `WalletClient`，使用时请自行安装；纯 REST 客户端（`ConversationClient` / `CentralAgentClient` / `BillingClient` 等）完全不需要。仓库内可运行示例见 `examples/`（viem 已在 devDependencies 中）。
+> **`viem`（^2.0）不是 peer dependency**：仅链上模块（`AgentRegistry` / `SubscriptionManager` / `A2AProtocol` 等）需要 viem 的 `PublicClient` / `WalletClient`，使用时请自行安装；纯 REST 客户端（`ConversationClient` / `CentralAgentClient` / `SpendPolicyClient` 等）完全不需要。仓库内可运行示例见 `examples/`（viem 已在 devDependencies 中）。
 
 ---
 
@@ -411,12 +411,14 @@ const info = await payments.fetchX402Info()                  // { enabled, price
 
 ### 5.4 ConversationClient —— 托管对话（REST/SSE）
 
-- **用途**：托管对话服务客户端（`POST /api/v1/agent/runs`，SSE 流式），支持会话、并行任务、A2A 委派、余额查询。
+- **用途**：托管对话服务客户端（`POST /api/v1/agent/runs`，SSE 流式），支持会话、并行任务、A2A 委派。
 - **构造**：`new ConversationClient({ gatewayUrl, apiKey?, accessToken?, endUserId?, llmApiKey?, llmEndpoint?, llmModel?, timeoutMs? })`
 - **关键方法**：
   - 对话：`chat(params)` → `{ text, toolCalls, clarification?, usage? }`；`stream(params, { signal? })` → SSE 事件（`text | tool_call | tool_result | thinking | done | error | clarification | onchain_approval_required`）
   - 会话/任务：`createSession(params)`、`createTask(params)`（立即返回 `status: 'queued'`，后台执行）、`getTask(taskId)`、`listTasks(sessionId)`、`cancelTask(taskId)`、`getCapabilities()`（`parallelTasks` 开关，关闭时 `createTask` 返回 403 `PARALLEL_TASKS_DISABLED`，应降级为 `chat()`）
-  - A2A/计费：`getA2ATaskResult(taskId)`、`retryA2ATask(taskId)`、`getSessionKeyInfo()`、`getBalance()`
+  - A2A：`getA2ATaskResult(taskId)`、`retryA2ATask(taskId)`、`getSessionKeyInfo()`
+  - 按次付费的 session 授权状态不再走本客户端（`getBalance()` 已随 `/api/v1/billing/balance` 下线），改用
+    `SpendPolicyClient.sessions()`（§5.6）。
 - 参数中的 `endUserId` 传 `0x<wallet>` 会触发网关订阅代理鉴权。
 - **多链（0.17.0 起）**：`chat()` / `stream()` / `createTask()` **不需要传链**，也无法传链 —— 平台按
   「你在这条 `agentId` 的哪条链上有权」自动解析并全链路沿用（详见 §4「托管对话：链由平台解析」）。
@@ -448,23 +450,34 @@ const { agent } = await central.create({ name: '行情分析助手', description
 const { plan } = await central.createPlan(agent.id, { priceWei: '10000000000000000', period: 'month' })
 ```
 
-### 5.6 BillingClient / TenantPlanPayments / A2AClient / PeriodClient
+### 5.6 SpendPolicyClient / TenantPlanPayments / A2AClient / PeriodClient
 
 | 类 | 用途 | 构造 | 关键方法 |
 |----|------|------|----------|
-| `BillingClient` | B 端余额预检（x402 台账，委托前判断余额是否够按次付费） | `{ gatewayUrl, apiKey?, accessToken?, endUserId? }` | `getBalance({ endUserId? })` → `{ balance, balanceWei, currency, subject, payTo?, priceWei? }`（`currency` 为该链原生币符号） |
+| `SpendPolicyClient` | 花费策略 + 审批队列，以及**按次 session 授权**（Keel v1，取代原预充值余额） | `{ gatewayUrl, apiKey?, accessToken? }` | `list()` / `get(chain)` / `put(chain, policy)` / `disable(chain)` / `check(input)` / `approvals()` / `decide(id, decision)`；`sessions()` / `enableSession()` / `confirmSession()` / `prepareSessionRevoke()` / `revokeSession()` |
 | `TenantPlanPayments` | 购买平台订阅档位（`purpose='tenant-plan'`，绑定租户配额） | `{ gatewayUrl, accessToken?, chain? }` | `buy({ tenantPlanId, subscriber, method, txHash?, successUrl?, cancelUrl? })` |
 | `A2AClient` | a2a-pay 支付意图两段式（create → pay → settle） | `{ baseUrl, accessToken? }`（`ClientOptions`） | `create({ payer, amountWei, payee?, chain?, metadata? })`、`settle({ paymentId, txHash, chain? })` |
 | `PeriodClient` | 周期授权（P4）：按周期扣款/读状态 | `{ baseUrl, accessToken? }`（`ClientOptions`） | `charge(authorizationId)`、`authorization(authorizationId)` |
 
 ```ts
-// BillingClient —— 委托前预检
-const billing = new BillingClient({ gatewayUrl, apiKey: 'actora_...' })
-const { balanceWei, priceWei } = await billing.getBalance()
-if (priceWei && BigInt(balanceWei) < BigInt(priceWei)) {
-  // 提示充值：向 balance.payTo 转原生币
-}
+const spend = new SpendPolicyClient({ gatewayUrl, accessToken: jwt })
+
+// 1) 授权：enable 返回 owner 待签 digest → 用户 eth_sign（裸签）→ confirm 上链
+const draft = await spend.enableSession({ chain: 'bsc' })   // 省略 policy 则用已保存策略
+const ownerSignature = await wallet.signMessage({ raw: draft.digest })
+await spend.confirmSession({ chain: 'bsc', ownerSignature })
+
+// 2) 查询：我的全部链 session 状态
+const sessions = await spend.sessions()
+
+// 3) 撤销（两段式）：先取冻结的撤销 digest，签名后带回购 userOpHash 提交
+const rv = await spend.prepareSessionRevoke({ chain: 'bsc' })
+const rvSig = await wallet.signMessage({ raw: rv.digest })
+await spend.revokeSession({ chain: 'bsc', ownerSignature: rvSig, userOpHash: rv.digest })
 ```
+
+> 余额预充值模型已下线：`GET /api/v1/billing/balance` 与 `BillingClient` 均已删除，资金始终留在用户
+> 智能账户中，按次扣费由 session 授权约束。
 
 ### 5.7 A2AProtocol —— 链上 A2A（Agent Card / Task）
 
@@ -889,6 +902,14 @@ const runner = new AgentRunner({
 > 网关不可用时，Studio 会**本地兜底**生成密钥对（`payload_key_mode = 'local'`，平台不托管）并在发布成功后
 > 立即下载私钥；此时改用 `unpack` / `aesKeyHex` 传入该本地私钥即可（`by-agent` 导出对它是 404）。
 
+> **订阅门控解密（2026-10-23，P5.1）**：订阅者或 owner 也可以**不导出私钥**，直接由网关解密并返回明文 ——
+> `POST /api/v1/agents/payload-keys/by-agent/:agentId/decrypt`（body 可选 `{ chain }`；B 端可带
+> `X-End-User-Id` 代理终端用户）。网关依次校验「owner 或有效订阅」→ 读链上 `encryptedPayloadCid` /
+> `eciesEncryptedKey` / `payload_key_id` → 取回 IPFS 密文 → KEK 解封托管私钥 → 解出 `{ prompt, skills, mcp }`。
+> 失败语义：未订阅 `403 subscription_required`；未绑定托管密钥 / 缺少密文引用 `409`；密钥不匹配
+> `422 decrypt_failed`。响应只含明文 payload 与 `keyId`，**私钥与 AES key 绝不返回**
+> （实现见 `gateway/src/services/agent-payload-access.ts`）。信任边界仍是平台 KEK 托管。
+
 #### 前置条件与失败语义
 
 | 项 | 说明 |
@@ -1028,7 +1049,7 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
 
 | 场景 | 头 | 适用客户端 |
 |------|-----|-----------|
-| 租户 API Key（推荐 B 端） | `X-Api-Key: actora_...` | `ConversationClient` / `BillingClient` / `CentralAgentClient`（发布管理） |
+| 租户 API Key（推荐 B 端） | `X-Api-Key: actora_...` | `ConversationClient` / `SpendPolicyClient` / `CentralAgentClient`（发布管理） |
 | 钱包签名 JWT | `Authorization: Bearer <jwt>` | 同上（`accessToken` 字段） |
 | 钱包/私钥（链上交易） | 无头，viem `WalletClient` 签名 | `AgentRegistry` / `SubscriptionManager` / `A2AProtocol` |
 
@@ -1154,15 +1175,15 @@ BYOK（自带模型 Key）另用三个头逐请求覆盖：`X-LLM-Api-Key` / `X-
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `POST` | `/api/v1/payments` | **统一下单**。`purpose` = `agent-subscription`（默认）/ `tenant-plan` / `token-pack` / `a2a`；`method` = `chain` / `fiat` / `x402` / `mpp` |
-| `POST` | `/api/v1/payments/verify` | 校验链上交易并记账（`{ txHash, chain }`） |
-| `GET` | `/api/v1/payments/access` | 跨轨道访问检查（链上订阅 / x402 台账 / fiat 订阅） |
+| `POST` | `/api/v1/payments/verify` | 校验链上交易并记录回执（`{ txHash, chain }`；按 `txHash` 幂等，不再累加余额） |
+| `GET` | `/api/v1/payments/access` | 跨轨道访问检查（链上订阅 / x402 回执 / fiat 订阅） |
 | `GET` | `/api/v1/payments/info` · `/quote` | x402 发现信息（`priceWei` / `payTo` / `network`）与报价 |
 | `POST` | `/api/v1/payments/a2a` · `/a2a/settle` | A2A 按次付费两段式（create → settle） |
 | `POST` | `/api/v1/payments/period/authorize` · `/charge` · `GET /period/authorization` | 周期授权扣款（P4） |
 | `POST` | `/api/v1/payments/mpp/open` · `/voucher` · `/topup` · `/settle` · `/close` · `GET /mpp/session` | MPP 通道（按量结算） |
-| `GET` | `/api/v1/billing/balance` | 余额 / token 包余量 / Session Key 授权态（`BillingClient.getBalance`） |
 | `GET` | `/api/v1/billing/token-packs` | 加油包列表（5M/$9.9、20M/$29.9、100M/$99.9，30 天有效） |
-| `GET` | `/api/v1/x402/info` · `/balance` · `/paywall` | x402 支付发现与台账（公开 / 租户） |
+| `GET` | `/api/v1/x402/info` · `/paywall` | x402 支付发现（`/balance` 已随预充值账本下线） |
+| `GET` · `POST` | `/api/v1/spend-policy/session{,/enable,/confirm,/revoke}` | 按次 session 授权与撤销（`SpendPolicyClient`） |
 
 **`purpose` 与关键字段**：
 
@@ -1190,8 +1211,8 @@ POST /api/v1/payments
 | `POST` | `/api/v1/sessions` · `GET /api/v1/sessions/:id` | 会话管理 |
 | `POST` | `/api/v1/tasks` · `GET /api/v1/tasks/:id` · `POST /api/v1/tasks/:id/cancel` | 异步任务（`parallel_tasks` 关闭时返回 403 `PARALLEL_TASKS_DISABLED`） |
 | `POST` | `/api/v1/a2a/tasks/:id/resume` · `/retry` · `GET /a2a/task-result/:taskId` | A2A 委派任务续跑 / 重试 / 取结果 |
-| `GET` | `/api/v1/a2a/session-key/info` | Session Key 授权状态（`balanceReturnEnabled` 等） |
-| `POST` | `/api/v1/a2a/session-key/create` · `/revoke` | 创建 / 撤销 Session Key（自动代付） |
+| `GET` | `/api/v1/a2a/session-key/info` | 按次付费能力发现（`enabled` / `chain` / `chainId` / `payTo`） |
+| `GET` · `POST` | `/api/v1/spend-policy/session{,/enable,/confirm,/revoke}` | 按次 session 授权：enable → owner 裸签 → confirm；revoke 两段式（`SpendPolicyClient`） |
 
 **链不用你传**：`POST /api/v1/agent/runs` 与 `POST /api/v1/sessions/:id/tasks` 都**不接受**调用方指定链，
 平台自行按上文的多链解析判定（列出该 `agentId` 的候选链 → 取你在其中**有权的那条**），并把该链下传给执行侧
@@ -1201,7 +1222,7 @@ POST /api/v1/payments
 ### 8.6 计费与配额语义
 
 - **两条 Key 来源**：`platform`（平台 LLM，按 `quota_daily` 扣 token，超出后消耗 token 包）/ `byok`（自带 Key，不计费）；用量日志按 `key_source` 分组。
-- **额度耗尽**：返回 **402**（`QUOTA_EXHAUSTED`），Session Key 自动代付任务会被挂起为 `awaiting_payment`，24 小时内充值即可续跑。
+- **额度耗尽**：返回 **402**（`QUOTA_EXHAUSTED`），按次付费任务会被挂起为 `awaiting_payment`，用户在客户端完成一次 session 授权（`/api/v1/spend-policy/session/enable` → 裸签 → `/confirm`）即可续跑。
 - **限流**：默认 partner `5 rpm` / 并发 `1`；购买档位后按档位生效。超限返回 **429**。
 - **`X-End-User-Id`**：同一把租户 API Key 可服务多个终端用户，计费与订阅判定按该地址归属，是 B 端「一次接入多用户」的标准做法。
 
@@ -1210,7 +1231,7 @@ POST /api/v1/payments
 | 状态 | 含义 | 处理建议 |
 |------|------|----------|
 | 401 | Key / JWT 缺失或失效 | 检查 `X-Api-Key`；若被轮换需换新 Key |
-| 402 | 额度耗尽 / 订阅过期 | 购档位或加油包；x402 任务等待充值 |
+| 402 | 额度耗尽 / 订阅过期 | 购档位或加油包；按次任务引导用户完成 session 授权 |
 | 403 | 租户被 suspend / 能力未开通；或**对目标 Agent 无归属 / 无有效订阅**（`AGENT_ACCESS_DENIED`） | 查 `GET /tenant/me` 的 `status`；`PARALLEL_TASKS_DISABLED` 时降级为 `chat()`；`AGENT_ACCESS_DENIED` 则确认该钱包在 Agent **所在链**上确实拥有 / 已订阅（多链下无需自己判断是哪条链，平台会逐链判定） |
 | 404 | 路径或资源不存在（含 Key 摘要不可读回）；`GET /agents/:id` 时表示**该 ID 在你指定的链上不存在**（`?chain=` 指定时），或不带 `chain` 时**所有候选链都没有该 ID** | 核对端点；Key 丢失只能轮换；Agent 详情可先不带 `?chain=` 让平台跨链解析 |
 | 429 | 触发限流 | 指数退避重试 |
@@ -1223,7 +1244,7 @@ POST /api/v1/payments
 3. 需要平台 LLM → 购档位（`GET /tenant/plans` + `POST /api/v1/payments`，`purpose='tenant-plan'`）；
 4. 需要链上 Agent → 选链（`GET /api/v1/chain/health` 探活）→ 订阅（`SubscriptionManager` / `SubscriptionPayments`）；
 5. 服务端调用一律带 `X-Api-Key` + `X-End-User-Id`，并实现 401/402/429/503 的重试与降级；
-6. 监控 `GET /api/v1/tenant/usage` 与 `GET /api/v1/billing/balance`，避免线上断供；
+6. 监控 `GET /api/v1/tenant/usage`，避免线上断供；`GET /api/v1/billing/balance` 已下线；
 7. 托管对话**不要传链**（也没有该参数）：传 `agentId` 即可，BSC / Ethereum / Base 的 Agent 由平台自动解析
    （§4）；若收到 403 `AGENT_ACCESS_DENIED`，先确认该钱包在 Agent 所在链上确实拥有 / 已订阅；
 8. 若需 Agent 的可执行工具生效，确认发布方已用 `registry.setAttributes(agentId, { skills: [...] })`

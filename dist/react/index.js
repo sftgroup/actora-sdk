@@ -718,7 +718,7 @@ var KNOWN_CHAINS = {
       identityRegistry: "0x37f3919D64d648ddF70747e159fd9A1c6890CA3b",
       subscriptionManager: "0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29",
       a2aProtocolRegistry: "0x2172145F2A8f7A66019A4F4048Af46844243607E",
-      reputationRegistry: "0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e",
+      reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
       configurationRegistry: "0x5EF8c35738311B971A64de64487E1E304Ae53993",
       multiEndpointRegistry: "0xB8065829dBb450B8fC7375D910521EA641EC6Ee5"
     },

@@ -214,28 +214,8 @@ export interface SessionKeyInfo {
   baseUrl: string
 }
 
-/** Session Key authorization status for an end-user wallet (REQ-3, from billing/balance). */
-export interface SessionKeyAuthStatus {
-  enabled: boolean
-  authorized: boolean
-  sessionAddress?: string
-  maxPerTx?: string
-  maxTotal?: string
-  totalSpent?: string
-  validUntil?: string
-}
-
-/** x402 ledger balance (GET /api/v1/billing/balance). */
-export interface BillingBalance {
-  balance: string
-  balanceWei: string
-  currency: string
-  updatedAt?: string | null
-  subject: string
-  payTo?: string
-  priceWei?: string
-  sessionKey?: SessionKeyAuthStatus
-}
+// 2026-10-23：`GET /api/v1/billing/balance` 已随 x402 v2 下线（不预充值、不记账），
+// 余额预检与按次 session 授权状态改由 `SpendPolicyClient.sessions()` 提供。
 
 export class ConversationClient {
   private readonly baseUrl: string
@@ -510,19 +490,5 @@ export class ConversationClient {
       )
     }
     return body as SessionKeyInfo
-  }
-
-  /** x402 ledger balance + Session Key authorization status (REQ-3). */
-  async getBalance(): Promise<BillingBalance> {
-    const res = await fetch(`${this.baseUrl}/api/v1/billing/balance`, { headers: this._headers() })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      throw new ConversationTaskError(
-        res.status,
-        body?.error || `Balance lookup failed (HTTP ${res.status})`,
-        body?.code,
-      )
-    }
-    return body as BillingBalance
   }
 }

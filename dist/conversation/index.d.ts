@@ -200,27 +200,6 @@ interface SessionKeyInfo {
     chainId: number;
     baseUrl: string;
 }
-/** Session Key authorization status for an end-user wallet (REQ-3, from billing/balance). */
-interface SessionKeyAuthStatus {
-    enabled: boolean;
-    authorized: boolean;
-    sessionAddress?: string;
-    maxPerTx?: string;
-    maxTotal?: string;
-    totalSpent?: string;
-    validUntil?: string;
-}
-/** x402 ledger balance (GET /api/v1/billing/balance). */
-interface BillingBalance {
-    balance: string;
-    balanceWei: string;
-    currency: string;
-    updatedAt?: string | null;
-    subject: string;
-    payTo?: string;
-    priceWei?: string;
-    sessionKey?: SessionKeyAuthStatus;
-}
 declare class ConversationClient {
     private readonly config;
     private readonly baseUrl;
@@ -289,8 +268,6 @@ declare class ConversationClient {
      * (EIP-712-verified; the session private key never transits the Gateway).
      */
     getSessionKeyInfo(): Promise<SessionKeyInfo>;
-    /** x402 ledger balance + Session Key authorization status (REQ-3). */
-    getBalance(): Promise<BillingBalance>;
 }
 
-export { type A2ADelegatedTaskResult, A2A_STATUS, type BillingBalance, type ConversationChatParams, type ConversationChatResult, ConversationClient, type ConversationClientConfig, type ConversationCreateSessionParams, type ConversationCreateTaskParams, type ConversationSSEEvent, type ConversationSkillDef, type ConversationTask, ConversationTaskError, type ConversationTaskStatus, type OnChainApprovalRequest, type SessionKeyAuthStatus, type SessionKeyInfo };
+export { type A2ADelegatedTaskResult, A2A_STATUS, type ConversationChatParams, type ConversationChatResult, ConversationClient, type ConversationClientConfig, type ConversationCreateSessionParams, type ConversationCreateTaskParams, type ConversationSSEEvent, type ConversationSkillDef, type ConversationTask, ConversationTaskError, type ConversationTaskStatus, type OnChainApprovalRequest, type SessionKeyInfo };

@@ -14,9 +14,9 @@ export { IPFSUploadResult, IPFSUploader, IPFSUploaderConfig, defaultIPFSUploader
 export { MemoryConfig, MemoryFact, MemoryProvider } from './memory/index.mjs';
 export { HttpTraceEmitter, NoopTraceEmitter, TraceConfig, TraceEmitter, TraceEvent } from './traces/index.mjs';
 export { BrowserAction, BrowserActionResult, executeBrowserAction, extractAccessibleDOM, sleep } from './skills/index.mjs';
-export { A2ADelegatedTaskResult, A2A_STATUS, BillingBalance, ConversationChatParams, ConversationChatResult, ConversationClient, ConversationClientConfig, ConversationCreateSessionParams, ConversationCreateTaskParams, ConversationSSEEvent, ConversationSkillDef, ConversationTask, ConversationTaskError, ConversationTaskStatus, OnChainApprovalRequest, SessionKeyAuthStatus, SessionKeyInfo } from './conversation/index.mjs';
-import { ClientOptions, ChainKey as ChainKey$1 } from '@0xinfrax/payments';
-export { ClientOptions, MPPClient, PaymentsClient, X402Client } from '@0xinfrax/payments';
+export { A2ADelegatedTaskResult, A2A_STATUS, ConversationChatParams, ConversationChatResult, ConversationClient, ConversationClientConfig, ConversationCreateSessionParams, ConversationCreateTaskParams, ConversationSSEEvent, ConversationSkillDef, ConversationTask, ConversationTaskError, ConversationTaskStatus, OnChainApprovalRequest, SessionKeyInfo } from './conversation/index.mjs';
+import { ChainKey as ChainKey$1, ClientOptions } from '@0xinfrax/payments';
+export { ClientOptions, PaymentsClient, X402Client } from '@0xinfrax/payments';
 export { C as ChainConfig, a as ConfigRegistryOpts, b as ConfigurationRegistry, K as KNOWN_CHAINS } from './config-DOyidIlP.mjs';
 export { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 import 'events';
@@ -84,7 +84,7 @@ declare const SUBSCRIPTION_VERSION = "0.3.0";
 
 type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402';
 type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year';
-type ChainKey = 'sepolia' | 'bsc' | 'ethereum' | 'base';
+type ChainKey = ChainKey$1;
 interface SubscriptionPaymentsConfig {
     /** Actora Gateway base URL (required for fiat / x402 rails). */
     gatewayUrl?: string;
@@ -227,7 +227,7 @@ declare class A2AClient {
         amountWei: string;
         payee: string;
     }>;
-    /** Phase 2: verify the payer's on-chain payment tx and credit it. */
+    /** Phase 2: verify the payer's on-chain payment tx (receipt only). */
     settle(input: {
         paymentId: string;
         txHash: string;
@@ -237,7 +237,6 @@ declare class A2AClient {
         paymentId: string;
         payer: string;
         creditedWei: string;
-        balanceWei: string;
     }>;
 }
 
@@ -258,57 +257,187 @@ declare class PeriodClient {
     }>;
 }
 
-interface BillingClientConfig {
-    /** Gateway base URL, e.g. https://actora.codes */
+type SpendChain = 'bsc' | 'ethereum' | 'base';
+/** 业务策略（与网关 services/spend-policy.ts 的 SpendPolicy 同构）。 */
+interface SpendPolicy {
+    version: 1;
+    maxPerTxWei: string;
+    periodSeconds: number;
+    periodLimitWei: string;
+    /** 0 = 不限 */
+    maxCalls: number;
+    /** 链 → 允许的收款地址；空数组 = 该链不限制 */
+    allowedTargets: Record<string, string[]>;
+    tokenCaps: Array<{
+        chain: SpendChain;
+        token: string;
+        periodAmountWei: string;
+        periodSeconds: number;
+    }>;
+    /** 命中已有订阅/拥有关系时跳过限额 */
+    skipWhenSubscribed: boolean;
+    /** > 0 时超过该额度的单笔需人工审批 */
+    approvalAboveWei: string;
+    /** unix 秒；0 = 不过期 */
+    validUntil: number;
+}
+/** Gator caveat（enforcer 合约地址由 Delegation Framework 地址表解析）。 */
+interface GatorCaveat {
+    enforcer: string;
+    terms: `0x${string}`;
+    args: `0x${string}`;
+    description: string;
+}
+interface SpendPolicyDoc {
+    chain: SpendChain;
+    enabled: boolean;
+    policy: SpendPolicy;
+    caveats: GatorCaveat[];
+}
+type SpendDecisionCode = 'ALLOW' | 'POLICY_MISSING' | 'POLICY_DISABLED' | 'POLICY_UNAVAILABLE' | 'POLICY_EXPIRED' | 'SUBSCRIPTION_COVERED' | 'INVALID_CHAIN' | 'INVALID_AMOUNT' | 'TARGET_NOT_ALLOWED' | 'PER_TX_LIMIT' | 'PERIOD_LIMIT' | 'CALL_LIMIT' | 'APPROVAL_REQUIRED' | 'APPROVAL_PENDING' | 'APPROVAL_REJECTED' | 'APPROVED_BY_USER';
+interface SpendGateResult {
+    allow: boolean;
+    decision: 'allow' | 'deny' | 'needs_approval';
+    code: SpendDecisionCode;
+    reason: string;
+    remainingWei: string;
+    approvalId?: number;
+}
+interface SpendApproval {
+    id: number;
+    subscriber: string;
+    chain: string;
+    target: string;
+    amount_wei: string;
+    target_agent_id: number | null;
+    ref_id: string | null;
+    reason: string;
+    status: 'pending' | 'approved' | 'rejected';
+    requested_at: string;
+    decided_at: string | null;
+    decided_by: string | null;
+    consumed_at: string | null;
+}
+/** 单链按次 session 授权状态（GET /session）。 */
+interface SpendSession {
+    chain: string;
+    accountAddress: string;
+    status: 'pending' | 'enabled' | 'disabled' | string;
+    /** unix 秒 */
+    validUntil: number;
+    sessionSigner: string;
+}
+/** enable 的返回值：owner 对 `digest` 裸签（eth_sign 语义）后走 confirm。 */
+interface EnableSpendSessionResult {
+    accountAddress: string;
+    accountDeployed: boolean;
+    sessionId: string;
+    sessionSigner: string;
+    digest: string;
+    validUntil: string;
+    /** 链上已有旧 session 时，网关先自愈撤销（v1 无需用户处理）。 */
+    needsSessionRevoke?: boolean;
+    disableUserOpHash?: string;
+    disableSessionId?: string;
+}
+interface ConfirmSpendSessionResult {
+    userOpHash: string;
+    txHash: string | null;
+    receiptSuccess: boolean;
+}
+/** 撤销第一步的产物：owner 对 `digest` 裸签，再原样带回 `revokeSession`。 */
+interface SpendSessionRevokeDraft {
+    accountAddress: string;
+    sessionId: string;
+    digest: string;
+    validUntil: number;
+}
+interface SpendSessionRevokeResult {
+    revoked: boolean;
+    userOpHash: string;
+    txHash: string | null;
+}
+interface SpendPolicyClientConfig {
     gatewayUrl: string;
-    /** Tenant API Key (actora_...) issued after registration (alternative to accessToken) */
+    /** Tenant API Key（actora_...） */
     apiKey?: string;
-    /** Gateway JWT access token from wallet-signed login (alternative to apiKey) */
+    /** 网关 JWT（钱包登录后获取） */
     accessToken?: string;
-    /** End-user wallet for balance queries within the tenant (optional) */
-    endUserId?: string;
 }
-interface BalanceResult {
-    /** Balance (ledger native token) as a high-precision decimal string, e.g. "1.500000000000000000". "0" when never funded. */
-    balance: string;
-    /** Raw balance in wei (string) — use for exact programmatic comparison against priceWei. */
-    balanceWei: string;
-    currency: 'OXA';
-    /** ISO timestamp of the last ledger update, or null when never funded. */
-    updatedAt: string | null;
-    /** The wallet the balance was queried for (tenant or proxied end user). */
-    subject: string;
-    /** Platform pay-to wallet for top-ups (present when x402 is enabled). */
-    payTo?: string;
-    /** Per-request pay-per-call price in wei (present when x402 is enabled). */
-    priceWei?: string;
-}
-/**
- * Balance query client for B-end integrations.
- * @example
- * const billing = new BillingClient({ gatewayUrl, apiKey: 'actora_xxx' })
- * const { balanceWei, priceWei } = await billing.getBalance()
- * if (balanceWei && priceWei && BigInt(balanceWei) < BigInt(priceWei)) {
- *   // show top-up prompt: send native token to billing.payTo
- * }
- */
-declare class BillingClient {
+declare class SpendPolicyClient {
     private readonly config;
     private readonly baseUrl;
-    constructor(config: BillingClientConfig);
-    private _headers;
+    constructor(config: SpendPolicyClientConfig);
+    private request;
+    /** 该钱包全部链的策略。 */
+    list(): Promise<Array<{
+        chain: string;
+        policy: SpendPolicy;
+        enabled: boolean;
+        validUntil: number;
+    }>>;
+    /** 单链策略 + 派生的 Gator caveat 组合。 */
+    get(chain: SpendChain): Promise<SpendPolicyDoc>;
+    /** 写入 / 更新策略（非法字段网关返回 400）。 */
+    put(chain: SpendChain, policy: SpendPolicy, enabled?: boolean): Promise<SpendPolicyDoc & {
+        enabled: boolean;
+    }>;
+    /** 停用策略（保留记录，可重新 put 启用）。 */
+    disable(chain: SpendChain): Promise<{
+        chain: SpendChain;
+        enabled: boolean;
+    }>;
     /**
-     * Query the x402 ledger balance for the tenant (default) or a proxied
-     * end-user wallet. Never throws on a zero balance — balance "0" is a normal
-     * response. Throws only on auth/transport errors.
-     * @param opts.endUserId 0x wallet to query instead of the tenant's own balance
+     * dry-run 校验一笔支出（不落流水、不代付）。
+     * `refId` 建议传任务/订单稳定 ID：超额时会据此进入审批队列并去重。
      */
-    getBalance(opts?: {
-        endUserId?: string;
-    }): Promise<BalanceResult>;
+    check(input: {
+        chain: SpendChain;
+        target: string;
+        amountWei: string;
+        refId?: string;
+        targetAgentId?: number;
+        subscribed?: boolean;
+    }): Promise<SpendGateResult>;
+    /** 超额审批队列（默认全部，可传 status 过滤）。 */
+    approvals(opts?: {
+        status?: 'pending' | 'approved' | 'rejected';
+        limit?: number;
+    }): Promise<SpendApproval[]>;
+    /** 人工审批（approve 只能被消费一次；reject 后同一 refId 永久拒绝）。 */
+    decide(id: number, decision: 'approve' | 'reject'): Promise<SpendApproval>;
+    /** 我的全部链 session 授权状态。 */
+    sessions(): Promise<SpendSession[]>;
+    /**
+     * 第一步：创建 session（必要时顺带部署智能账户）并返回 owner 待签 digest。
+     * 用户对 `digest` 裸签后调用 `confirmSession` 上链。
+     */
+    enableSession(input?: {
+        chain?: SpendChain;
+        policy?: SpendPolicy;
+    }): Promise<EnableSpendSessionResult>;
+    /** 第二步：提交 owner 裸签（65 字节 hex）完成授权。 */
+    confirmSession(input: {
+        chain?: SpendChain;
+        ownerSignature: string;
+    }): Promise<ConfirmSpendSessionResult>;
+    /**
+     * 撤销第一步：冻结撤销 op 并返回待签 digest（网关落草稿，避免 nonce/gas 变化导致签名失配）。
+     * v0 存量 session 无法在链上定位，网关返回 409，需重新 `enableSession` 迁移到 v1。
+     */
+    prepareSessionRevoke(input?: {
+        chain?: SpendChain;
+    }): Promise<SpendSessionRevokeDraft>;
+    /** 撤销第二步：带回第一步的 `digest` 的 owner 签名提交上链。 */
+    revokeSession(input: {
+        chain?: SpendChain;
+        ownerSignature: string;
+        /** 可选，用于校验与 `prepareSessionRevoke` 返回的 digest 一致。 */
+        userOpHash?: string;
+    }): Promise<SpendSessionRevokeResult>;
 }
 
-declare const PAYMENT_VERSION = "0.1.3";
+declare const PAYMENT_VERSION = "0.3.0";
 
 declare const A2A_VERSION = "0.1.0";
 
@@ -518,4 +647,23 @@ declare class CentralAgentClient {
     }>;
 }
 
-export { A2AClient, A2A_VERSION, Actora402, type Actora402Config, type ActoraChainEvent, type ActoraEventType, type BalanceResult, BillingClient, type BillingClientConfig, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, CentralAgentClient, type CentralAgentClientOptions, type CentralAgentListFilters, type CentralAgentSummary, type CentralPlan, type CentralPlanRow, type CentralSubscription, type CreateCentralAgentInput, type CreateCentralPlanInput, type EventListenerOptions, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, SUBSCRIPTION_VERSION, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type UpdateCentralAgentInput, type X402Info, subscribeToEvents };
+/** 证明包（与网关 services/execution-proof.ts 的 ExecutionProofBundle 对齐）。 */
+interface ExecutionProofBundle {
+    tag: 'signed-manifest-v1';
+    requestHash: string;
+    manifestHash: string;
+    manifest: Record<string, unknown>;
+    signature: string;
+    signer: string;
+}
+type ExecutionProofVerifyReason = 'bad-tag' | 'bad-manifest' | 'request-hash-mismatch' | 'manifest-hash-mismatch' | 'expired' | 'bad-signature' | 'signer-mismatch';
+interface ExecutionProofVerifyResult {
+    valid: boolean;
+    signer: string | null;
+    manifestHash: string | null;
+    reason?: ExecutionProofVerifyReason;
+}
+/** 校验执行证明（POST /api/v1/proofs/verify）。 */
+declare function verifyExecutionProof(baseUrl: string, proof: ExecutionProofBundle, accessToken?: string): Promise<ExecutionProofVerifyResult>;
+
+export { A2AClient, A2A_VERSION, Actora402, type Actora402Config, type ActoraChainEvent, type ActoraEventType, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, CentralAgentClient, type CentralAgentClientOptions, type CentralAgentListFilters, type CentralAgentSummary, type CentralPlan, type CentralPlanRow, type CentralSubscription, type ConfirmSpendSessionResult, type CreateCentralAgentInput, type CreateCentralPlanInput, type EnableSpendSessionResult, type EventListenerOptions, type ExecutionProofBundle, type ExecutionProofVerifyReason, type ExecutionProofVerifyResult, type GatorCaveat, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, SUBSCRIPTION_VERSION, type SpendApproval, type SpendChain, type SpendDecisionCode, type SpendGateResult, type SpendPolicy, SpendPolicyClient, type SpendPolicyClientConfig, type SpendPolicyDoc, type SpendSession, type SpendSessionRevokeDraft, type SpendSessionRevokeResult, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type UpdateCentralAgentInput, type X402Info, subscribeToEvents, verifyExecutionProof };

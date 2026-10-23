@@ -1507,14 +1507,19 @@ async function executePlatformTool(toolName, args, ctx) {
       // ── Reputation ─────────────────────────────────
       case "actora_reputation_rate":
         throw new Error("reputation writes are not supported by the read adapter");
-      case "actora_reputation_get":
+      case "actora_reputation_get": {
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
+        const agentId = args.agentId;
+        let clients = args.clients ?? [];
+        if (clients.length === 0) clients = await ctx.reputationRegistry.getClients(agentId);
+        if (clients.length === 0) return { count: 0, averageScore: 0 };
         return ctx.reputationRegistry.getReputationSummary(
-          args.agentId,
-          args.clients ?? [],
+          agentId,
+          clients,
           args.tag1 ?? "",
           args.tag2 ?? ""
         );
+      }
       case "actora_reputation_reviews": {
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
         const agentId = args.agentId;

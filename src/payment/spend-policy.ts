@@ -12,6 +12,12 @@
 //   POST   /api/v1/spend-policy/check
 //   GET    /api/v1/spend-policy/approvals
 //   POST   /api/v1/spend-policy/approvals/:id/decide
+//
+// 按次 session 授权（x402 v2 / Keel v1；取代已下线的余额预充值）：
+//   GET    /api/v1/spend-policy/session
+//   POST   /api/v1/spend-policy/session/enable    返回 owner 待签 digest
+//   POST   /api/v1/spend-policy/session/confirm   owner 裸签 → 上链
+//   POST   /api/v1/spend-policy/session/revoke    两段式：无签名=返回 digest，有签名=上链
 // ---------------------------------------------------------------------------
 
 export type SpendChain = 'bsc' | 'ethereum' | 'base'
@@ -91,6 +97,50 @@ export interface SpendApproval {
   decided_at: string | null
   decided_by: string | null
   consumed_at: string | null
+}
+
+/** 单链按次 session 授权状态（GET /session）。 */
+export interface SpendSession {
+  chain: string
+  accountAddress: string
+  status: 'pending' | 'enabled' | 'disabled' | string
+  /** unix 秒 */
+  validUntil: number
+  sessionSigner: string
+}
+
+/** enable 的返回值：owner 对 `digest` 裸签（eth_sign 语义）后走 confirm。 */
+export interface EnableSpendSessionResult {
+  accountAddress: string
+  accountDeployed: boolean
+  sessionId: string
+  sessionSigner: string
+  digest: string
+  validUntil: string
+  /** 链上已有旧 session 时，网关先自愈撤销（v1 无需用户处理）。 */
+  needsSessionRevoke?: boolean
+  disableUserOpHash?: string
+  disableSessionId?: string
+}
+
+export interface ConfirmSpendSessionResult {
+  userOpHash: string
+  txHash: string | null
+  receiptSuccess: boolean
+}
+
+/** 撤销第一步的产物：owner 对 `digest` 裸签，再原样带回 `revokeSession`。 */
+export interface SpendSessionRevokeDraft {
+  accountAddress: string
+  sessionId: string
+  digest: string
+  validUntil: number
+}
+
+export interface SpendSessionRevokeResult {
+  revoked: boolean
+  userOpHash: string
+  txHash: string | null
 }
 
 export interface SpendPolicyClientConfig {
@@ -179,5 +229,44 @@ export class SpendPolicyClient {
   async decide(id: number, decision: 'approve' | 'reject'): Promise<SpendApproval> {
     const out = await this.request<{ approval: SpendApproval }>('POST', `/approvals/${id}/decide`, { decision })
     return out.approval
+  }
+
+  // ── 按次 session 授权（Keel v1；不预充值、不记账）─────────────────────
+
+  /** 我的全部链 session 授权状态。 */
+  async sessions(): Promise<SpendSession[]> {
+    const out = await this.request<{ sessions: SpendSession[] }>('GET', '/session')
+    return out.sessions
+  }
+
+  /**
+   * 第一步：创建 session（必要时顺带部署智能账户）并返回 owner 待签 digest。
+   * 用户对 `digest` 裸签后调用 `confirmSession` 上链。
+   */
+  enableSession(input: { chain?: SpendChain; policy?: SpendPolicy } = {}): Promise<EnableSpendSessionResult> {
+    return this.request('POST', '/session/enable', input)
+  }
+
+  /** 第二步：提交 owner 裸签（65 字节 hex）完成授权。 */
+  confirmSession(input: { chain?: SpendChain; ownerSignature: string }): Promise<ConfirmSpendSessionResult> {
+    return this.request('POST', '/session/confirm', input)
+  }
+
+  /**
+   * 撤销第一步：冻结撤销 op 并返回待签 digest（网关落草稿，避免 nonce/gas 变化导致签名失配）。
+   * v0 存量 session 无法在链上定位，网关返回 409，需重新 `enableSession` 迁移到 v1。
+   */
+  prepareSessionRevoke(input: { chain?: SpendChain } = {}): Promise<SpendSessionRevokeDraft> {
+    return this.request('POST', '/session/revoke', input)
+  }
+
+  /** 撤销第二步：带回第一步的 `digest` 的 owner 签名提交上链。 */
+  revokeSession(input: {
+    chain?: SpendChain
+    ownerSignature: string
+    /** 可选，用于校验与 `prepareSessionRevoke` 返回的 digest 一致。 */
+    userOpHash?: string
+  }): Promise<SpendSessionRevokeResult> {
+    return this.request('POST', '/session/revoke', input)
   }
 }

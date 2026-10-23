@@ -4484,14 +4484,19 @@ async function executePlatformTool(toolName, args, ctx) {
       // ── Reputation ─────────────────────────────────
       case "actora_reputation_rate":
         throw new Error("reputation writes are not supported by the read adapter");
-      case "actora_reputation_get":
+      case "actora_reputation_get": {
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
+        const agentId = args.agentId;
+        let clients = args.clients ?? [];
+        if (clients.length === 0) clients = await ctx.reputationRegistry.getClients(agentId);
+        if (clients.length === 0) return { count: 0, averageScore: 0 };
         return ctx.reputationRegistry.getReputationSummary(
-          args.agentId,
-          args.clients ?? [],
+          agentId,
+          clients,
           args.tag1 ?? "",
           args.tag2 ?? ""
         );
+      }
       case "actora_reputation_reviews": {
         if (!ctx.reputationRegistry) throw new Error("ReputationRegistry not configured");
         const agentId = args.agentId;
@@ -6554,29 +6559,8 @@ var SubscriptionPayments = class {
     });
     return { method: "chain", subscriptionId: result.subscriptionId, txHash: result.txHash };
   }
-  async _payFiat(input) {
-    if (!this.client) throw new Error('method "fiat" requires a gatewayUrl');
-    if (!input.subscriber) throw new Error('method "fiat" requires a subscriber address');
-    const data = await this.client.create({
-      method: "fiat",
-      subscriber: input.subscriber,
-      period: input.period ?? "month",
-      currency: input.currency ?? "usd",
-      chain: this.config.chain ?? "bsc",
-      // amountCents is optional — the Gateway derives the USD amount from the
-      // on-chain plan price when omitted (FIAT_TOKEN_USD_PRICE on the Gateway).
-      amountCents: input.amountCents,
-      pricing: { planId: input.planId },
-      // Actora business context rides in metadata (the unified endpoint reads
-      // it back out — the generic module never interprets it).
-      metadata: { agentId: input.agentId, planId: input.planId },
-      successUrl: input.successUrl,
-      cancelUrl: input.cancelUrl
-    });
-    if (data.method !== "fiat" || !data.sessionUrl) {
-      throw new Error("Fiat checkout returned no redirect URL");
-    }
-    return { method: "fiat", sessionUrl: data.sessionUrl, sessionId: data.sessionId, redirect: true };
+  async _payFiat(_input) {
+    throw new Error('method "fiat" was retired in @0xinfrax/payments 0.3.0; use "chain" or "x402"');
   }
   async _payX402(input) {
     if (!this.client) throw new Error('method "x402" requires a gatewayUrl');
@@ -6716,7 +6700,7 @@ var TenantPlanPayments = class {
 };
 
 // src/payment/index.ts
-import { MPPClient, X402Client, PaymentsClient as PaymentsClient2 } from "@0xinfrax/payments";
+import { X402Client, PaymentsClient as PaymentsClient2 } from "@0xinfrax/payments";
 
 // src/payment/a2a-client.ts
 async function request(baseUrl, path, init, accessToken) {
@@ -6751,7 +6735,7 @@ var A2AClient = class {
       this.opts.accessToken
     );
   }
-  /** Phase 2: verify the payer's on-chain payment tx and credit it. */
+  /** Phase 2: verify the payer's on-chain payment tx (receipt only). */
   async settle(input) {
     return request(
       this.opts.baseUrl,
@@ -6781,53 +6765,104 @@ var PeriodClient = class {
   }
 };
 
-// src/payment/billing.ts
-var BillingClient = class {
+// src/payment/spend-policy.ts
+var SpendPolicyClient = class {
   constructor(config) {
     this.config = config;
     this.baseUrl = config.gatewayUrl.replace(/\/$/, "");
   }
   config;
   baseUrl;
-  _headers(endUserId) {
-    const headers = {
-      "Content-Type": "application/json"
-    };
+  async request(method, path, body) {
+    const headers = {};
+    if (body !== void 0) headers["Content-Type"] = "application/json";
     if (this.config.apiKey) headers["X-Api-Key"] = this.config.apiKey;
     if (this.config.accessToken) headers["Authorization"] = `Bearer ${this.config.accessToken}`;
     if (!this.config.apiKey && !this.config.accessToken) {
-      throw new Error("BillingClient requires either apiKey or accessToken");
+      throw new Error("SpendPolicyClient requires either apiKey or accessToken");
     }
-    const uid = endUserId ?? this.config.endUserId;
-    if (uid) headers["X-End-User-Id"] = uid;
-    return headers;
+    const res = await fetch(`${this.baseUrl}/api/v1/spend-policy${path}`, {
+      method,
+      headers,
+      body: body !== void 0 ? JSON.stringify(body) : void 0
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const detail = json?.message ?? json?.error ?? `HTTP ${res.status}`;
+      throw new Error(`Spend policy request failed: ${detail}`);
+    }
+    return json;
+  }
+  /** 该钱包全部链的策略。 */
+  async list() {
+    const out = await this.request("GET", "");
+    return out.policies;
+  }
+  /** 单链策略 + 派生的 Gator caveat 组合。 */
+  get(chain) {
+    return this.request("GET", `/${chain}`);
+  }
+  /** 写入 / 更新策略（非法字段网关返回 400）。 */
+  put(chain, policy, enabled = true) {
+    return this.request("PUT", `/${chain}`, { policy, enabled });
+  }
+  /** 停用策略（保留记录，可重新 put 启用）。 */
+  disable(chain) {
+    return this.request("DELETE", `/${chain}`);
   }
   /**
-   * Query the x402 ledger balance for the tenant (default) or a proxied
-   * end-user wallet. Never throws on a zero balance — balance "0" is a normal
-   * response. Throws only on auth/transport errors.
-   * @param opts.endUserId 0x wallet to query instead of the tenant's own balance
+   * dry-run 校验一笔支出（不落流水、不代付）。
+   * `refId` 建议传任务/订单稳定 ID：超额时会据此进入审批队列并去重。
    */
-  async getBalance(opts = {}) {
-    const res = await fetch(`${this.baseUrl}/api/v1/billing/balance`, {
-      method: "GET",
-      headers: this._headers(opts.endUserId)
-    });
-    if (!res.ok) {
-      let detail = "";
-      try {
-        const body = await res.json();
-        detail = body?.error ?? "";
-      } catch {
-      }
-      throw new Error(`Balance query failed (HTTP ${res.status}) ${detail}`.trim());
-    }
-    return res.json();
+  check(input) {
+    return this.request("POST", "/check", input);
+  }
+  /** 超额审批队列（默认全部，可传 status 过滤）。 */
+  async approvals(opts = {}) {
+    const qs = new URLSearchParams();
+    if (opts.status) qs.set("status", opts.status);
+    if (opts.limit) qs.set("limit", String(opts.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    const out = await this.request("GET", `/approvals${suffix}`);
+    return out.approvals;
+  }
+  /** 人工审批（approve 只能被消费一次；reject 后同一 refId 永久拒绝）。 */
+  async decide(id, decision) {
+    const out = await this.request("POST", `/approvals/${id}/decide`, { decision });
+    return out.approval;
+  }
+  // ── 按次 session 授权（Keel v1；不预充值、不记账）─────────────────────
+  /** 我的全部链 session 授权状态。 */
+  async sessions() {
+    const out = await this.request("GET", "/session");
+    return out.sessions;
+  }
+  /**
+   * 第一步：创建 session（必要时顺带部署智能账户）并返回 owner 待签 digest。
+   * 用户对 `digest` 裸签后调用 `confirmSession` 上链。
+   */
+  enableSession(input = {}) {
+    return this.request("POST", "/session/enable", input);
+  }
+  /** 第二步：提交 owner 裸签（65 字节 hex）完成授权。 */
+  confirmSession(input) {
+    return this.request("POST", "/session/confirm", input);
+  }
+  /**
+   * 撤销第一步：冻结撤销 op 并返回待签 digest（网关落草稿，避免 nonce/gas 变化导致签名失配）。
+   * v0 存量 session 无法在链上定位，网关返回 409，需重新 `enableSession` 迁移到 v1。
+   */
+  prepareSessionRevoke(input = {}) {
+    return this.request("POST", "/session/revoke", input);
+  }
+  /** 撤销第二步：带回第一步的 `digest` 的 owner 签名提交上链。 */
+  revokeSession(input) {
+    return this.request("POST", "/session/revoke", input);
   }
 };
 
 // src/payment/index.ts
-var PAYMENT_VERSION = "0.1.3";
+var PAYMENT_VERSION = "0.3.0";
 
 // src/a2a/a2a.ts
 var A2A_ABI = {
@@ -7539,7 +7574,7 @@ var KNOWN_CHAINS = {
       identityRegistry: "0x37f3919D64d648ddF70747e159fd9A1c6890CA3b",
       subscriptionManager: "0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29",
       a2aProtocolRegistry: "0x2172145F2A8f7A66019A4F4048Af46844243607E",
-      reputationRegistry: "0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e",
+      reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
       configurationRegistry: "0x5EF8c35738311B971A64de64487E1E304Ae53993",
       multiEndpointRegistry: "0xB8065829dBb450B8fC7375D910521EA641EC6Ee5"
     },
@@ -8518,19 +8553,6 @@ var ConversationClient = class {
     }
     return body;
   }
-  /** x402 ledger balance + Session Key authorization status (REQ-3). */
-  async getBalance() {
-    const res = await fetch(`${this.baseUrl}/api/v1/billing/balance`, { headers: this._headers() });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new ConversationTaskError(
-        res.status,
-        body?.error || `Balance lookup failed (HTTP ${res.status})`,
-        body?.code
-      );
-    }
-    return body;
-  }
 };
 
 // src/central/central-client.ts
@@ -8635,6 +8657,20 @@ var CentralAgentClient = class {
     );
   }
 };
+
+// src/proofs/index.ts
+async function verifyExecutionProof(baseUrl, proof, accessToken) {
+  return request(
+    baseUrl,
+    "/api/v1/proofs/verify",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proof })
+    },
+    accessToken
+  );
+}
 export {
   A2AClient,
   A2ADaemon,
@@ -8648,7 +8684,6 @@ export {
   AgentLoop,
   AgentRegistry,
   AgentRunner,
-  BillingClient,
   CONFIG_VERSION,
   CentralAgentClient,
   ConfigurationClient,
@@ -8676,7 +8711,6 @@ export {
   LoopTraceEmitter,
   MCPConnector,
   MCP_VERSION,
-  MPPClient,
   MultiEndpointClient,
   NoopTraceEmitter,
   OpenAIProvider,
@@ -8692,6 +8726,7 @@ export {
   STANDARD_IDENTITY_ABI,
   SUBSCRIPTION_PERIODS,
   SUBSCRIPTION_VERSION,
+  SpendPolicyClient,
   SubscriptionManager,
   SubscriptionPayments,
   TenantPlanPayments,
@@ -8744,6 +8779,7 @@ export {
   subscribeToEvents,
   toAttributes,
   unpackAgent,
+  verifyExecutionProof,
   wrapPlatformToolsAsSkills
 };
 //# sourceMappingURL=index.mjs.map

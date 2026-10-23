@@ -42,8 +42,8 @@ export class A2AClient {
     )
   }
 
-  /** Phase 2: verify the payer's on-chain payment tx and credit it. */
-  async settle(input: { paymentId: string; txHash: string; chain?: ChainKey }): Promise<{ verified: boolean; paymentId: string; payer: string; creditedWei: string; balanceWei: string }> {
+  /** Phase 2: verify the payer's on-chain payment tx (receipt only). */
+  async settle(input: { paymentId: string; txHash: string; chain?: ChainKey }): Promise<{ verified: boolean; paymentId: string; payer: string; creditedWei: string }> {
     return request(
       this.opts.baseUrl,
       '/api/v1/payments/a2a/settle',
