@@ -51,6 +51,17 @@ export interface ChainConfig {
   deployed?: boolean
 }
 
+/**
+ * 未部署的扩展合约占位地址。
+ *
+ * ConfigurationRegistry / MultiEndpointRegistry / AgentFactory 默认不再部署
+ * （见 DeployCanonicalExtensions.s.sol 的 DEPLOY_CONFIG / DEPLOY_ENDPOINTS 开关），
+ * 因此这里必须保持零地址——**不得**继续指向旧版（legacy）合约：旧合约仍在链上，
+ * 读到的是陈旧数据，比直接报错更危险。
+ * 调用方拿到零地址应视为「该能力未启用」，不要发起 RPC。
+ */
+const NOT_DEPLOYED: Address = '0x0000000000000000000000000000000000000000'
+
 export const KNOWN_CHAINS: Record<number, ChainConfig> = {
   // Sepolia Testnet
   // v3 (deployed 2026-07-13): platformFee=250bps(2.5%), ReentrancyGuard, audit fixes
@@ -61,8 +72,8 @@ export const KNOWN_CHAINS: Record<number, ChainConfig> = {
       subscriptionManager: '0xC15fE80b9d800abb72121F353a6ae6d6E9077E63',
       a2aProtocolRegistry: '0x309C7447d89f3087A9924BB686d88df020F7e9cB',
       reputationRegistry: '0xeb6B410ea71b8d9dA0c96f6A91d35027CE143DC9',
-      configurationRegistry: '0x68DcE00e4C9077c94BC68016cD14B09557faEA6c',
-      multiEndpointRegistry: '0xEB5e866f186d4B73F97aa0d70B86f2C6e2e21Cb7',
+      configurationRegistry: NOT_DEPLOYED,
+      multiEndpointRegistry: NOT_DEPLOYED,
     },
     ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
   },
@@ -78,8 +89,8 @@ export const KNOWN_CHAINS: Record<number, ChainConfig> = {
       subscriptionManager: '0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b',
       a2aProtocolRegistry: '0x842F0B9E85f5aBd9752B5ea20Cc888b94dBb5E16',
       reputationRegistry: '0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee',
-      configurationRegistry: '0xd9B984cF591dc1C3663991e7D75c44C2bDE1a9BB',
-      multiEndpointRegistry: '0x80Bc36634693d7935109f5cdbc95E64a9c1bdA6a',
+      configurationRegistry: NOT_DEPLOYED,
+      multiEndpointRegistry: NOT_DEPLOYED,
     },
     ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
     rpcUrl: 'https://bsc-rpc.publicnode.com',
@@ -93,8 +104,8 @@ export const KNOWN_CHAINS: Record<number, ChainConfig> = {
       subscriptionManager: '0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE',
       a2aProtocolRegistry: '0x09f6C8f9AE6CEf12C4a078c91aeb2EcCb7CbD012',
       reputationRegistry: '0x72C1236bc425b1A6129b76400aE7b26c1fbFAeFE',
-      configurationRegistry: '0x2Bf6962301164A301e4fEC9036aB97edcBcE1bCa',
-      multiEndpointRegistry: '0xE93fbED3Df2a5D357856f2f2712B3c1Ebb8d026f',
+      configurationRegistry: NOT_DEPLOYED,
+      multiEndpointRegistry: NOT_DEPLOYED,
     },
     ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
     rpcUrl: 'https://ethereum-rpc.publicnode.com',
@@ -109,8 +120,8 @@ export const KNOWN_CHAINS: Record<number, ChainConfig> = {
       subscriptionManager: '0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29',
       a2aProtocolRegistry: '0x2172145F2A8f7A66019A4F4048Af46844243607E',
       reputationRegistry: '0x8004BAa17C55a88189AE136b182e5fdA19dE9b63',
-      configurationRegistry: '0x5EF8c35738311B971A64de64487E1E304Ae53993',
-      multiEndpointRegistry: '0xB8065829dBb450B8fC7375D910521EA641EC6Ee5',
+      configurationRegistry: NOT_DEPLOYED,
+      multiEndpointRegistry: NOT_DEPLOYED,
     },
     ipfsGateways: ['ipfs.io', 'gateway.pinata.cloud', 'dweb.link', 'cf-ipfs.com'],
     rpcUrl: 'https://base-rpc.publicnode.com',
