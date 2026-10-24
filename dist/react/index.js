@@ -691,7 +691,7 @@ var KNOWN_CHAINS = {
       identityRegistry: "0xeF96D883e1082E3e102d925c8190A13EEC1ffF33",
       subscriptionManager: "0x5a36150C5865B4dA16218724a1c5668561E4d981",
       a2aProtocolRegistry: "0x97cad48D250C00A394449A5E613773e82b20089D",
-      reputationRegistry: "0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee",
+      reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
       configurationRegistry: NOT_DEPLOYED,
       multiEndpointRegistry: NOT_DEPLOYED
     },
@@ -705,7 +705,7 @@ var KNOWN_CHAINS = {
       identityRegistry: "0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e",
       subscriptionManager: "0xF3D14ac4D51BC4B7354838af3137248476D540BD",
       a2aProtocolRegistry: "0x5a36150C5865B4dA16218724a1c5668561E4d981",
-      reputationRegistry: "0x72C1236bc425b1A6129b76400aE7b26c1fbFAeFE",
+      reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
       configurationRegistry: NOT_DEPLOYED,
       multiEndpointRegistry: NOT_DEPLOYED
     },

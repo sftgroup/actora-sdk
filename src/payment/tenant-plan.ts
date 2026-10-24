@@ -2,7 +2,7 @@
 // @actora/sdk — TenantPlanPayments: platform subscription-tier purchases (R19.3)
 // ---------------------------------------------------------------------------
 // R19.3 (D11): buying a *platform* subscription tier (the `plans` table on the
-// Gateway — quota_daily / rate limits) reuses the same @0xinfrax/payments
+// Gateway — quota_daily / rate limits) reuses the same @keelcodes/payments
 // engine via the unified `/api/v1/payments` endpoint. Unlike
 // SubscriptionPayments (agent subscriptions, planId+agentId), a tenant plan
 // purchase binds onto the tenant: `purpose='tenant-plan'` + `tenantPlanId`.

@@ -1,13 +1,13 @@
 // ---------------------------------------------------------------------------
 // @actora/sdk — A2AClient (a2a rail, module-backed since R17.6)
 // ---------------------------------------------------------------------------
-// @0xinfrax/payments@0.1.2 removed the a2a rail; Actora self-hosted it (R17.5)
+// @keelcodes/payments@0.1.2 removed the a2a rail; Actora self-hosted it (R17.5)
 // while keeping the client contract byte-for-byte identical. Since 0.1.3 the
 // rail lives in the generic engine again and the gateway delegates to it, but
 // the public client contract is unchanged — B-side callers see zero change.
 // ---------------------------------------------------------------------------
 
-import type { ChainKey, ClientOptions } from '@0xinfrax/payments'
+import type { ChainKey, ClientOptions } from '@keelcodes/payments'
 
 /** Minimal JSON request helper against an Actora gateway (shared with period-client). */
 export async function request(baseUrl: string, path: string, init?: RequestInit, accessToken?: string): Promise<any> {

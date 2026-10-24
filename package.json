@@ -1,6 +1,6 @@
 {
   "name": "@actora/sdk",
-  "version": "0.20.5",
+  "version": "0.20.6",
   "description": "Actora — Decentralized AI Agent SDK with ReAct AgentLoop + Multi-Tenant LLM Providers",
   "main": "dist/index.js",
   "types": "dist/index.d.mts",
@@ -91,7 +91,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@0xinfrax/payments": "^0.3.0",
+    "@keelcodes/payments": "^0.3.1",
     "@noble/ciphers": "^1.0.0",
     "@noble/curves": "^1.6.0",
     "@noble/hashes": "^1.5.0"

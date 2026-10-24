@@ -14,9 +14,9 @@ Agent = Prompt + Skills + MCP
 
 | 链 | chainId | IdentityRegistry | SubscriptionManager | 原生代币 | RPC |
 |----|---------|------------------|---------------------|----------|-----|
-| BSC | 56 | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` | `0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b` | BNB | `https://bsc-rpc.publicnode.com` |
-| Ethereum | 1 | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE` | ETH | `https://ethereum-rpc.publicnode.com` |
-| Base | 8453 | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` | `0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29` | ETH | `https://base-rpc.publicnode.com` |
+| BSC | 56 | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` | `0x5a36150C5865B4dA16218724a1c5668561E4d981` | BNB | `https://bsc-rpc.publicnode.com` |
+| Ethereum | 1 | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0xF3D14ac4D51BC4B7354838af3137248476D540BD` | ETH | `https://ethereum-rpc.publicnode.com` |
+| Base | 8453 | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` | `0x41A42cDe1bd7AA39a9beB3745Ae08f50e8656B36` | ETH | `https://base-rpc.publicnode.com` |
 | Sepolia 测试网 | 11155111 | `0xe94ad380d3F8d08a7590eda0C84f354a93F96e5F` | `0xC15fE80b9d800abb72121F353a6ae6d6E9077E63` | ETH | 自备（Alchemy/Infura 等） |
 
 > ⚠️ **地址来源**：上表全部取自 `KNOWN_CHAINS[chainId]`（`src/config/config.ts`）。**生产环境请优先从 `KNOWN_CHAINS[chainId].contracts.identityRegistry / subscriptionManager` 读取，避免硬编码**——合约地址可能随部署修正而更新。
@@ -28,15 +28,18 @@ Agent = Prompt + Skills + MCP
 | 合约 | BSC (56) | Ethereum (1) | Base (8453) |
 |------|----------|--------------|-------------|
 | IdentityRegistry | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` |
-| SubscriptionManager | `0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b` | `0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE` | `0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29` |
-| A2AProtocolRegistry | `0x842F0B9E85f5aBd9752B5ea20Cc888b94dBb5E16` | `0x09f6C8f9AE6CEf12C4a078c91aeb2EcCb7CbD012` | `0x2172145F2A8f7A66019A4F4048Af46844243607E` |
-| ReputationRegistry | `0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee` | `0x72C1236bc425b1A6129b76400aE7b26c1fbFAeFE` | `0x3f30d87BDFFa66f0e4664F1cE65a0e3a91FB4A9e` |
+| SubscriptionManager | `0x5a36150C5865B4dA16218724a1c5668561E4d981` | `0xF3D14ac4D51BC4B7354838af3137248476D540BD` | `0x41A42cDe1bd7AA39a9beB3745Ae08f50e8656B36` |
+| A2AProtocolRegistry | `0x97cad48D250C00A394449A5E613773e82b20089D` | `0x5a36150C5865B4dA16218724a1c5668561E4d981` | `0x88cce24854505e2d3DC8625a0Bf27Cca10f901C1` |
+| ReputationRegistry | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` |
+
+> ReputationRegistry 自 2026-10-24 起三链统一指向 **官方 canonical 部署**（`0x8004BAa1…9b63`）。
+> SDK 的 `ReputationRegistry` 会按 `getReputationSummary` 是否存在自动识别 legacy / standard 实现，业务侧无需改代码。
 
 > `ConfigurationRegistry` / `MultiEndpointRegistry` 默认**不再部署**（`DEPLOY_CONFIG` / `DEPLOY_ENDPOINTS`
 > 默认 `false`），`KNOWN_CHAINS[chainId].contracts` 中对应字段恒为 `ZERO_ADDRESS`。
 > 拿到零地址应视为「该能力未启用」，不要构造 `ConfigurationRegistry` 或发起 RPC。
 
-> 部署起始块（网关索引 `*_SYNC_FROM_BLOCK` 用）：BSC SM `122277574`、Ethereum SM `25992521`、Base SM `51401326`。
+> 部署起始块（网关索引 `*_SYNC_FROM_BLOCK` 用）：BSC SM `129441669`、Ethereum SM `26259798`、Base SM `53011518`。
 > 程序化访问请直接读 `KNOWN_CHAINS[chainId].contracts`（字段名与上表一致），避免复制粘贴出错。
 
 ### 白名单稳定币（USDT / USDC）
@@ -92,7 +95,7 @@ const { planId } = await sub.createPlan({
 ```bash
 npm install @actora/sdk
 # 或锁定版本
-npm install @actora/sdk@0.20.1
+npm install @actora/sdk@0.20.6
 ```
 
 > 包内含 `examples/`（B 端可运行样例）与 `UPGRADE.md`（逐版本迁移指南），安装后可从
@@ -1272,6 +1275,7 @@ POST /api/v1/payments
 | 0.19.0 | **密钥来源与发布护栏**：① 托管密钥（服务端生成密钥对）写成**受支持的一等用法**（含安全建议 / 不可迁移性）；② `deriveKeyPairFromWallet()` 默认开启 `assertDeterministic`（可关）并新增默认开启的 `selfCheck`；③ `publishAgent({ verifyWithPrivateKey })` **铸造前** dry-run 解包校验（含 v1/v2 mode 用错）；④ 新增跨实现的派生绑定字段 `payload_key_mode`（`PAYLOAD_KEY_MODE_ATTRIBUTE` / `readPayloadKeyMode()` / `isDerivationMode()` / `AgentRegistry.setPayloadKeyMode()`）；⑤ README 明确「签名路径固有边界」并收回 v2「来源可验证」的过度声明。**若发布流程依赖单次签名提示，请显式传 `assertDeterministic: false`** |
 | 0.20.0 | **payload 密钥派生 v3（WebAuthn PRF，非签名）**：新增 `mode: 'webauthn-prf-hkdf'`，IKM 改为 WebAuthn PRF 扩展输出（32 字节，由浏览器按 RP ID 绑定），HKDF 构造与 v1/v2 逐字节一致、`infoPrefix` 版本化为 `agent-payload-encryption/v3`；配套 `getPrfCapability()`（不弹窗探测）/ `createPrfCredential()` / `evaluatePrf()` / `PrfError`（`PRF_UNSUPPORTED` 等 4 码，**不支持时报可操作错误、绝不静默回退到签名派生**）；派生入口新增 `derivePrivateKeyFromIkm()` 与 `DEFAULT_PRF_SALT` / `DEFAULT_DERIVATION_INFO_PREFIX_V3`；新增 credential 绑定字段 `payload_key_credential`（`PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE` / `serializePayloadKeyCredential()` / `readPayloadKeyCredential()` / `AgentRegistry.setPayloadKeyCredential()`）。**v1/v2 保留且行为不变**，默认值不变、v3 为 opt-in |
 | 0.20.1 | **纯文档**：§5.12 新增「选型：四条路径怎么选」矩阵（v1 / v2 / v3 / 私钥托管并列对照），并明确「Runner 跑在服务端 ⇒ 私钥托管可完全规避 WebAuthn/PRF 的兼容性问题」及其代价（信任边界转移、不可轮换、丢失即永久解不开、提供的是服务端鉴权而非客户端自持 + 域绑定）。**无代码 / API / 行为变更** |
+| 0.20.6 | **包名与合约地址对齐（品牌退役）**：依赖 `@0xinfrax/payments ^0.3.0` → `@keelcodes/payments ^0.3.1`（公开 API 逐字节一致，仅品牌 / 命名空间变更）；`PAYMENT_VERSION` → `0.3.1`；`KNOWN_CHAINS` 的 BSC / Ethereum `ReputationRegistry` 改为官方 canonical `0x8004BAa1…9b63`（三链同址，legacy 仅剩 Sepolia）；README 同步 SM / A2A / Reputation 地址表与部署起始块。**无 API 破坏** |
 
 ---
 

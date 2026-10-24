@@ -1,8 +1,21 @@
 # @actora/sdk Upgrade Guide
 
+## v0.20.5 → v0.20.6（2026-10-24，建议升级）
+
+> 主题：**品牌与合约地址对齐**——支付引擎包名由已退役的 `@0xinfrax/payments` 迁到
+> `@keelcodes/payments ^0.3.1`（公开 API 逐字节一致，仅包名 / 命名空间变更），并同步
+> `ReputationRegistry` 的 canonical 部署。
+
+- **依赖**：`@0xinfrax/payments ^0.3.0` → `@keelcodes/payments ^0.3.1`；`PAYMENT_VERSION = '0.3.1'`。
+  调用 `X402Client` / `PaymentsClient` / `A2AClient` / `PeriodClient` 的代码无需修改。
+- **合约地址**：`KNOWN_CHAINS` 中 BSC / Ethereum 的 `reputationRegistry` 改为官方 canonical
+  `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`（与 Base 同址）；legacy 自研注册表仅剩 Sepolia。
+  `ReputationRegistry` 适配器按 `getReputationSummary` 是否存在自动识别实现，业务侧无需改代码。
+- **无 API 破坏**。若项目里仍直接安装 `@0xinfrax/payments`，请一并替换为 `@keelcodes/payments`。
+
 ## payments 引擎 0.3.0（破坏性变更：移除 fiat / MPP）
 
-> 主题：**`@0xinfrax/payments` 0.2.2 → 0.3.0 删除两条 rail**。
+> 主题：**`@keelcodes/payments` 0.2.2 → 0.3.0 删除两条 rail**（该版本号沿用旧包名 `@0xinfrax/payments`）。
 > - **fiat（Stripe）**：`SubscriptionPayments.pay({ method: 'fiat' })` 保留方法签名但运行时抛错；
 >   Gateway 的 `POST /api/v1/fiat/checkout`、`POST /api/v1/fiat/webhook` 返回 `410`。
 > - **MPP**：`MPPClient` 不再导出，`/api/v1/payments/mpp/*` 路由已删除。

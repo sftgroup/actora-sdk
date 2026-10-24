@@ -6731,7 +6731,7 @@ var Actora402 = class {
 var SUBSCRIPTION_VERSION = "0.3.0";
 
 // src/payment/payments.ts
-var import_payments = require("@0xinfrax/payments");
+var import_payments = require("@keelcodes/payments");
 var PERIODS = ["day", "week", "month", "year"];
 var SubscriptionPayments = class {
   constructor(config) {
@@ -6788,7 +6788,7 @@ var SubscriptionPayments = class {
     return { method: "chain", subscriptionId: result.subscriptionId, txHash: result.txHash };
   }
   async _payFiat(_input) {
-    throw new Error('method "fiat" was retired in @0xinfrax/payments 0.3.0; use "chain" or "x402"');
+    throw new Error('method "fiat" was retired in @keelcodes/payments 0.3.0; use "chain" or "x402"');
   }
   async _payX402(input) {
     if (!this.client) throw new Error('method "x402" requires a gatewayUrl');
@@ -6928,7 +6928,7 @@ var TenantPlanPayments = class {
 };
 
 // src/payment/index.ts
-var import_payments3 = require("@0xinfrax/payments");
+var import_payments3 = require("@keelcodes/payments");
 
 // src/payment/a2a-client.ts
 async function request(baseUrl, path, init, accessToken) {
@@ -7090,7 +7090,7 @@ var SpendPolicyClient = class {
 };
 
 // src/payment/index.ts
-var PAYMENT_VERSION = "0.3.0";
+var PAYMENT_VERSION = "0.3.1";
 
 // src/a2a/a2a.ts
 var A2A_ABI = {
@@ -7775,7 +7775,7 @@ var KNOWN_CHAINS = {
       identityRegistry: "0xeF96D883e1082E3e102d925c8190A13EEC1ffF33",
       subscriptionManager: "0x5a36150C5865B4dA16218724a1c5668561E4d981",
       a2aProtocolRegistry: "0x97cad48D250C00A394449A5E613773e82b20089D",
-      reputationRegistry: "0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee",
+      reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
       configurationRegistry: NOT_DEPLOYED,
       multiEndpointRegistry: NOT_DEPLOYED
     },
@@ -7789,7 +7789,7 @@ var KNOWN_CHAINS = {
       identityRegistry: "0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e",
       subscriptionManager: "0xF3D14ac4D51BC4B7354838af3137248476D540BD",
       a2aProtocolRegistry: "0x5a36150C5865B4dA16218724a1c5668561E4d981",
-      reputationRegistry: "0x72C1236bc425b1A6129b76400aE7b26c1fbFAeFE",
+      reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
       configurationRegistry: NOT_DEPLOYED,
       multiEndpointRegistry: NOT_DEPLOYED
     },

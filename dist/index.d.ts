@@ -15,9 +15,9 @@ export { MemoryConfig, MemoryFact, MemoryProvider } from './memory/index.js';
 export { HttpTraceEmitter, NoopTraceEmitter, TraceConfig, TraceEmitter, TraceEvent } from './traces/index.js';
 export { BrowserAction, BrowserActionResult, executeBrowserAction, extractAccessibleDOM, sleep } from './skills/index.js';
 export { A2ADelegatedTaskResult, A2A_STATUS, ConversationChatParams, ConversationChatResult, ConversationClient, ConversationClientConfig, ConversationCreateSessionParams, ConversationCreateTaskParams, ConversationSSEEvent, ConversationSkillDef, ConversationTask, ConversationTaskError, ConversationTaskStatus, OnChainApprovalRequest, SessionKeyInfo } from './conversation/index.js';
-import { ChainKey as ChainKey$1, ClientOptions } from '@0xinfrax/payments';
-export { ClientOptions, PaymentsClient, X402Client } from '@0xinfrax/payments';
-export { C as ChainConfig, a as ConfigRegistryOpts, b as ConfigurationRegistry, K as KNOWN_CHAINS } from './config-DOyidIlP.js';
+import { ChainKey as ChainKey$1, ClientOptions } from '@keelcodes/payments';
+export { ClientOptions, PaymentsClient, X402Client } from '@keelcodes/payments';
+export { C as ChainConfig, a as ConfigRegistryOpts, b as ConfigurationRegistry, K as KNOWN_CHAINS } from './config-DTv6imOF.js';
 export { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 import 'events';
 
@@ -437,7 +437,8 @@ declare class SpendPolicyClient {
     }): Promise<SpendSessionRevokeResult>;
 }
 
-declare const PAYMENT_VERSION = "0.3.0";
+/** 对齐的通用支付引擎版本（`@keelcodes/payments`）。 */
+declare const PAYMENT_VERSION = "0.3.1";
 
 declare const A2A_VERSION = "0.1.0";
 

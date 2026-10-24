@@ -1,6 +1,6 @@
 // SubscriptionPayments — three-rail subscription payment unit tests.
 // 0.9.0: fiat/x402/access talk to the unified payments endpoint through
-// @0xinfrax/payments' PaymentsClient; chain stays on SubscriptionManager.
+// @keelcodes/payments' PaymentsClient; chain stays on SubscriptionManager.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { SubscriptionPayments } from '../src/payment/payments'
 import { A2AClient, PeriodClient, X402Client, PaymentsClient, PAYMENT_VERSION } from '../src/payment'
@@ -16,7 +16,7 @@ describe('payment module exports (v0.9.3)', () => {
     }
   })
   it('tracks the aligned generic engine version', () => {
-    expect(PAYMENT_VERSION).toBe('0.3.0') // 跟随 @0xinfrax/payments 0.3.0（移除 fiat / MPP）
+    expect(PAYMENT_VERSION).toBe('0.3.1') // 跟随 @keelcodes/payments 0.3.1（移除 fiat / MPP）
   })
 })
 
@@ -61,7 +61,7 @@ describe('SubscriptionPayments', () => {
   })
 
   describe('fiat rail', () => {
-    it('is retired in @0xinfrax/payments 0.3.0 and fails loudly without calling the gateway', async () => {
+    it('is retired in @keelcodes/payments 0.3.0 and fails loudly without calling the gateway', async () => {
       const payments = make()
       await expect(payments.pay({ method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc', amountCents: 499 }))
         .rejects.toThrow('method "fiat" was retired')
