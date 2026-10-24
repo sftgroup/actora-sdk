@@ -57,7 +57,9 @@ export async function executePlatformTool(
       case 'actora_subscription_cancel':
         return ctx.subscriptionManager.cancel(args.subscriptionId as number)
       case 'actora_subscription_release':
-        return ctx.subscriptionManager.releaseFunds(args.subscriptionId as number)
+        // ERC8004SubscriptionManager settles payments at subscribe/renew time;
+        // there is no escrow to release.
+        throw new Error('release is not supported: ERC8004SubscriptionManager has no escrow')
       case 'actora_subscription_fee':
         return { platformFeeBps: await ctx.subscriptionManager.getPlatformFeeBps() }
 

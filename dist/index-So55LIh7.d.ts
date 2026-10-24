@@ -1,10 +1,10 @@
-import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-6ttfEKn5.mjs';
-import { R as RunnableSkill, b as AgentRunner } from './agent-runner-CVpGoUs7.mjs';
-import { TraceConfig, TraceEvent } from './traces/index.mjs';
+import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-Cv-LIswG.js';
+import { R as RunnableSkill, b as AgentRunner } from './agent-runner-rDuplD1X.js';
+import { TraceConfig, TraceEvent } from './traces/index.js';
 import { Address, PublicClient, WalletClient, Hash } from 'viem';
-import { b as A2AAgentCard, d as A2ATask, r as AgentSubscription } from './types-ATMM4oRG.mjs';
-import { D as DerivationMode, q as PayloadKeyCredential } from './crypto-DcBuG_jD.mjs';
-import { IPFSUploader } from './ipfs/index.mjs';
+import { b as A2AAgentCard, d as A2ATask, r as AgentSubscription } from './types-ATMM4oRG.js';
+import { D as DerivationMode, q as PayloadKeyCredential } from './crypto-Din2ikPh.js';
+import { IPFSUploader } from './ipfs/index.js';
 import { EventEmitter } from 'events';
 
 declare class AgentLoop {
@@ -121,42 +121,77 @@ interface SubscriptionConfig {
     publicClient: PublicClient;
     walletClient: WalletClient;
 }
+/** PlanType enum: 0=Subscription, 1=UsageBased, 2=Hybrid. */
+type PlanType = 0 | 1 | 2;
 interface PlanDetail {
     planId: number;
     agentId: number;
+    /** Agent owner, derived via `identityRegistry.ownerOf(agentId)`. */
     creator: Address;
+    /** Alias of `subscriptionPrice` (kept for existing callers). */
     price: bigint;
+    /** Billing period name: day | week | month | quarter | year. */
     period: string;
     active: boolean;
+    /** ERC-20 pay token; address(0) = native token. */
     payToken: Address;
+    /** Always 0 — ERC8004SubscriptionManager has no trial period. */
     trialDays: number;
+    name: string;
+    description: string;
+    planType: PlanType;
+    subscriptionPrice: bigint;
+    usagePrice: bigint;
+    billingPeriod: number;
+    /** Max usage per billing period (0 = unlimited). */
+    maxUsage: bigint;
+    /** Total usage limit for usage-based plans (0 = unlimited). */
+    totalUsageLimit: bigint;
+    /** Platform fee snapshot in basis points (100 = 1%). */
+    platformFeePercentage: number;
 }
 interface SubscriptionDetail {
     subscriptionId: number;
+    planId: number;
     subscriber: Address;
     agentId: number;
+    /** 0=Active, 1=Cancelled, 2=Expired, 3=PaymentFailed, 4=Suspended */
     status: number;
+    planType: PlanType;
     startedAt: number;
-    expiresAt: number;
+    /** Next charge date. Usage-based plans keep this at the start date. */
+    nextBillingDate: number;
+    endDate: number;
+    /** Billing period name: day | week | month | quarter | year. */
     period: string;
     payToken: Address;
     amountPaid: bigint;
-    trialActive: boolean;
-    trialEndsAt: number;
-    fundsReleased: boolean;
+    currentPeriodUsage: bigint;
+    totalUsage: bigint;
+    remainingUsage: bigint;
+    lastPaymentDate: number;
 }
-declare const SUBSCRIPTION_PERIODS: readonly ["day", "week", "month", "year"];
+declare const SUBSCRIPTION_PERIODS: readonly ["day", "week", "month", "quarter", "year"];
 type SubscriptionPeriod = (typeof SUBSCRIPTION_PERIODS)[number];
 interface CreatePlanParams {
     agentId: number;
-    /** Price in wei (native token) or token units for ERC20 plans. */
-    price: bigint;
-    /** Must be one of: day | week | month | year (contract-valid enum). */
+    /** Plan name — required on-chain (non-empty). Defaults to `Plan #<agentId>`. */
+    name?: string;
+    description?: string;
+    /** 0=Subscription (default), 1=UsageBased, 2=Hybrid. */
+    planType?: PlanType;
+    /** Recurring price in wei / token units. Required unless planType=1. */
+    price?: bigint;
+    /** Per-use price. Required when planType is 1 or 2. */
+    usagePrice?: bigint;
+    /** Must be one of: day | week | month | quarter | year. */
     period: SubscriptionPeriod;
     /** ERC20 pay token; default zero address = native token. */
     payToken?: Address;
-    /** Trial days (0–30). Default 0 = no trial. */
-    trialDays?: number;
+    /** Max usage per billing period (0 = unlimited). */
+    maxUsage?: bigint;
+    /** Total usage limit (0 = unlimited). */
+    totalUsageLimit?: bigint;
 }
 interface CreatePlanResult {
     planId: number;
@@ -167,8 +202,8 @@ interface SubscribeResult {
     txHash: Hash;
     subscriber: Address;
     agentId: number;
-    /** Unix timestamp (seconds) when the subscription expires. */
-    expiresAt: number;
+    /** Unix timestamp (seconds) of the next scheduled charge. */
+    nextBillingDate: number;
 }
 declare class SubscriptionManager {
     private address;
@@ -187,18 +222,16 @@ declare class SubscriptionManager {
      * and the provider signs, so both paths keep working.
      */
     private _resolveAccount;
-    /** Get current platform fee in basis points (e.g. 250 = 2.5%). */
+    /** Get the default platform fee in basis points (e.g. 250 = 2.5%). */
     getPlatformFeeBps(): Promise<number>;
-    /** Check if a token is whitelisted for payments. */
+    /** Check whether an ERC-20 token is accepted by the plan price oracle. */
     isTokenWhitelisted(token: Address): Promise<boolean>;
-    /** Get full plan details with v2 fields. */
+    /** Get full plan details; `creator` is the identity owner of `agentId`. */
     getPlan(planId: number): Promise<PlanDetail>;
     /**
      * Create a subscription plan for an agent.
      *
-     * @param params.period  Must be 'day' | 'week' | 'month' | 'year' — the only
-     *                       values the contract maps to real durations. Anything
-     *                       else silently becomes 30 days on-chain.
+     * @param params.period  Must be 'day' | 'week' | 'month' | 'quarter' | 'year'.
      * @returns              { planId, txHash } (planId parsed from PlanCreated event)
      */
     createPlan(params: CreatePlanParams): Promise<CreatePlanResult>;
@@ -208,8 +241,8 @@ declare class SubscriptionManager {
      * For ERC20 plans: auto-detects from plan.payToken, calls approve + subscribe.
      *                    User must have approved this contract for plan.price tokens.
      *
-     * @returns SubscribeResult — subscriptionId/expiresAt/subscriber parsed from
-     *          the Subscribed event (no longer hardcoded to 0).
+     * @returns SubscribeResult — subscriptionId/nextBillingDate/subscriber parsed
+     *          from the SubscriptionCreated event (no longer hardcoded to 0).
      */
     subscribe(planId: number, opts?: {
         valueWei?: bigint;
@@ -220,19 +253,30 @@ declare class SubscriptionManager {
      * Saves the caller one round of plan lookup when the plan does not exist yet.
      */
     createPlanAndSubscribe(params: CreatePlanParams): Promise<CreatePlanResult & SubscribeResult>;
-    /** Release escrowed funds to creator after trial window ends. */
-    releaseFunds(subscriptionId: number): Promise<Hash>;
-    /** Cancel subscription (trial refund if within window). */
+    /** Cancel subscription. ERC8004SubscriptionManager settles payments immediately. */
     cancel(subscriptionId: number): Promise<Hash>;
     hasActiveSubscription(subscriber: Address, agentId: number): Promise<boolean>;
+    /**
+     * Latest subscription of `subscriber` for `agentId`.
+     *
+     * ERC8004SubscriptionManager indexes subscriptions by ID only, so this scans
+     * `getUserSubscriptions(subscriber)`. Prefers an active, non-expired entry;
+     * otherwise falls back to the newest one.
+     */
     getSubscription(subscriber: Address, agentId: number): Promise<AgentSubscription | null>;
-    /** Get full subscription detail with v2 fields (trial, payToken, fundsReleased). */
+    /** Full subscription detail (status, usage counters, payment token). */
     getSubscriptionDetail(subscriptionId: number): Promise<SubscriptionDetail>;
+    /** All subscription IDs owned by a wallet. */
     getUserSubscriptions(user: Address): Promise<number[]>;
+    private _readPlanRaw;
+    private _readSubscription;
+    private _readUserSubscriptions;
+    /** Plan creator — the identity (ERC-721) owner of `agentId`. */
+    private _agentOwner;
     private _findEventLog;
     /** Parse planId from the PlanCreated event in a transaction receipt. */
     private _parsePlanIdFromReceipt;
-    /** Parse subscriptionId/subscriber/agentId/expiresAt from the Subscribed event. */
+    /** Parse subscriptionId/subscriber/agentId/nextBillingDate from SubscriptionCreated. */
     private _parseSubscribedFromReceipt;
 }
 declare function guardSubscription(manager: SubscriptionManager, user: Address, agentId: number): Promise<AgentSubscription>;
@@ -749,4 +793,4 @@ declare class A2ADaemon extends EventEmitter {
     private processPendingTask;
 }
 
-export { type A2AConfig as A, buildTools as B, ContextCompactor as C, cidFromURI as D, executePlatformTool as E, FactExtractor as F, type GetAllAgentsOptions as G, getAllPlatformToolNames as H, guardSubscription as I, parseTokenURIJSON as J, toAttributes as K, LoopTraceEmitter as L, type MetadataAttribute as M, wrapPlatformToolsAsSkills as N, type PlanDetail as P, type ReputationConfig as R, SubscriptionManager as S, ToolExecutor as T, ZERO_ADDRESS as Z, A2ADaemon as a, type A2ADaemonConfig as b, A2AProtocol as c, type A2ATaskResult as d, AgentLoop as e, AgentRegistry as f, type AgentRegistryConfig as g, type AgentSummary as h, type AgentSummaryMetadata as i, type CreatePlanParams as j, type CreatePlanResult as k, type PlatformToolContext as l, type PlatformToolDef as m, type ReputationFeedback as n, type ReputationFlavor as o, ReputationRegistry as p, type ReputationSummary as q, STANDARD_IDENTITY_ABI as r, SUBSCRIPTION_PERIODS as s, type StructuredAgentMetadata as t, type SubscribeResult as u, type SubscriptionConfig as v, type SubscriptionDetail as w, type SubscriptionPeriod as x, buildPlatformTools as y, buildSystemPrompt as z };
+export { type A2AConfig as A, buildSystemPrompt as B, ContextCompactor as C, buildTools as D, cidFromURI as E, FactExtractor as F, type GetAllAgentsOptions as G, executePlatformTool as H, getAllPlatformToolNames as I, guardSubscription as J, parseTokenURIJSON as K, LoopTraceEmitter as L, type MetadataAttribute as M, toAttributes as N, wrapPlatformToolsAsSkills as O, type PlanDetail as P, type ReputationConfig as R, SubscriptionManager as S, ToolExecutor as T, ZERO_ADDRESS as Z, A2ADaemon as a, type A2ADaemonConfig as b, A2AProtocol as c, type A2ATaskResult as d, AgentLoop as e, AgentRegistry as f, type AgentRegistryConfig as g, type AgentSummary as h, type AgentSummaryMetadata as i, type CreatePlanParams as j, type CreatePlanResult as k, type PlanType as l, type PlatformToolContext as m, type PlatformToolDef as n, type ReputationFeedback as o, type ReputationFlavor as p, ReputationRegistry as q, type ReputationSummary as r, STANDARD_IDENTITY_ABI as s, SUBSCRIPTION_PERIODS as t, type StructuredAgentMetadata as u, type SubscribeResult as v, type SubscriptionConfig as w, type SubscriptionDetail as x, type SubscriptionPeriod as y, buildPlatformTools as z };

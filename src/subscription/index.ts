@@ -3,6 +3,7 @@ export { SubscriptionManager, guardSubscription, ZERO_ADDRESS, SUBSCRIPTION_PERI
 export type {
   SubscriptionConfig,
   PlanDetail,
+  PlanType,
   SubscriptionDetail,
   SubscriptionPeriod,
   CreatePlanParams,

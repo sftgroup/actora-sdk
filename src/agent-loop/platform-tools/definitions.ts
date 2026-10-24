@@ -214,7 +214,7 @@ const subscriptionTools: PlatformToolDef[] = [
     type: 'function',
     function: {
       name: 'actora_subscription_release',
-      description: 'Release escrowed subscription funds to the agent creator (after trial window). Only callable by the subscriber.',
+      description: 'Deprecated: ERC8004SubscriptionManager settles payments on subscribe/renew, so there is no escrow to release.',
       parameters: object({
         subscriptionId: integer('The subscription ID'),
       }, required(['subscriptionId'])),

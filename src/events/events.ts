@@ -2,7 +2,7 @@
 // @actora/sdk — On-chain Event Listener
 // ---------------------------------------------------------------------------
 // Lightweight contract event subscription (Transfer / AgentRegistered on the
-// IdentityRegistry, PlanCreated / Subscribed on the SubscriptionManager).
+// IdentityRegistry, PlanCreated / SubscriptionCreated on the SubscriptionManager).
 // Uses viem `watchContractEvent` in poll mode (works over any transport).
 // Replaces 2-minute polling loops with near-real-time event-driven sync.
 // ---------------------------------------------------------------------------
@@ -23,10 +23,10 @@ const REGISTERED_EVENT = parseAbiItem(
   'event Registered(uint256 indexed agentId, string agentURI, address indexed owner)'
 )
 const PLAN_CREATED_EVENT = parseAbiItem(
-  'event PlanCreated(uint256 indexed planId, uint256 indexed agentId, uint256 price, string period, address payToken, uint256 trialDays)'
+  'event PlanCreated(uint256 indexed planId, uint256 indexed agentId, string name, uint8 planType, address token, uint256 subscriptionPrice, uint256 usagePrice, uint8 billingPeriod, uint256 platformFeePercentage)'
 )
-const SUBSCRIBED_EVENT = parseAbiItem(
-  'event Subscribed(uint256 indexed subscriptionId, address indexed subscriber, uint256 indexed agentId, uint256 expiresAt)'
+const SUBSCRIPTION_CREATED_EVENT = parseAbiItem(
+  'event SubscriptionCreated(uint256 indexed subscriptionId, uint256 indexed planId, uint256 indexed agentId, address subscriber, uint8 planType, uint256 startDate, uint256 nextBillingDate)'
 )
 
 const EVENT_ABI = {
@@ -34,12 +34,12 @@ const EVENT_ABI = {
   AgentRegistered: AGENT_REGISTERED_EVENT,
   Registered: REGISTERED_EVENT,
   PlanCreated: PLAN_CREATED_EVENT,
-  Subscribed: SUBSCRIBED_EVENT,
+  SubscriptionCreated: SUBSCRIPTION_CREATED_EVENT,
 } as const
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'Registered' | 'PlanCreated' | 'Subscribed'
+export type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'Registered' | 'PlanCreated' | 'SubscriptionCreated'
 
 export interface ActoraChainEvent {
   type: ActoraEventType
@@ -64,7 +64,7 @@ export interface EventListenerOptions {
 const CONTRACT_EVENTS: Record<'identityRegistryAddress' | 'subscriptionManagerAddress', readonly ActoraEventType[]> = {
   // Transfer 两个实现都有；AgentRegistered=历史实现，Registered=canonical 标准
   identityRegistryAddress: ['Transfer', 'AgentRegistered', 'Registered'],
-  subscriptionManagerAddress: ['PlanCreated', 'Subscribed'],
+  subscriptionManagerAddress: ['PlanCreated', 'SubscriptionCreated'],
 }
 
 // ── Listener ───────────────────────────────────────────────────────────────

@@ -4,8 +4,8 @@ export { a as DEFAULT_DERIVATION_INFO_PREFIX, b as DEFAULT_DERIVATION_INFO_PREFI
 export { CreatePrfCredentialOptions, EvaluatePrfOptions, PrfCapability, PrfCredential, PrfError, PrfErrorCode, createPrfCredential, evaluatePrf, getPrfCapability } from './core/index.mjs';
 import { Hash, Address, PublicClient, WalletClient } from 'viem';
 export { a as A2ASkillResult, A as AgentRunContext, b as AgentRunner, c as AgentRunnerConfig, I as IPFSFetcher, d as IPFSFetcherConfig, O as OnChainReader, R as RunnableSkill, W as WalletSigner, e as defaultIPFSFetcher } from './agent-runner-CVpGoUs7.mjs';
-import { S as SubscriptionManager } from './index-BmVZFnux.mjs';
-export { A as A2AConfig, a as A2ADaemon, b as A2ADaemonConfig, c as A2AProtocol, d as A2ATaskResult, e as AgentLoop, f as AgentRegistry, g as AgentRegistryConfig, h as AgentSummary, i as AgentSummaryMetadata, C as ContextCompactor, j as CreatePlanParams, k as CreatePlanResult, F as FactExtractor, G as GetAllAgentsOptions, L as LoopTraceEmitter, M as MetadataAttribute, P as PlanDetail, l as PlatformToolContext, m as PlatformToolDef, R as ReputationConfig, n as ReputationFeedback, o as ReputationFlavor, p as ReputationRegistry, q as ReputationSummary, r as STANDARD_IDENTITY_ABI, s as SUBSCRIPTION_PERIODS, t as StructuredAgentMetadata, u as SubscribeResult, v as SubscriptionConfig, w as SubscriptionDetail, x as SubscriptionPeriod, T as ToolExecutor, Z as ZERO_ADDRESS, y as buildPlatformTools, z as buildSystemPrompt, B as buildTools, D as cidFromURI, E as executePlatformTool, H as getAllPlatformToolNames, I as guardSubscription, J as parseTokenURIJSON, K as toAttributes, N as wrapPlatformToolsAsSkills } from './index-BmVZFnux.mjs';
+import { S as SubscriptionManager } from './index-CSVo9tU0.mjs';
+export { A as A2AConfig, a as A2ADaemon, b as A2ADaemonConfig, c as A2AProtocol, d as A2ATaskResult, e as AgentLoop, f as AgentRegistry, g as AgentRegistryConfig, h as AgentSummary, i as AgentSummaryMetadata, C as ContextCompactor, j as CreatePlanParams, k as CreatePlanResult, F as FactExtractor, G as GetAllAgentsOptions, L as LoopTraceEmitter, M as MetadataAttribute, P as PlanDetail, l as PlanType, m as PlatformToolContext, n as PlatformToolDef, R as ReputationConfig, o as ReputationFeedback, p as ReputationFlavor, q as ReputationRegistry, r as ReputationSummary, s as STANDARD_IDENTITY_ABI, t as SUBSCRIPTION_PERIODS, u as StructuredAgentMetadata, v as SubscribeResult, w as SubscriptionConfig, x as SubscriptionDetail, y as SubscriptionPeriod, T as ToolExecutor, Z as ZERO_ADDRESS, z as buildPlatformTools, B as buildSystemPrompt, D as buildTools, E as cidFromURI, H as executePlatformTool, I as getAllPlatformToolNames, J as guardSubscription, K as parseTokenURIJSON, N as toAttributes, O as wrapPlatformToolsAsSkills } from './index-CSVo9tU0.mjs';
 export { A as AgentLoopConfig, a as AgentLoopResult, C as ChatRequest, b as ChatStreamEvent, L as LLMMessage, c as LLMProvider, d as LLMToolCall, e as LoopRunContext, O as OpenAIToolDef, T as ToolCallRecord, f as ToolCallResult, g as ToolCallStart } from './types-6ttfEKn5.mjs';
 export { GatewayProvider, GatewayProviderConfig, OpenAIProvider, OpenAIProviderConfig, ProviderFactoryConfig, createLLMProvider } from './llm/index.mjs';
 export { EndpointRecord, MultiEndpointClient, MultiEndpointConfig } from './endpoint/index.mjs';
@@ -21,7 +21,7 @@ export { C as ChainConfig, a as ConfigRegistryOpts, b as ConfigurationRegistry, 
 export { bytesToHex, hexToBytes } from '@noble/ciphers/utils.js';
 import 'events';
 
-type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'Registered' | 'PlanCreated' | 'Subscribed';
+type ActoraEventType = 'Transfer' | 'AgentRegistered' | 'Registered' | 'PlanCreated' | 'SubscriptionCreated';
 interface ActoraChainEvent {
     type: ActoraEventType;
     args: Record<string, unknown>;

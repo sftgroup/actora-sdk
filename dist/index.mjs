@@ -3043,22 +3043,22 @@ var REGISTERED_EVENT = parseAbiItem(
   "event Registered(uint256 indexed agentId, string agentURI, address indexed owner)"
 );
 var PLAN_CREATED_EVENT = parseAbiItem(
-  "event PlanCreated(uint256 indexed planId, uint256 indexed agentId, uint256 price, string period, address payToken, uint256 trialDays)"
+  "event PlanCreated(uint256 indexed planId, uint256 indexed agentId, string name, uint8 planType, address token, uint256 subscriptionPrice, uint256 usagePrice, uint8 billingPeriod, uint256 platformFeePercentage)"
 );
-var SUBSCRIBED_EVENT = parseAbiItem(
-  "event Subscribed(uint256 indexed subscriptionId, address indexed subscriber, uint256 indexed agentId, uint256 expiresAt)"
+var SUBSCRIPTION_CREATED_EVENT = parseAbiItem(
+  "event SubscriptionCreated(uint256 indexed subscriptionId, uint256 indexed planId, uint256 indexed agentId, address subscriber, uint8 planType, uint256 startDate, uint256 nextBillingDate)"
 );
 var EVENT_ABI = {
   Transfer: TRANSFER_EVENT,
   AgentRegistered: AGENT_REGISTERED_EVENT,
   Registered: REGISTERED_EVENT,
   PlanCreated: PLAN_CREATED_EVENT,
-  Subscribed: SUBSCRIBED_EVENT
+  SubscriptionCreated: SUBSCRIPTION_CREATED_EVENT
 };
 var CONTRACT_EVENTS = {
   // Transfer 两个实现都有；AgentRegistered=历史实现，Registered=canonical 标准
   identityRegistryAddress: ["Transfer", "AgentRegistered", "Registered"],
-  subscriptionManagerAddress: ["PlanCreated", "Subscribed"]
+  subscriptionManagerAddress: ["PlanCreated", "SubscriptionCreated"]
 };
 function subscribeToEvents(publicClient, options) {
   const unwatchAll = [];
@@ -4118,7 +4118,7 @@ var subscriptionTools = [
     type: "function",
     function: {
       name: "actora_subscription_release",
-      description: "Release escrowed subscription funds to the agent creator (after trial window). Only callable by the subscriber.",
+      description: "Deprecated: ERC8004SubscriptionManager settles payments on subscribe/renew, so there is no escrow to release.",
       parameters: object({
         subscriptionId: integer("The subscription ID")
       }, required(["subscriptionId"]))
@@ -4463,7 +4463,7 @@ async function executePlatformTool(toolName, args, ctx) {
       case "actora_subscription_cancel":
         return ctx.subscriptionManager.cancel(args.subscriptionId);
       case "actora_subscription_release":
-        return ctx.subscriptionManager.releaseFunds(args.subscriptionId);
+        throw new Error("release is not supported: ERC8004SubscriptionManager has no escrow");
       case "actora_subscription_fee":
         return { platformFeeBps: await ctx.subscriptionManager.getPlatformFeeBps() };
       // ── A2A ───────────────────────────────────────
@@ -5085,26 +5085,33 @@ init_crypto();
 // src/subscription/subscription.ts
 var ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 var PLAN_CREATED_EVENT2 = parseAbiItem(
-  "event PlanCreated(uint256 indexed planId, uint256 indexed agentId, uint256 price, string period, address payToken, uint256 trialDays)"
+  "event PlanCreated(uint256 indexed planId, uint256 indexed agentId, string name, uint8 planType, address token, uint256 subscriptionPrice, uint256 usagePrice, uint8 billingPeriod, uint256 platformFeePercentage)"
 );
-var SUBSCRIBED_EVENT2 = parseAbiItem(
-  "event Subscribed(uint256 indexed subscriptionId, address indexed subscriber, uint256 indexed agentId, uint256 expiresAt)"
+var SUBSCRIBED_EVENT = parseAbiItem(
+  "event SubscriptionCreated(uint256 indexed subscriptionId, uint256 indexed planId, uint256 indexed agentId, address subscriber, uint8 planType, uint256 startDate, uint256 nextBillingDate)"
 );
 var PLAN_CREATED_TOPIC = toSignatureHash(PLAN_CREATED_EVENT2);
-var SUBSCRIBED_TOPIC = toSignatureHash(SUBSCRIBED_EVENT2);
+var SUBSCRIBED_TOPIC = toSignatureHash(SUBSCRIBED_EVENT);
 var SUBSCRIPTION_ABI_V2 = {
   // Admin
-  platformFeeBps: {
+  defaultPlatformFee: {
     inputs: [],
-    name: "platformFeeBps",
+    name: "defaultPlatformFee",
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
     type: "function"
   },
-  tokenWhitelist: {
-    inputs: [{ name: "token", type: "address" }],
-    name: "tokenWhitelist",
-    outputs: [{ name: "", type: "bool" }],
+  priceOracle: {
+    inputs: [],
+    name: "priceOracle",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function"
+  },
+  identityRegistry: {
+    inputs: [],
+    name: "identityRegistry",
+    outputs: [{ name: "", type: "address" }],
     stateMutability: "view",
     type: "function"
   },
@@ -5112,10 +5119,15 @@ var SUBSCRIPTION_ABI_V2 = {
   createPlan: {
     inputs: [
       { name: "agentId", type: "uint256" },
-      { name: "price", type: "uint256" },
-      { name: "period", type: "string" },
-      { name: "payToken", type: "address" },
-      { name: "trialDays", type: "uint256" }
+      { name: "name", type: "string" },
+      { name: "description", type: "string" },
+      { name: "planType", type: "uint8" },
+      { name: "token", type: "address" },
+      { name: "subscriptionPrice", type: "uint256" },
+      { name: "usagePrice", type: "uint256" },
+      { name: "billingPeriod", type: "uint8" },
+      { name: "maxUsage", type: "uint256" },
+      { name: "totalUsageLimit", type: "uint256" }
     ],
     name: "createPlan",
     outputs: [{ name: "planId", type: "uint256" }],
@@ -5125,18 +5137,23 @@ var SUBSCRIPTION_ABI_V2 = {
   getPlan: {
     inputs: [{ name: "planId", type: "uint256" }],
     name: "getPlan",
-    // Contract returns `SubscriptionPlan memory` (struct → dynamic tuple encoding).
     outputs: [{
       type: "tuple",
       components: [
         { name: "planId", type: "uint256" },
         { name: "agentId", type: "uint256" },
-        { name: "creator", type: "address" },
-        { name: "price", type: "uint256" },
-        { name: "period", type: "string" },
-        { name: "active", type: "bool" },
-        { name: "payToken", type: "address" },
-        { name: "trialDays", type: "uint256" }
+        { name: "name", type: "string" },
+        { name: "description", type: "string" },
+        { name: "planType", type: "uint8" },
+        { name: "token", type: "address" },
+        { name: "subscriptionPrice", type: "uint256" },
+        { name: "usagePrice", type: "uint256" },
+        { name: "billingPeriod", type: "uint8" },
+        { name: "maxUsage", type: "uint256" },
+        { name: "totalUsageLimit", type: "uint256" },
+        { name: "isActive", type: "bool" },
+        { name: "createdAt", type: "uint256" },
+        { name: "platformFeePercentage", type: "uint256" }
       ]
     }],
     stateMutability: "view",
@@ -5150,12 +5167,12 @@ var SUBSCRIPTION_ABI_V2 = {
     stateMutability: "payable",
     type: "function"
   },
-  // Trial / Release
-  releaseFunds: {
+  // Renew（保持旧版 processPayment 语义：延长同一 subscriptionId）
+  processPayment: {
     inputs: [{ name: "subscriptionId", type: "uint256" }],
-    name: "releaseFunds",
+    name: "processPayment",
     outputs: [],
-    stateMutability: "nonpayable",
+    stateMutability: "payable",
     type: "function"
   },
   cancelSubscription: {
@@ -5167,20 +5184,29 @@ var SUBSCRIPTION_ABI_V2 = {
   },
   // Queries
   getSubscription: {
-    inputs: [
-      { name: "subscriber", type: "address" },
-      { name: "agentId", type: "uint256" }
-    ],
+    inputs: [{ name: "subscriptionId", type: "uint256" }],
     name: "getSubscription",
-    outputs: [
-      { name: "subscriptionId", type: "uint256" },
-      { name: "subscriber", type: "address" },
-      { name: "agentId", type: "uint256" },
-      { name: "status", type: "uint8" },
-      { name: "startedAt", type: "uint256" },
-      { name: "expiresAt", type: "uint256" },
-      { name: "period", type: "string" }
-    ],
+    outputs: [{
+      type: "tuple",
+      components: [
+        { name: "subscriptionId", type: "uint256" },
+        { name: "planId", type: "uint256" },
+        { name: "agentId", type: "uint256" },
+        { name: "subscriber", type: "address" },
+        { name: "status", type: "uint8" },
+        { name: "planType", type: "uint8" },
+        { name: "startDate", type: "uint256" },
+        { name: "nextBillingDate", type: "uint256" },
+        { name: "endDate", type: "uint256" },
+        { name: "currentPeriodUsage", type: "uint256" },
+        { name: "totalUsage", type: "uint256" },
+        { name: "remainingUsage", type: "uint256" },
+        { name: "totalPaid", type: "uint256" },
+        { name: "createdAt", type: "uint256" },
+        { name: "lastPaymentDate", type: "uint256" },
+        { name: "paymentToken", type: "address" }
+      ]
+    }],
     stateMutability: "view",
     type: "function"
   },
@@ -5197,27 +5223,43 @@ var SUBSCRIPTION_ABI_V2 = {
   getUserSubscriptions: {
     inputs: [{ name: "user", type: "address" }],
     name: "getUserSubscriptions",
-    outputs: [{ name: "", type: "uint256[]" }],
+    outputs: [{
+      type: "tuple[]",
+      components: [
+        { name: "subscriptionId", type: "uint256" },
+        { name: "planId", type: "uint256" },
+        { name: "agentId", type: "uint256" },
+        { name: "subscriber", type: "address" },
+        { name: "status", type: "uint8" },
+        { name: "planType", type: "uint8" },
+        { name: "startDate", type: "uint256" },
+        { name: "nextBillingDate", type: "uint256" },
+        { name: "endDate", type: "uint256" },
+        { name: "currentPeriodUsage", type: "uint256" },
+        { name: "totalUsage", type: "uint256" },
+        { name: "remainingUsage", type: "uint256" },
+        { name: "totalPaid", type: "uint256" },
+        { name: "createdAt", type: "uint256" },
+        { name: "lastPaymentDate", type: "uint256" },
+        { name: "paymentToken", type: "address" }
+      ]
+    }],
     stateMutability: "view",
     type: "function"
   },
-  getSubscriptionDetail: {
-    inputs: [{ name: "subscriptionId", type: "uint256" }],
-    name: "getSubscriptionDetail",
-    outputs: [
-      { name: "subscriptionId", type: "uint256" },
-      { name: "subscriber", type: "address" },
-      { name: "agentId", type: "uint256" },
-      { name: "status", type: "uint8" },
-      { name: "startedAt", type: "uint256" },
-      { name: "expiresAt", type: "uint256" },
-      { name: "period", type: "string" },
-      { name: "payToken", type: "address" },
-      { name: "amountPaid", type: "uint256" },
-      { name: "trialActive", type: "bool" },
-      { name: "trialEndsAt", type: "uint256" },
-      { name: "fundsReleased", type: "bool" }
-    ],
+  // Oracle whitelist
+  isTokenSupported: {
+    inputs: [{ name: "token", type: "address" }],
+    name: "isTokenSupported",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function"
+  },
+  // Identity owner（PlanDetail.creator 派生）
+  ownerOf: {
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    name: "ownerOf",
+    outputs: [{ name: "", type: "address" }],
     stateMutability: "view",
     type: "function"
   }
@@ -5245,12 +5287,22 @@ var ERC20_ABI = {
   }
 };
 var SUBSCRIPTION_STATUS_NAMES = {
-  0: "pending",
-  1: "active",
+  0: "active",
+  1: "cancelled",
   2: "expired",
-  3: "cancelled"
+  3: "pending",
+  4: "pending"
 };
-var SUBSCRIPTION_PERIODS = ["day", "week", "month", "year"];
+var SUBSCRIPTION_PERIODS = ["day", "week", "month", "quarter", "year"];
+var BILLING_PERIOD_NAMES = ["day", "week", "month", "quarter", "year"];
+var BILLING_PERIOD_TO_ENUM = {
+  day: 0,
+  week: 1,
+  month: 2,
+  quarter: 3,
+  year: 4
+};
+var GRACE_PERIOD_SECONDS = 3 * 24 * 60 * 60;
 var SubscriptionManager = class {
   address;
   publicClient;
@@ -5279,64 +5331,84 @@ var SubscriptionManager = class {
     return address;
   }
   // ── Config Read ──────────────────────────────────────────────────────────
-  /** Get current platform fee in basis points (e.g. 250 = 2.5%). */
+  /** Get the default platform fee in basis points (e.g. 250 = 2.5%). */
   async getPlatformFeeBps() {
     const result = await this.publicClient.readContract({
       address: this.address,
-      abi: [SUBSCRIPTION_ABI_V2.platformFeeBps],
-      functionName: "platformFeeBps"
+      abi: [SUBSCRIPTION_ABI_V2.defaultPlatformFee],
+      functionName: "defaultPlatformFee"
     });
     return Number(result);
   }
-  /** Check if a token is whitelisted for payments. */
+  /** Check whether an ERC-20 token is accepted by the plan price oracle. */
   async isTokenWhitelisted(token) {
-    const result = await this.publicClient.readContract({
+    const oracle = await this.publicClient.readContract({
       address: this.address,
-      abi: [SUBSCRIPTION_ABI_V2.tokenWhitelist],
-      functionName: "tokenWhitelist",
+      abi: [SUBSCRIPTION_ABI_V2.priceOracle],
+      functionName: "priceOracle"
+    });
+    const result = await this.publicClient.readContract({
+      address: oracle,
+      abi: [SUBSCRIPTION_ABI_V2.isTokenSupported],
+      functionName: "isTokenSupported",
       args: [token]
     });
     return result;
   }
   // ── Plans ────────────────────────────────────────────────────────────────
-  /** Get full plan details with v2 fields. */
+  /** Get full plan details; `creator` is the identity owner of `agentId`. */
   async getPlan(planId) {
-    const result = await this.publicClient.readContract({
-      address: this.address,
-      abi: [SUBSCRIPTION_ABI_V2.getPlan],
-      functionName: "getPlan",
-      args: [BigInt(planId)]
-    });
-    const r = result;
+    const r = await this._readPlanRaw(planId);
     return {
       planId: Number(r.planId),
       agentId: Number(r.agentId),
-      creator: r.creator,
-      price: r.price,
-      period: r.period,
-      active: r.active,
-      payToken: r.payToken,
-      trialDays: Number(r.trialDays)
+      creator: await this._agentOwner(Number(r.agentId)),
+      price: r.subscriptionPrice,
+      period: BILLING_PERIOD_NAMES[Number(r.billingPeriod)] ?? "month",
+      active: r.isActive,
+      payToken: r.token,
+      trialDays: 0,
+      name: r.name,
+      description: r.description,
+      planType: Number(r.planType),
+      subscriptionPrice: r.subscriptionPrice,
+      usagePrice: r.usagePrice,
+      billingPeriod: Number(r.billingPeriod),
+      maxUsage: r.maxUsage,
+      totalUsageLimit: r.totalUsageLimit,
+      platformFeePercentage: Number(r.platformFeePercentage)
     };
   }
-  // ── Plans ────────────────────────────────────────────────────────────────
   /**
    * Create a subscription plan for an agent.
    *
-   * @param params.period  Must be 'day' | 'week' | 'month' | 'year' — the only
-   *                       values the contract maps to real durations. Anything
-   *                       else silently becomes 30 days on-chain.
+   * @param params.period  Must be 'day' | 'week' | 'month' | 'quarter' | 'year'.
    * @returns              { planId, txHash } (planId parsed from PlanCreated event)
    */
   async createPlan(params) {
-    const { agentId, price, period, payToken = ZERO_ADDRESS, trialDays = 0 } = params;
-    if (!SUBSCRIPTION_PERIODS.includes(period)) {
+    const {
+      agentId,
+      name = `Plan #${agentId}`,
+      description = "",
+      planType = 0,
+      price = 0n,
+      usagePrice = 0n,
+      period,
+      payToken = ZERO_ADDRESS,
+      maxUsage = 0n,
+      totalUsageLimit = 0n
+    } = params;
+    const billingPeriod = BILLING_PERIOD_TO_ENUM[period];
+    if (billingPeriod === void 0) {
       throw new Error(
         `Invalid period "${period}". Must be one of: ${SUBSCRIPTION_PERIODS.join(", ")}`
       );
     }
-    if (trialDays < 0 || trialDays > 30) {
-      throw new Error("trialDays must be between 0 and 30");
+    if (planType !== 1 && price <= 0n) {
+      throw new Error("price must be > 0 for subscription/hybrid plans");
+    }
+    if (planType !== 0 && usagePrice <= 0n) {
+      throw new Error("usagePrice must be > 0 for usage-based/hybrid plans");
     }
     const account = await this._resolveAccount();
     const { request: request2 } = await this.publicClient.simulateContract({
@@ -5344,7 +5416,18 @@ var SubscriptionManager = class {
       address: this.address,
       abi: [SUBSCRIPTION_ABI_V2.createPlan],
       functionName: "createPlan",
-      args: [BigInt(agentId), price, period, payToken, BigInt(trialDays)]
+      args: [
+        BigInt(agentId),
+        name,
+        description,
+        planType,
+        payToken,
+        price,
+        usagePrice,
+        billingPeriod,
+        maxUsage,
+        totalUsageLimit
+      ]
     });
     const hash2 = await this.walletClient.writeContract({ ...request2, account });
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash: hash2 });
@@ -5356,8 +5439,8 @@ var SubscriptionManager = class {
    * For ERC20 plans: auto-detects from plan.payToken, calls approve + subscribe.
    *                    User must have approved this contract for plan.price tokens.
    *
-   * @returns SubscribeResult — subscriptionId/expiresAt/subscriber parsed from
-   *          the Subscribed event (no longer hardcoded to 0).
+   * @returns SubscribeResult — subscriptionId/nextBillingDate/subscriber parsed
+   *          from the SubscriptionCreated event (no longer hardcoded to 0).
    */
   async subscribe(planId, opts) {
     const account = await this._resolveAccount();
@@ -5417,19 +5500,7 @@ var SubscriptionManager = class {
     const subscribed = await this.subscribe(planId);
     return { planId, ...subscribed };
   }
-  /** Release escrowed funds to creator after trial window ends. */
-  async releaseFunds(subscriptionId) {
-    const account = await this._resolveAccount();
-    const { request: request2 } = await this.publicClient.simulateContract({
-      account,
-      address: this.address,
-      abi: [SUBSCRIPTION_ABI_V2.releaseFunds],
-      functionName: "releaseFunds",
-      args: [BigInt(subscriptionId)]
-    });
-    return this.walletClient.writeContract({ ...request2, account });
-  }
-  /** Cancel subscription (trial refund if within window). */
+  /** Cancel subscription. ERC8004SubscriptionManager settles payments immediately. */
   async cancel(subscriptionId) {
     const account = await this._resolveAccount();
     const { request: request2 } = await this.publicClient.simulateContract({
@@ -5451,70 +5522,105 @@ var SubscriptionManager = class {
     });
     return result;
   }
+  /**
+   * Latest subscription of `subscriber` for `agentId`.
+   *
+   * ERC8004SubscriptionManager indexes subscriptions by ID only, so this scans
+   * `getUserSubscriptions(subscriber)`. Prefers an active, non-expired entry;
+   * otherwise falls back to the newest one.
+   */
   async getSubscription(subscriber, agentId) {
+    const subs = await this._readUserSubscriptions(subscriber);
+    const matches = subs.filter((s) => Number(s.agentId) === Number(agentId));
+    if (matches.length === 0) return null;
+    const now = Math.floor(Date.now() / 1e3);
+    const usable = matches.filter(
+      (s) => Number(s.status) === 0 && (Number(s.planType) === 1 || now <= Number(s.nextBillingDate) + GRACE_PERIOD_SECONDS)
+    );
+    const picked = [...usable.length > 0 ? usable : matches].sort(
+      (a, b) => Number(b.subscriptionId) - Number(a.subscriptionId)
+    )[0];
+    if (!picked) return null;
+    const plan = await this._readPlanRaw(Number(picked.planId));
+    return {
+      subscriptionId: Number(picked.subscriptionId),
+      subscriber: picked.subscriber,
+      agentId: Number(picked.agentId),
+      status: SUBSCRIPTION_STATUS_NAMES[Number(picked.status)] ?? "pending",
+      startedAt: Number(picked.startDate),
+      expiresAt: Number(picked.nextBillingDate),
+      period: BILLING_PERIOD_NAMES[Number(plan.billingPeriod)] ?? "month"
+    };
+  }
+  /** Full subscription detail (status, usage counters, payment token). */
+  async getSubscriptionDetail(subscriptionId) {
+    const s = await this._readSubscription(subscriptionId);
+    const plan = await this._readPlanRaw(Number(s.planId));
+    return {
+      subscriptionId: Number(s.subscriptionId),
+      planId: Number(s.planId),
+      subscriber: s.subscriber,
+      agentId: Number(s.agentId),
+      status: Number(s.status),
+      planType: Number(s.planType),
+      startedAt: Number(s.startDate),
+      nextBillingDate: Number(s.nextBillingDate),
+      endDate: Number(s.endDate),
+      period: BILLING_PERIOD_NAMES[Number(plan.billingPeriod)] ?? "month",
+      payToken: s.paymentToken,
+      amountPaid: s.totalPaid,
+      currentPeriodUsage: s.currentPeriodUsage,
+      totalUsage: s.totalUsage,
+      remainingUsage: s.remainingUsage,
+      lastPaymentDate: Number(s.lastPaymentDate)
+    };
+  }
+  /** All subscription IDs owned by a wallet. */
+  async getUserSubscriptions(user) {
+    const subs = await this._readUserSubscriptions(user);
+    return subs.map((s) => Number(s.subscriptionId));
+  }
+  // ── Raw reads ────────────────────────────────────────────────────────────
+  async _readPlanRaw(planId) {
+    const result = await this.publicClient.readContract({
+      address: this.address,
+      abi: [SUBSCRIPTION_ABI_V2.getPlan],
+      functionName: "getPlan",
+      args: [BigInt(planId)]
+    });
+    return result;
+  }
+  async _readSubscription(subscriptionId) {
     const result = await this.publicClient.readContract({
       address: this.address,
       abi: [SUBSCRIPTION_ABI_V2.getSubscription],
       functionName: "getSubscription",
-      args: [subscriber, BigInt(agentId)]
-    });
-    const [subId, sub, aId, status, started, expires, period] = result;
-    if (Number(subId) === 0) return null;
-    return {
-      subscriptionId: Number(subId),
-      subscriber: sub,
-      agentId: Number(aId),
-      status: SUBSCRIPTION_STATUS_NAMES[status] ?? "pending",
-      startedAt: Number(started),
-      expiresAt: Number(expires),
-      period
-    };
-  }
-  /** Get full subscription detail with v2 fields (trial, payToken, fundsReleased). */
-  async getSubscriptionDetail(subscriptionId) {
-    const result = await this.publicClient.readContract({
-      address: this.address,
-      abi: [SUBSCRIPTION_ABI_V2.getSubscriptionDetail],
-      functionName: "getSubscriptionDetail",
       args: [BigInt(subscriptionId)]
     });
-    const [
-      sid,
-      sub,
-      aId,
-      status,
-      started,
-      expires,
-      period,
-      payToken,
-      amountPaid,
-      trialActive,
-      trialEndsAt,
-      fundsReleased
-    ] = result;
-    return {
-      subscriptionId: Number(sid),
-      subscriber: sub,
-      agentId: Number(aId),
-      status,
-      startedAt: Number(started),
-      expiresAt: Number(expires),
-      period,
-      payToken,
-      amountPaid,
-      trialActive,
-      trialEndsAt: Number(trialEndsAt),
-      fundsReleased
-    };
+    return result;
   }
-  async getUserSubscriptions(user) {
+  async _readUserSubscriptions(user) {
     const result = await this.publicClient.readContract({
       address: this.address,
       abi: [SUBSCRIPTION_ABI_V2.getUserSubscriptions],
       functionName: "getUserSubscriptions",
       args: [user]
     });
-    return result.map(Number);
+    return result;
+  }
+  /** Plan creator — the identity (ERC-721) owner of `agentId`. */
+  async _agentOwner(agentId) {
+    const registry = await this.publicClient.readContract({
+      address: this.address,
+      abi: [SUBSCRIPTION_ABI_V2.identityRegistry],
+      functionName: "identityRegistry"
+    });
+    return this.publicClient.readContract({
+      address: registry,
+      abi: [SUBSCRIPTION_ABI_V2.ownerOf],
+      functionName: "ownerOf",
+      args: [BigInt(agentId)]
+    });
   }
   // ── Receipt parsing (event-driven, no hardcoded IDs) ─────────────────────
   _findEventLog(receipt, topic) {
@@ -5533,14 +5639,14 @@ var SubscriptionManager = class {
     });
     return Number(decoded.args.planId);
   }
-  /** Parse subscriptionId/subscriber/agentId/expiresAt from the Subscribed event. */
+  /** Parse subscriptionId/subscriber/agentId/nextBillingDate from SubscriptionCreated. */
   _parseSubscribedFromReceipt(receipt) {
     const log = this._findEventLog(receipt, SUBSCRIBED_TOPIC);
     if (!log) {
-      throw new Error("Subscribed event not found in transaction receipt");
+      throw new Error("SubscriptionCreated event not found in transaction receipt");
     }
     const decoded = decodeEventLog({
-      abi: [SUBSCRIBED_EVENT2],
+      abi: [SUBSCRIBED_EVENT],
       data: log.data,
       topics: log.topics
     });
@@ -5548,7 +5654,7 @@ var SubscriptionManager = class {
       subscriptionId: Number(decoded.args.subscriptionId),
       subscriber: decoded.args.subscriber,
       agentId: Number(decoded.args.agentId),
-      expiresAt: Number(decoded.args.expiresAt)
+      nextBillingDate: Number(decoded.args.nextBillingDate)
     };
   }
 };
@@ -7519,6 +7625,7 @@ var CONFIG_ABI = {
     type: "function"
   }
 };
+var NOT_DEPLOYED = "0x0000000000000000000000000000000000000000";
 var KNOWN_CHAINS = {
   // Sepolia Testnet
   // v3 (deployed 2026-07-13): platformFee=250bps(2.5%), ReentrancyGuard, audit fixes
@@ -7529,54 +7636,54 @@ var KNOWN_CHAINS = {
       subscriptionManager: "0xC15fE80b9d800abb72121F353a6ae6d6E9077E63",
       a2aProtocolRegistry: "0x309C7447d89f3087A9924BB686d88df020F7e9cB",
       reputationRegistry: "0xeb6B410ea71b8d9dA0c96f6A91d35027CE143DC9",
-      configurationRegistry: "0x68DcE00e4C9077c94BC68016cD14B09557faEA6c",
-      multiEndpointRegistry: "0xEB5e866f186d4B73F97aa0d70B86f2C6e2e21Cb7"
+      configurationRegistry: NOT_DEPLOYED,
+      multiEndpointRegistry: NOT_DEPLOYED
     },
     ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"]
   },
   // BNB Smart Chain (BSC) Mainnet
   // Chain ID 56, EIP-1559, gas token BNB
-  // Agent 市场开通 2026-09-17（DeployBsc.s.sol，部署者 0x8017925F7eEcA3713F03983113788321891F7D1f）
+  // Agent 市场开通 2026-09-17（DeployBsc.s.sol）
+  // 付费层 2026-10-24 换代（DeployCanonicalExtensions.s.sol，block 129441669）：
+  //   SM / A2A 为新版（订阅即分账），身份层仍绑 legacy identity（未迁移 canonical）。
   // Explorer: https://bscscan.com
   56: {
     chainId: 56,
     contracts: {
       identityRegistry: "0xeF96D883e1082E3e102d925c8190A13EEC1ffF33",
-      subscriptionManager: "0x6f18Aa693e5062Ef98bBA5A865F225f2e652DF6b",
-      a2aProtocolRegistry: "0x842F0B9E85f5aBd9752B5ea20Cc888b94dBb5E16",
+      subscriptionManager: "0x5a36150C5865B4dA16218724a1c5668561E4d981",
+      a2aProtocolRegistry: "0x97cad48D250C00A394449A5E613773e82b20089D",
       reputationRegistry: "0xBaDB0F3956252DE6e31aE749245E8bA6Fda288ee",
-      configurationRegistry: "0xd9B984cF591dc1C3663991e7D75c44C2bDE1a9BB",
-      multiEndpointRegistry: "0x80Bc36634693d7935109f5cdbc95E64a9c1bdA6a"
+      configurationRegistry: NOT_DEPLOYED,
+      multiEndpointRegistry: NOT_DEPLOYED
     },
     ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"],
     rpcUrl: "https://bsc-rpc.publicnode.com"
   },
-  // ── Ethereum Mainnet — 已开通（2026-09-17 部署 DeployEthereum.s.sol，SM block 25992521）──
+  // ── Ethereum Mainnet — 已开通（付费层 2026-10-24 换代，block 26259798）──
   1: {
     chainId: 1,
     contracts: {
       identityRegistry: "0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e",
-      subscriptionManager: "0x7b4002a416E9c0cA68d7dEDc6c734CFab4D396FE",
-      a2aProtocolRegistry: "0x09f6C8f9AE6CEf12C4a078c91aeb2EcCb7CbD012",
+      subscriptionManager: "0xF3D14ac4D51BC4B7354838af3137248476D540BD",
+      a2aProtocolRegistry: "0x5a36150C5865B4dA16218724a1c5668561E4d981",
       reputationRegistry: "0x72C1236bc425b1A6129b76400aE7b26c1fbFAeFE",
-      configurationRegistry: "0x2Bf6962301164A301e4fEC9036aB97edcBcE1bCa",
-      multiEndpointRegistry: "0xE93fbED3Df2a5D357856f2f2712B3c1Ebb8d026f"
+      configurationRegistry: NOT_DEPLOYED,
+      multiEndpointRegistry: NOT_DEPLOYED
     },
     ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"],
     rpcUrl: "https://ethereum-rpc.publicnode.com"
   },
-  // ── Base — 已开通（2026-09-17 部署 DeployBase.s.sol，SM block 51401326）──
-  // 注：地址以 broadcast/DeployBase.s.sol/8453/run-latest.json 的 contractName 映射为准
-  // （2026-09-17 曾误按交易顺序分配地址，实际 SM=0x0f129e... 已修正）
+  // ── Base — 已开通（付费层 2026-10-24 换代，block 53011518）──
   8453: {
     chainId: 8453,
     contracts: {
       identityRegistry: "0x37f3919D64d648ddF70747e159fd9A1c6890CA3b",
-      subscriptionManager: "0x0f129e8C31Dd7642cd7e852fBf682fCb75104b29",
-      a2aProtocolRegistry: "0x2172145F2A8f7A66019A4F4048Af46844243607E",
+      subscriptionManager: "0x41A42cDe1bd7AA39a9beB3745Ae08f50e8656B36",
+      a2aProtocolRegistry: "0x88cce24854505e2d3DC8625a0Bf27Cca10f901C1",
       reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
-      configurationRegistry: "0x5EF8c35738311B971A64de64487E1E304Ae53993",
-      multiEndpointRegistry: "0xB8065829dBb450B8fC7375D910521EA641EC6Ee5"
+      configurationRegistry: NOT_DEPLOYED,
+      multiEndpointRegistry: NOT_DEPLOYED
     },
     ipfsGateways: ["ipfs.io", "gateway.pinata.cloud", "dweb.link", "cf-ipfs.com"],
     rpcUrl: "https://base-rpc.publicnode.com"

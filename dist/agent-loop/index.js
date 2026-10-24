@@ -1165,7 +1165,7 @@ var subscriptionTools = [
     type: "function",
     function: {
       name: "actora_subscription_release",
-      description: "Release escrowed subscription funds to the agent creator (after trial window). Only callable by the subscriber.",
+      description: "Deprecated: ERC8004SubscriptionManager settles payments on subscribe/renew, so there is no escrow to release.",
       parameters: object({
         subscriptionId: integer("The subscription ID")
       }, required(["subscriptionId"]))
@@ -1510,7 +1510,7 @@ async function executePlatformTool(toolName, args, ctx) {
       case "actora_subscription_cancel":
         return ctx.subscriptionManager.cancel(args.subscriptionId);
       case "actora_subscription_release":
-        return ctx.subscriptionManager.releaseFunds(args.subscriptionId);
+        throw new Error("release is not supported: ERC8004SubscriptionManager has no escrow");
       case "actora_subscription_fee":
         return { platformFeeBps: await ctx.subscriptionManager.getPlatformFeeBps() };
       // ── A2A ───────────────────────────────────────
