@@ -7772,7 +7772,7 @@ var KNOWN_CHAINS = {
   56: {
     chainId: 56,
     contracts: {
-      identityRegistry: "0xeF96D883e1082E3e102d925c8190A13EEC1ffF33",
+      identityRegistry: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
       subscriptionManager: "0x5a36150C5865B4dA16218724a1c5668561E4d981",
       a2aProtocolRegistry: "0x97cad48D250C00A394449A5E613773e82b20089D",
       reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
@@ -7786,7 +7786,7 @@ var KNOWN_CHAINS = {
   1: {
     chainId: 1,
     contracts: {
-      identityRegistry: "0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e",
+      identityRegistry: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
       subscriptionManager: "0xF3D14ac4D51BC4B7354838af3137248476D540BD",
       a2aProtocolRegistry: "0x5a36150C5865B4dA16218724a1c5668561E4d981",
       reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",
@@ -7800,7 +7800,7 @@ var KNOWN_CHAINS = {
   8453: {
     chainId: 8453,
     contracts: {
-      identityRegistry: "0x37f3919D64d648ddF70747e159fd9A1c6890CA3b",
+      identityRegistry: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432",
       subscriptionManager: "0x41A42cDe1bd7AA39a9beB3745Ae08f50e8656B36",
       a2aProtocolRegistry: "0x88cce24854505e2d3DC8625a0Bf27Cca10f901C1",
       reputationRegistry: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63",

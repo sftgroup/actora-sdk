@@ -1,4 +1,4 @@
-# @actora/sdk v0.20.1
+# @actora/sdk v0.21.0
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
@@ -14,10 +14,13 @@ Agent = Prompt + Skills + MCP
 
 | 链 | chainId | IdentityRegistry | SubscriptionManager | 原生代币 | RPC |
 |----|---------|------------------|---------------------|----------|-----|
-| BSC | 56 | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` | `0x5a36150C5865B4dA16218724a1c5668561E4d981` | BNB | `https://bsc-rpc.publicnode.com` |
-| Ethereum | 1 | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0xF3D14ac4D51BC4B7354838af3137248476D540BD` | ETH | `https://ethereum-rpc.publicnode.com` |
-| Base | 8453 | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` | `0x41A42cDe1bd7AA39a9beB3745Ae08f50e8656B36` | ETH | `https://base-rpc.publicnode.com` |
+| BSC | 56 | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `0x5a36150C5865B4dA16218724a1c5668561E4d981` | BNB | `https://bsc-rpc.publicnode.com` |
+| Ethereum | 1 | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `0xF3D14ac4D51BC4B7354838af3137248476D540BD` | ETH | `https://ethereum-rpc.publicnode.com` |
+| Base | 8453 | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `0x41A42cDe1bd7AA39a9beB3745Ae08f50e8656B36` | ETH | `https://base-rpc.publicnode.com` |
 | Sepolia 测试网 | 11155111 | `0xe94ad380d3F8d08a7590eda0C84f354a93F96e5F` | `0xC15fE80b9d800abb72121F353a6ae6d6E9077E63` | ETH | 自备（Alchemy/Infura 等） |
+
+> ⚠️ **2026-10-24 身份层迁移**：BSC / Ethereum / Base 的 `IdentityRegistry` 已统一指向官方 ERC-8004 canonical 单例（三链同址 `0x8004A169…`），旧的自建注册表仅作只读存档。
+> 因此 **agentId 编号随之变化**（BSC 存量 agent 由 `1..22` 变为 `382297..382416`，Base 的 `1` 变为 `1123065`）；`SubscriptionManager` / `A2AProtocolRegistry` 已通过 `setIdentityRegistry` 指向同一单例。
 
 > ⚠️ **地址来源**：上表全部取自 `KNOWN_CHAINS[chainId]`（`src/config/config.ts`）。**生产环境请优先从 `KNOWN_CHAINS[chainId].contracts.identityRegistry / subscriptionManager` 读取，避免硬编码**——合约地址可能随部署修正而更新。
 
@@ -27,7 +30,7 @@ Agent = Prompt + Skills + MCP
 
 | 合约 | BSC (56) | Ethereum (1) | Base (8453) |
 |------|----------|--------------|-------------|
-| IdentityRegistry | `0xeF96D883e1082E3e102d925c8190A13EEC1ffF33` | `0xb38BC382aA438F8B4f0BFA902041330Bc14DD02e` | `0x37f3919D64d648ddF70747e159fd9A1c6890CA3b` |
+| IdentityRegistry | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` |
 | SubscriptionManager | `0x5a36150C5865B4dA16218724a1c5668561E4d981` | `0xF3D14ac4D51BC4B7354838af3137248476D540BD` | `0x41A42cDe1bd7AA39a9beB3745Ae08f50e8656B36` |
 | A2AProtocolRegistry | `0x97cad48D250C00A394449A5E613773e82b20089D` | `0x5a36150C5865B4dA16218724a1c5668561E4d981` | `0x88cce24854505e2d3DC8625a0Bf27Cca10f901C1` |
 | ReputationRegistry | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` |
