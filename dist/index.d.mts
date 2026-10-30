@@ -2,14 +2,13 @@ import { M as McpConnection } from './types-ATMM4oRG.mjs';
 export { b as A2AAgentCard, c as A2ASkillExecution, d as A2ATask, e as A2ATaskStatus, f as AGENT_CATEGORIES, g as ActoraConfig, h as ActoraContracts, i as ActoraError, j as ActoraErrorCode, k as AgentCategory, A as AgentPayload, l as AgentPricing, a as AgentPrivatePayload, m as AgentPublicPayload, n as AgentReputation, o as AgentReview, p as AgentSearchQuery, q as AgentSearchResult, r as AgentSubscription, E as EncryptedPayload, J as JSONSchema, s as JSONSchemaProperty, t as McpTransport, O as OnChainAgentMetadata, P as PackResult, u as PricingType, R as RegisteredAgent, S as SkillDef, v as SkillExecutionMode, w as SkillExecutionRemote, x as SubscriptionRequired, y as SubscriptionStatus, U as UnpackResult } from './types-ATMM4oRG.mjs';
 export { a as DEFAULT_DERIVATION_INFO_PREFIX, b as DEFAULT_DERIVATION_INFO_PREFIX_V2, c as DEFAULT_DERIVATION_INFO_PREFIX_V3, d as DEFAULT_DERIVATION_MESSAGE, e as DEFAULT_DERIVATION_SALT, f as DEFAULT_EIP712_DOMAIN, g as DEFAULT_EIP712_MESSAGE_VERSION, h as DEFAULT_EIP712_PRIMARY_TYPE, i as DEFAULT_EIP712_PURPOSE, j as DEFAULT_EIP712_TYPES, k as DEFAULT_PRF_SALT, D as DerivationMode, l as DeriveKeyPairFromWalletArgs, m as Eip712DerivationOverrides, n as Eip712TypeEntry, o as Eip712TypedData, E as Eip712Types, P as PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE, p as PAYLOAD_KEY_MODE_ATTRIBUTE, q as PayloadKeyCredential, r as PublishAgentConfig, s as PublishAgentResult, W as WalletKeyDerivationParams, t as aesDecrypt, u as aesEncrypt, v as buildPayloadKeyTypedData, w as decryptPayload, x as decryptWithKey, y as defaultInfoPrefixFor, z as deriveKeyPairFromWallet, A as derivePrivateKeyFromIkm, B as derivePrivateKeyFromSignature, C as eciesDecrypt, F as eciesEncrypt, G as encryptPayload, H as encryptWithKey, I as generateAesKey, J as generateKeyPair, K as getPublicKey, L as isDerivationMode, M as packAgentForPublish, N as prfSaltBytes, O as publishAgent, Q as randomBytes, R as readPayloadKeyCredential, S as readPayloadKeyMode, T as serializePayloadKeyCredential, U as unpackAgent } from './crypto-DcBuG_jD.mjs';
 export { CreatePrfCredentialOptions, EvaluatePrfOptions, PrfCapability, PrfCredential, PrfError, PrfErrorCode, createPrfCredential, evaluatePrf, getPrfCapability } from './core/index.mjs';
-import { Hash, Address, PublicClient, WalletClient } from 'viem';
+import { Hash, Address, PublicClient, WalletClient, Hex, Account } from 'viem';
 export { a as A2ASkillResult, A as AgentRunContext, b as AgentRunner, c as AgentRunnerConfig, I as IPFSFetcher, d as IPFSFetcherConfig, O as OnChainReader, R as RunnableSkill, W as WalletSigner, e as defaultIPFSFetcher } from './agent-runner-CVpGoUs7.mjs';
 import { S as SubscriptionManager } from './index-CSVo9tU0.mjs';
 export { A as A2AConfig, a as A2ADaemon, b as A2ADaemonConfig, c as A2AProtocol, d as A2ATaskResult, e as AgentLoop, f as AgentRegistry, g as AgentRegistryConfig, h as AgentSummary, i as AgentSummaryMetadata, C as ContextCompactor, j as CreatePlanParams, k as CreatePlanResult, F as FactExtractor, G as GetAllAgentsOptions, L as LoopTraceEmitter, M as MetadataAttribute, P as PlanDetail, l as PlanType, m as PlatformToolContext, n as PlatformToolDef, R as ReputationConfig, o as ReputationFeedback, p as ReputationFlavor, q as ReputationRegistry, r as ReputationSummary, s as STANDARD_IDENTITY_ABI, t as SUBSCRIPTION_PERIODS, u as StructuredAgentMetadata, v as SubscribeResult, w as SubscriptionConfig, x as SubscriptionDetail, y as SubscriptionPeriod, T as ToolExecutor, Z as ZERO_ADDRESS, z as buildPlatformTools, B as buildSystemPrompt, D as buildTools, E as cidFromURI, H as executePlatformTool, I as getAllPlatformToolNames, J as guardSubscription, K as parseTokenURIJSON, N as toAttributes, O as wrapPlatformToolsAsSkills } from './index-CSVo9tU0.mjs';
 export { A as AgentLoopConfig, a as AgentLoopResult, C as ChatRequest, b as ChatStreamEvent, L as LLMMessage, c as LLMProvider, d as LLMToolCall, e as LoopRunContext, O as OpenAIToolDef, T as ToolCallRecord, f as ToolCallResult, g as ToolCallStart } from './types-6ttfEKn5.mjs';
 export { GatewayProvider, GatewayProviderConfig, OpenAIProvider, OpenAIProviderConfig, ProviderFactoryConfig, createLLMProvider } from './llm/index.mjs';
 export { EndpointRecord, MultiEndpointClient, MultiEndpointConfig } from './endpoint/index.mjs';
-export { ConfigEntry, ConfigurationClient, ConfigurationConfig } from './configuration/index.mjs';
 export { IPFSUploadResult, IPFSUploader, IPFSUploaderConfig, defaultIPFSUploader } from './ipfs/index.mjs';
 export { MemoryConfig, MemoryFact, MemoryProvider } from './memory/index.mjs';
 export { HttpTraceEmitter, NoopTraceEmitter, TraceConfig, TraceEmitter, TraceEvent } from './traces/index.mjs';
@@ -486,7 +485,131 @@ declare class MCPConnector {
 
 declare const MCP_VERSION = "0.1.0";
 
-declare const REPUTATION_VERSION = "0.1.0";
+type SettlementChain = 'bsc' | 'ethereum' | 'base' | 'sepolia';
+declare const SETTLEMENT_PROOF_DOMAIN_NAME = "ActoraPaymentSettlement";
+declare const SETTLEMENT_PROOF_DOMAIN_VERSION = "1";
+/** 与合约 / 网关逐字一致的 EIP-712 结构体定义。 */
+declare const SETTLEMENT_PROOF_TYPES: {
+    readonly SettlementProof: readonly [{
+        readonly name: "agentId";
+        readonly type: "uint256";
+    }, {
+        readonly name: "payer";
+        readonly type: "address";
+    }, {
+        readonly name: "asset";
+        readonly type: "address";
+    }, {
+        readonly name: "amount";
+        readonly type: "uint256";
+    }, {
+        readonly name: "rail";
+        readonly type: "string";
+    }, {
+        readonly name: "taskRef";
+        readonly type: "bytes32";
+    }, {
+        readonly name: "settlementRef";
+        readonly type: "bytes32";
+    }, {
+        readonly name: "settledAt";
+        readonly type: "uint64";
+    }];
+};
+/** 结算 rail 命名空间；用于推导 `settlementRef`。 */
+type SettlementRail = 'erc8183' | 'milestone' | 'x402' | 'sessionKey';
+/**
+ * 同一 job 下所有结算的聚合键（信誉按 taskRef 汇总）。
+ * 与网关 `jobs.id` 对应：`taskRef = keccak256(utf8(jobId))`。
+ */
+declare function deriveTaskRef(jobId: string): Hex;
+/**
+ * 单笔结算的幂等键（信誉按 settlementRef 去重）。约定：
+ *   * `erc8183`   —— `bytes32(uint256(jobId))`，保持 Erc8183Verifier 既有约定；
+ *   * `milestone` —— `keccak256(utf8(`${jobId}:${milestoneIndex}`))`；
+ *   * `x402`      —— `keccak256(utf8(txHash))`；
+ *   * `sessionKey`—— `keccak256(utf8(`${subscriptionId}:${period}`))`。
+ */
+declare function deriveSettlementRef(rail: SettlementRail, ref: string, milestoneIndex?: number): Hex;
+interface SettlementDomain {
+    name: string;
+    version: string;
+    chainId: number;
+    verifyingContract: `0x${string}`;
+}
+interface SettlementDomainResponse {
+    chain: SettlementChain;
+    chainId: number;
+    domain: SettlementDomain;
+    types: typeof SETTLEMENT_PROOF_TYPES;
+    primaryType: 'SettlementProof';
+}
+interface SettlementProofMessage {
+    agentId: bigint;
+    payer: `0x${string}`;
+    asset: `0x${string}`;
+    amount: bigint;
+    rail: string;
+    taskRef: Hex;
+    settlementRef: Hex;
+    settledAt: bigint;
+}
+interface SubmitSettlementResult {
+    reference: string;
+    chain: SettlementChain;
+    agentId: number;
+    payer: string;
+    amountWei: string;
+    status: string;
+    txHash: string | null;
+    idempotent: boolean;
+}
+type SubscriptionSettlementStatus = 'recorded' | 'already_recorded' | 'no_subscription' | 'cancelled' | 'not_configured' | 'writer_not_configured' | 'failed';
+interface SubscriptionSettlementResult {
+    ok: boolean;
+    status: SubscriptionSettlementStatus;
+    subscriptionId?: number;
+    txHash?: string;
+    reason?: string;
+}
+/**
+ * 读取某链的 EIP-712 结算域（GET /api/v1/reputation/settlement-domain/:chain）。
+ * 客户端不应硬编码 verifyingContract —— Oracle 可能按链升级。
+ */
+declare function getSettlementDomain(baseUrl: string, chain: SettlementChain, accessToken?: string): Promise<SettlementDomainResponse>;
+/** 付款方对一笔结算记录做 EIP-712 签名（域请先经 getSettlementDomain 获取）。 */
+declare function signSettlementProof(params: {
+    wallet: WalletClient;
+    account?: Account;
+    domain: SettlementDomain;
+    message: SettlementProofMessage;
+}): Promise<Hex>;
+interface SubmitSettlementInput {
+    chain: SettlementChain;
+    agentId: number;
+    reference: string;
+    payer: string;
+    payerSignature: Hex;
+    /** 请求有效期（unix 秒），网关侧护栏，不进合约结构体。 */
+    deadline: number;
+    amountWei?: string;
+    metadata?: Record<string, unknown>;
+}
+/** 提交 EOA 签名的结算（POST /api/v1/reputation/submit-settlement）。 */
+declare function submitSettlement(baseUrl: string, input: SubmitSettlementInput, accessToken?: string): Promise<SubmitSettlementResult>;
+interface SubmitSubscriptionSettlementInput {
+    chain: SettlementChain;
+    agentId: number;
+    /** 订阅的链上付款方；AA 自动续订场景为智能账户地址。 */
+    subscriber: string;
+}
+/**
+ * 提交链上订阅结算（POST /api/v1/reputation/submit-subscription-settlement）。
+ * 免签名：证据为 SubscriptionManager 的公开订阅状态。
+ */
+declare function submitSubscriptionSettlement(baseUrl: string, input: SubmitSubscriptionSettlementInput, accessToken?: string): Promise<SubscriptionSettlementResult>;
+
+declare const REPUTATION_VERSION = "0.2.0";
 
 declare const CONFIG_VERSION = "0.1.0";
 
@@ -667,4 +790,4 @@ interface ExecutionProofVerifyResult {
 /** 校验执行证明（POST /api/v1/proofs/verify）。 */
 declare function verifyExecutionProof(baseUrl: string, proof: ExecutionProofBundle, accessToken?: string): Promise<ExecutionProofVerifyResult>;
 
-export { A2AClient, A2A_VERSION, Actora402, type Actora402Config, type ActoraChainEvent, type ActoraEventType, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, CentralAgentClient, type CentralAgentClientOptions, type CentralAgentListFilters, type CentralAgentSummary, type CentralPlan, type CentralPlanRow, type CentralSubscription, type ConfirmSpendSessionResult, type CreateCentralAgentInput, type CreateCentralPlanInput, type EnableSpendSessionResult, type EventListenerOptions, type ExecutionProofBundle, type ExecutionProofVerifyReason, type ExecutionProofVerifyResult, type GatorCaveat, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, SUBSCRIPTION_VERSION, type SpendApproval, type SpendChain, type SpendDecisionCode, type SpendGateResult, type SpendPolicy, SpendPolicyClient, type SpendPolicyClientConfig, type SpendPolicyDoc, type SpendSession, type SpendSessionRevokeDraft, type SpendSessionRevokeResult, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type UpdateCentralAgentInput, type X402Info, subscribeToEvents, verifyExecutionProof };
+export { A2AClient, A2A_VERSION, Actora402, type Actora402Config, type ActoraChainEvent, type ActoraEventType, type BuyTenantPlanInput, type BuyTenantPlanResult, CONFIG_VERSION, CentralAgentClient, type CentralAgentClientOptions, type CentralAgentListFilters, type CentralAgentSummary, type CentralPlan, type CentralPlanRow, type CentralSubscription, type ConfirmSpendSessionResult, type CreateCentralAgentInput, type CreateCentralPlanInput, type EnableSpendSessionResult, type EventListenerOptions, type ExecutionProofBundle, type ExecutionProofVerifyReason, type ExecutionProofVerifyResult, type GatorCaveat, type MCPCallResult, MCPConnector, type MCPConnectorConfig, type MCPTool, MCP_VERSION, McpConnection, PAYMENT_VERSION, type PaySubscriptionInput, type PaySubscriptionResult, PeriodClient, REGISTRY_VERSION, REPUTATION_VERSION, SETTLEMENT_PROOF_DOMAIN_NAME, SETTLEMENT_PROOF_DOMAIN_VERSION, SETTLEMENT_PROOF_TYPES, SUBSCRIPTION_VERSION, type SettlementChain, type SettlementDomain, type SettlementDomainResponse, type SettlementProofMessage, type SettlementRail, type SpendApproval, type SpendChain, type SpendDecisionCode, type SpendGateResult, type SpendPolicy, SpendPolicyClient, type SpendPolicyClientConfig, type SpendPolicyDoc, type SpendSession, type SpendSessionRevokeDraft, type SpendSessionRevokeResult, type SubmitSettlementInput, type SubmitSettlementResult, type SubmitSubscriptionSettlementInput, SubscriptionManager, type SubscriptionPaymentMethod, SubscriptionPayments, type SubscriptionPaymentsConfig, type SubscriptionSettlementResult, type SubscriptionSettlementStatus, type TenantPlanPaymentMethod, TenantPlanPayments, type TenantPlanPaymentsConfig, type UpdateCentralAgentInput, type X402Info, deriveSettlementRef, deriveTaskRef, getSettlementDomain, signSettlementProof, submitSettlement, submitSubscriptionSettlement, subscribeToEvents, verifyExecutionProof };

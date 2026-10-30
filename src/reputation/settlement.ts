@@ -13,6 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Account, Hex, WalletClient } from 'viem'
+import { keccak256, pad, stringToHex, toHex } from 'viem'
 import { request } from '../payment/a2a-client'
 
 export type SettlementChain = 'bsc' | 'ethereum' | 'base' | 'sepolia'
@@ -35,6 +36,40 @@ export const SETTLEMENT_PROOF_TYPES = {
 } as const
 
 const PRIMARY_TYPE = 'SettlementProof' as const
+
+/** 结算 rail 命名空间；用于推导 `settlementRef`。 */
+export type SettlementRail = 'erc8183' | 'milestone' | 'x402' | 'sessionKey'
+
+/**
+ * 同一 job 下所有结算的聚合键（信誉按 taskRef 汇总）。
+ * 与网关 `jobs.id` 对应：`taskRef = keccak256(utf8(jobId))`。
+ */
+export function deriveTaskRef(jobId: string): Hex {
+  return keccak256(stringToHex(jobId))
+}
+
+/**
+ * 单笔结算的幂等键（信誉按 settlementRef 去重）。约定：
+ *   * `erc8183`   —— `bytes32(uint256(jobId))`，保持 Erc8183Verifier 既有约定；
+ *   * `milestone` —— `keccak256(utf8(`${jobId}:${milestoneIndex}`))`；
+ *   * `x402`      —— `keccak256(utf8(txHash))`；
+ *   * `sessionKey`—— `keccak256(utf8(`${subscriptionId}:${period}`))`。
+ */
+export function deriveSettlementRef(
+  rail: SettlementRail,
+  ref: string,
+  milestoneIndex = 0,
+): Hex {
+  switch (rail) {
+    case 'erc8183':
+      return pad(toHex(BigInt(ref)), { size: 32 })
+    case 'milestone':
+      return keccak256(stringToHex(`${ref}:${milestoneIndex}`))
+    case 'x402':
+    case 'sessionKey':
+      return keccak256(stringToHex(ref))
+  }
+}
 
 export interface SettlementDomain {
   name: string

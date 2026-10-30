@@ -1,5 +1,15 @@
 # @actora/sdk Upgrade Guide
 
+## v0.22.0 → v0.23.0（2026-10-30，可选升级）
+
+> 主题：**新增护照客户端**。`@actora/sdk/passport` 提供 `PassportClient`，把 agent 护照、
+> 回执与验签、收款地址读写、Webhook 订阅、一源多发发布计划收进一个类型化入口。
+
+- **新增子路径**：`@actora/sdk/passport`（根导出同时可用），无新增依赖。
+- **错误语义**：`PassportApiError` 带 `code` / `status`；需要鉴权的方法在未配置
+  `accessToken` / `apiKey` 时**本地抛 `UNAUTHORIZED`（401），不发请求**。
+- **无 API 破坏**，不升级也不影响既有调用。
+
 ## v0.20.5 → v0.20.6（2026-10-24，建议升级）
 
 > 主题：**品牌与合约地址对齐**——支付引擎包名由已退役的 `@0xinfrax/payments` 迁到

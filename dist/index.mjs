@@ -3029,8 +3029,10 @@ function decodeTopic({ param, value }) {
 init_toSignatureHash();
 
 // node_modules/viem/_esm/index.js
+init_pad();
 init_fromHex();
 init_toHex();
+init_keccak256();
 
 // src/events/events.ts
 var TRANSFER_EVENT = parseAbiItem(
@@ -7598,8 +7600,77 @@ function normalizeScore(value, valueDecimals) {
   return Number(v);
 }
 
+// src/reputation/settlement.ts
+var SETTLEMENT_PROOF_DOMAIN_NAME = "ActoraPaymentSettlement";
+var SETTLEMENT_PROOF_DOMAIN_VERSION = "1";
+var SETTLEMENT_PROOF_TYPES = {
+  SettlementProof: [
+    { name: "agentId", type: "uint256" },
+    { name: "payer", type: "address" },
+    { name: "asset", type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "rail", type: "string" },
+    { name: "taskRef", type: "bytes32" },
+    { name: "settlementRef", type: "bytes32" },
+    { name: "settledAt", type: "uint64" }
+  ]
+};
+var PRIMARY_TYPE = "SettlementProof";
+function deriveTaskRef(jobId) {
+  return keccak256(stringToHex(jobId));
+}
+function deriveSettlementRef(rail, ref, milestoneIndex = 0) {
+  switch (rail) {
+    case "erc8183":
+      return pad(toHex2(BigInt(ref)), { size: 32 });
+    case "milestone":
+      return keccak256(stringToHex(`${ref}:${milestoneIndex}`));
+    case "x402":
+    case "sessionKey":
+      return keccak256(stringToHex(ref));
+  }
+}
+async function getSettlementDomain(baseUrl, chain, accessToken) {
+  return request(baseUrl, `/api/v1/reputation/settlement-domain/${chain}`, { method: "GET" }, accessToken);
+}
+async function signSettlementProof(params) {
+  const account = params.account ?? params.wallet.account;
+  if (!account) throw new Error("signSettlementProof: wallet has no account");
+  return params.wallet.signTypedData({
+    account,
+    domain: params.domain,
+    types: SETTLEMENT_PROOF_TYPES,
+    primaryType: PRIMARY_TYPE,
+    message: params.message
+  });
+}
+async function submitSettlement(baseUrl, input, accessToken) {
+  return request(
+    baseUrl,
+    "/api/v1/reputation/submit-settlement",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    },
+    accessToken
+  );
+}
+async function submitSubscriptionSettlement(baseUrl, input, accessToken) {
+  return request(
+    baseUrl,
+    "/api/v1/reputation/submit-subscription-settlement",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    },
+    accessToken
+  );
+}
+
 // src/reputation/index.ts
-var REPUTATION_VERSION = "0.1.0";
+var REPUTATION_VERSION = "0.2.0";
 
 // src/config/config.ts
 var CONFIG_ABI = {
@@ -7901,131 +7972,6 @@ var MultiEndpointClient = class {
   async getBestMCPUrl(agentId) {
     const best = await this.pickBestEndpoint(agentId);
     return best?.url ?? null;
-  }
-};
-
-// src/configuration/configuration.ts
-var ABI2 = [
-  {
-    name: "getConfig",
-    type: "function",
-    stateMutability: "view",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "configKey", type: "string" }
-    ],
-    outputs: [{
-      type: "tuple",
-      components: [
-        { name: "agentId", type: "uint256" },
-        { name: "key", type: "string" },
-        { name: "value", type: "string" },
-        { name: "dataType", type: "string" },
-        { name: "updatedAt", type: "uint256" },
-        { name: "updatedBy", type: "address" }
-      ]
-    }]
-  },
-  {
-    name: "getAgentConfigs",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "agentId", type: "uint256" }],
-    outputs: [{
-      type: "tuple[]",
-      components: [
-        { name: "agentId", type: "uint256" },
-        { name: "key", type: "string" },
-        { name: "value", type: "string" },
-        { name: "dataType", type: "string" },
-        { name: "updatedAt", type: "uint256" },
-        { name: "updatedBy", type: "address" }
-      ]
-    }]
-  },
-  {
-    name: "getConfigKeys",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "agentId", type: "uint256" }],
-    outputs: [{ type: "string[]" }]
-  },
-  {
-    name: "getConfigCount",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "agentId", type: "uint256" }],
-    outputs: [{ type: "uint256" }]
-  },
-  {
-    name: "configExists",
-    type: "function",
-    stateMutability: "view",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "configKey", type: "string" }
-    ],
-    outputs: [{ type: "bool" }]
-  }
-];
-var ConfigurationClient = class {
-  address;
-  publicClient;
-  constructor(config, publicClient) {
-    this.address = config.address;
-    this.publicClient = publicClient ?? null;
-  }
-  setPublicClient(client) {
-    this.publicClient = client;
-  }
-  async get(agentId, key) {
-    if (!this.publicClient) throw new Error("publicClient not set");
-    try {
-      return await this.publicClient.readContract({
-        address: this.address,
-        abi: ABI2,
-        functionName: "getConfig",
-        args: [agentId, key]
-      });
-    } catch {
-      return null;
-    }
-  }
-  async getAll(agentId) {
-    if (!this.publicClient) throw new Error("publicClient not set");
-    return await this.publicClient.readContract({
-      address: this.address,
-      abi: ABI2,
-      functionName: "getAgentConfigs",
-      args: [agentId]
-    });
-  }
-  async getKeys(agentId) {
-    if (!this.publicClient) throw new Error("publicClient not set");
-    return await this.publicClient.readContract({
-      address: this.address,
-      abi: ABI2,
-      functionName: "getConfigKeys",
-      args: [agentId]
-    });
-  }
-  async getCount(agentId) {
-    if (!this.publicClient) throw new Error("publicClient not set");
-    return await this.publicClient.readContract({
-      address: this.address,
-      abi: ABI2,
-      functionName: "getConfigCount",
-      args: [agentId]
-    });
-  }
-  async exists(agentId, key) {
-    if (!this.publicClient) throw new Error("publicClient not set");
-    return await this.publicClient.readContract({
-      address: this.address,
-      abi: ABI2,
-      functionName: "configExists",
-      args: [agentId, key]
-    });
   }
 };
 
@@ -8793,7 +8739,6 @@ export {
   AgentRunner,
   CONFIG_VERSION,
   CentralAgentClient,
-  ConfigurationClient,
   ConfigurationRegistry,
   ContextCompactor,
   ConversationClient,
@@ -8830,6 +8775,9 @@ export {
   REGISTRY_VERSION,
   REPUTATION_VERSION,
   ReputationRegistry,
+  SETTLEMENT_PROOF_DOMAIN_NAME,
+  SETTLEMENT_PROOF_DOMAIN_VERSION,
+  SETTLEMENT_PROOF_TYPES,
   STANDARD_IDENTITY_ABI,
   SUBSCRIPTION_PERIODS,
   SUBSCRIPTION_VERSION,
@@ -8858,6 +8806,8 @@ export {
   deriveKeyPairFromWallet,
   derivePrivateKeyFromIkm,
   derivePrivateKeyFromSignature,
+  deriveSettlementRef,
+  deriveTaskRef,
   eciesDecrypt,
   eciesEncrypt,
   encryptPayload,
@@ -8871,6 +8821,7 @@ export {
   getAllPlatformToolNames,
   getPrfCapability,
   getPublicKey,
+  getSettlementDomain,
   guardSubscription,
   hexToBytes,
   isDerivationMode,
@@ -8882,7 +8833,10 @@ export {
   readPayloadKeyCredential,
   readPayloadKeyMode,
   serializePayloadKeyCredential,
+  signSettlementProof,
   sleep,
+  submitSettlement,
+  submitSubscriptionSettlement,
   subscribeToEvents,
   toAttributes,
   unpackAgent,

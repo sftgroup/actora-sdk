@@ -2,7 +2,7 @@
 // @actora/sdk — Subscription Manager (ERC8004SubscriptionManager)
 // ---------------------------------------------------------------------------
 // Wraps erc8004-extensions/SubscriptionManager.sol:
-//   — 订阅时即时分账（agent owner + platformFeeCollector），无托管、无 trial
+//   — 订阅时即时分账（agent owner + platformFeeCollector）；协议费当前恒为 0
 //   — 计划类型：Subscription / UsageBased / Hybrid
 //   — 续费沿用 `processPayment(subscriptionId)`（由网关 AA session key 触发）
 // Uses viem PublicClient / WalletClient (chain-agnostic).
@@ -409,7 +409,7 @@ export class SubscriptionManager {
 
   // ── Config Read ──────────────────────────────────────────────────────────
 
-  /** Get the default platform fee in basis points (e.g. 250 = 2.5%). */
+  /** Get the default platform fee in basis points (250 = 2.5%). Actora currently sets this to 0. */
   async getPlatformFeeBps(): Promise<number> {
     const result = await this.publicClient.readContract({
       address: this.address,

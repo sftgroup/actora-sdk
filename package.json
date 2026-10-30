@@ -1,6 +1,6 @@
 {
   "name": "@actora/sdk",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "description": "Actora — Decentralized AI Agent SDK with ReAct AgentLoop + Multi-Tenant LLM Providers",
   "main": "dist/index.js",
   "types": "dist/index.d.mts",
@@ -36,11 +36,6 @@
       "import": "./dist/endpoint/index.mjs",
       "require": "./dist/endpoint/index.js"
     },
-    "./configuration": {
-      "types": "./dist/configuration/index.d.mts",
-      "import": "./dist/configuration/index.mjs",
-      "require": "./dist/configuration/index.js"
-    },
     "./ipfs": {
       "types": "./dist/ipfs/index.d.mts",
       "import": "./dist/ipfs/index.mjs",
@@ -66,6 +61,11 @@
       "import": "./dist/conversation/index.mjs",
       "require": "./dist/conversation/index.js"
     },
+    "./passport": {
+      "types": "./dist/passport/index.d.mts",
+      "import": "./dist/passport/index.mjs",
+      "require": "./dist/passport/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -75,7 +75,7 @@
     "examples"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/core/index.ts src/react/index.ts src/endpoint/index.ts src/configuration/index.ts src/agent-loop/index.ts src/llm/index.ts src/ipfs/index.ts src/memory/index.ts src/traces/index.ts src/skills/index.ts src/conversation/index.ts --format cjs,esm --dts --clean --sourcemap --splitting false --out-dir dist",
+    "build": "tsup src/index.ts src/core/index.ts src/react/index.ts src/endpoint/index.ts src/agent-loop/index.ts src/llm/index.ts src/ipfs/index.ts src/memory/index.ts src/traces/index.ts src/skills/index.ts src/conversation/index.ts src/passport/index.ts --format cjs,esm --dts --clean --sourcemap --splitting false --out-dir dist",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

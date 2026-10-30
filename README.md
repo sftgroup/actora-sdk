@@ -1,4 +1,4 @@
-# @actora/sdk v0.21.0
+# @actora/sdk v0.23.0
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
@@ -1189,7 +1189,6 @@ BYOK（自带模型 Key）另用三个头逐请求覆盖：`X-LLM-Api-Key` / `X-
 | `POST` | `/api/v1/payments/a2a` · `/a2a/settle` | A2A 按次付费两段式（create → settle） |
 | `POST` | `/api/v1/payments/period/authorize` · `/charge` · `GET /period/authorization` | 周期授权扣款（P4） |
 | `POST` | `/api/v1/payments/mpp/open` · `/voucher` · `/topup` · `/settle` · `/close` · `GET /mpp/session` | MPP 通道（按量结算） |
-| `GET` | `/api/v1/billing/token-packs` | 加油包列表（5M/$9.9、20M/$29.9、100M/$99.9，30 天有效） |
 | `GET` | `/api/v1/x402/info` · `/paywall` | x402 支付发现（`/balance` 已随预充值账本下线） |
 | `GET` · `POST` | `/api/v1/spend-policy/session{,/enable,/confirm,/revoke}` | 按次 session 授权与撤销（`SpendPolicyClient`） |
 
@@ -1279,6 +1278,7 @@ POST /api/v1/payments
 | 0.20.0 | **payload 密钥派生 v3（WebAuthn PRF，非签名）**：新增 `mode: 'webauthn-prf-hkdf'`，IKM 改为 WebAuthn PRF 扩展输出（32 字节，由浏览器按 RP ID 绑定），HKDF 构造与 v1/v2 逐字节一致、`infoPrefix` 版本化为 `agent-payload-encryption/v3`；配套 `getPrfCapability()`（不弹窗探测）/ `createPrfCredential()` / `evaluatePrf()` / `PrfError`（`PRF_UNSUPPORTED` 等 4 码，**不支持时报可操作错误、绝不静默回退到签名派生**）；派生入口新增 `derivePrivateKeyFromIkm()` 与 `DEFAULT_PRF_SALT` / `DEFAULT_DERIVATION_INFO_PREFIX_V3`；新增 credential 绑定字段 `payload_key_credential`（`PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE` / `serializePayloadKeyCredential()` / `readPayloadKeyCredential()` / `AgentRegistry.setPayloadKeyCredential()`）。**v1/v2 保留且行为不变**，默认值不变、v3 为 opt-in |
 | 0.20.1 | **纯文档**：§5.12 新增「选型：四条路径怎么选」矩阵（v1 / v2 / v3 / 私钥托管并列对照），并明确「Runner 跑在服务端 ⇒ 私钥托管可完全规避 WebAuthn/PRF 的兼容性问题」及其代价（信任边界转移、不可轮换、丢失即永久解不开、提供的是服务端鉴权而非客户端自持 + 域绑定）。**无代码 / API / 行为变更** |
 | 0.20.6 | **包名与合约地址对齐（品牌退役）**：依赖 `@0xinfrax/payments ^0.3.0` → `@keelcodes/payments ^0.3.1`（公开 API 逐字节一致，仅品牌 / 命名空间变更）；`PAYMENT_VERSION` → `0.3.1`；`KNOWN_CHAINS` 的 BSC / Ethereum `ReputationRegistry` 改为官方 canonical `0x8004BAa1…9b63`（三链同址，legacy 仅剩 Sepolia）；README 同步 SM / A2A / Reputation 地址表与部署起始块。**无 API 破坏** |
+| 0.23.0 | **护照客户端**：新增子路径 `@actora/sdk/passport`（`PassportClient` / `PassportApiError`），覆盖 agent 护照、回执与验签、收款地址读写、Webhook 订阅、发布计划；需要鉴权的方法在无凭证时**本地抛 `UNAUTHORIZED` 且不发请求**。根导出同时可用。**无 API 破坏** |
 
 ---
 

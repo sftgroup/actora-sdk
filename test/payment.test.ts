@@ -87,9 +87,7 @@ describe('SubscriptionPayments', () => {
       const sendTransaction = vi.fn().mockResolvedValue('0xautotx')
       const getPlan = vi.fn().mockResolvedValue({ price: 800n })
       fetchMock.mockResolvedValueOnce(jsonResponse({
-        rails: { fiat: { enabled: true }, chain: { enabled: true }, x402: { enabled: true } },
-        x402: { enabled: true, priceWei: '500', payTo: '0xpay', network: 'eip155:56', chain: 'bsc' },
-        chains: { chain: 'bsc', chainId: 56 },
+        enabled: true, priceWei: '500', payTo: '0xpay', network: 'eip155:56', chain: 'bsc',
       }, 200))
       fetchMock.mockResolvedValue(jsonResponse({ subscriptionId: 11, creditedWei: '800' }, 200))
       const payments = make({ walletClient: { account: { address: '0xacc' }, sendTransaction }, subscriptionManager: { getPlan } as unknown as never })
@@ -97,9 +95,9 @@ describe('SubscriptionPayments', () => {
       const res = await payments.pay({ method: 'x402', planId: 2, agentId: 3, subscriber: '0xabc' })
       expect(sendTransaction).toHaveBeenCalledWith({ to: '0xpay', value: 800n, chain: undefined, account: '0xacc' })
       expect(res).toEqual({ method: 'x402', subscriptionId: 11, txHash: '0xautotx', creditedWei: '800' })
-      // Discovery went to the unified info endpoint first.
+      // Discovery goes to the per-agent endpoint so payTo is the agent's payout_address.
       const infoUrl = firstCall(fetchMock.mock.calls[0]!).url
-      expect(infoUrl).toBe('https://gw.example.com/api/v1/payments/info')
+      expect(infoUrl).toBe('https://gw.example.com/api/v1/x402/info?agentId=3')
     })
 
     it('rejects an invalid period', async () => {

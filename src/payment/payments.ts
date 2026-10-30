@@ -118,18 +118,39 @@ export class SubscriptionPayments {
     return res.active === true
   }
 
-  /** x402 protocol discovery (price / pay-to wallet / network). */
-  async fetchX402Info(): Promise<X402Info> {
+  /**
+   * x402 protocol discovery (price / pay-to wallet / network).
+   * @param agentId 传入时返回**该 agent 的收款地址**（`agents.payout_address`），
+   *   让自动付款直接付给开发者；未配置该地址时网关回 409 PAYOUT_NOT_CONFIGURED。
+   */
+  async fetchX402Info(agentId?: number): Promise<X402Info> {
     if (!this.client) {
       throw new Error('fetchX402Info() requires a gatewayUrl')
     }
-    const info = await this.client.info()
+    if (agentId === undefined) {
+      const info = await this.client.info()
+      return {
+        enabled: Boolean(info.x402?.enabled),
+        priceWei: info.x402?.priceWei ?? '0',
+        payTo: info.x402?.payTo ?? '',
+        network: info.x402?.network ?? '',
+        chain: (info.x402?.chain ?? this.config.chain ?? 'bsc') as ChainKey,
+      }
+    }
+    // Keel client.info() 不支持带参：按 agent 取收款地址走网关原生端点。
+    const info = await this._fetchJson<{
+      enabled?: boolean
+      priceWei?: string
+      payTo?: string
+      network?: string
+      chain?: string
+    }>(`/api/v1/x402/info?agentId=${encodeURIComponent(String(agentId))}`)
     return {
-      enabled: Boolean(info.x402?.enabled),
-      priceWei: info.x402?.priceWei ?? '0',
-      payTo: info.x402?.payTo ?? '',
-      network: info.x402?.network ?? '',
-      chain: (info.x402?.chain ?? this.config.chain ?? 'bsc') as ChainKey,
+      enabled: Boolean(info.enabled),
+      priceWei: info.priceWei ?? '0',
+      payTo: info.payTo ?? '',
+      network: info.network ?? '',
+      chain: (info.chain ?? this.config.chain ?? 'bsc') as ChainKey,
     }
   }
 
@@ -194,9 +215,13 @@ export class SubscriptionPayments {
     if (!walletClient || !subscriptionManager) {
       throw new Error('x402 automatic payment needs a txHash, or a walletClient + subscriptionManager in the config')
     }
-    const info = await this.fetchX402Info()
-    if (!info.enabled || !info.payTo) {
-      throw new Error('x402 is not enabled on the Gateway (X402_ENABLED / X402_PAY_TO missing)')
+    // 按 agent 取收款地址：网关返回该 agent 的 payout_address（钱直达开发者）。
+    const info = await this.fetchX402Info(input.agentId)
+    if (!info.payTo) {
+      throw new Error(`x402 payment target unavailable for agent ${input.agentId} (payout_address not configured)`)
+    }
+    if (!info.enabled) {
+      throw new Error('x402 is not enabled on the Gateway (X402_ENABLED missing)')
     }
     const priceWei = BigInt(info.priceWei || '0')
     // Centralized agents have no on-chain plan — the caller supplies the plan
