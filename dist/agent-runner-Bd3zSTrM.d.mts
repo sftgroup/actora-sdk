@@ -1,4 +1,4 @@
-import { E as EncryptedPayload, a as AgentPrivatePayload, A as AgentPayload, P as PackResult } from './types-ATMM4oRG.js';
+import { E as EncryptedPayload, c as AgentPrivatePayload, b as AgentPayload, P as PackResult } from './types-C6xHfvpn.mjs';
 
 interface IPFSFetcherConfig {
     /** Primary IPFS gateway (default: ipfs.io) */

@@ -1,10 +1,13 @@
-import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-Cv-LIswG.js';
-import { R as RunnableSkill, b as AgentRunner } from './agent-runner-rDuplD1X.js';
-import { TraceConfig, TraceEvent } from './traces/index.js';
+import { A as AgentLoopConfig, a as AgentLoopResult, T as ToolCallRecord, c as LLMProvider, L as LLMMessage, O as OpenAIToolDef } from './types-BX2Nbu5x.mjs';
+import { R as RunnableSkill, b as AgentRunner } from './agent-runner-Bd3zSTrM.mjs';
+import { TraceConfig, TraceEvent } from './traces/index.mjs';
+import { a as A2AProtocol } from './a2a-bU3ngGJ2.mjs';
+import { f as SubscriptionManager } from './subscription-DD5RHSzb.mjs';
 import { Address, PublicClient, WalletClient, Hash } from 'viem';
-import { b as A2AAgentCard, d as A2ATask, r as AgentSubscription } from './types-ATMM4oRG.js';
-import { D as DerivationMode, q as PayloadKeyCredential } from './crypto-Din2ikPh.js';
-import { IPFSUploader } from './ipfs/index.js';
+import { D as DerivationMode, q as PayloadKeyCredential } from './crypto-CJLKU40y.mjs';
+import { c as ReputationRegistry } from './reputation-BdaT2Izy.mjs';
+import { IPFSUploader } from './ipfs/index.mjs';
+import { a as A2ATask } from './types-C6xHfvpn.mjs';
 import { EventEmitter } from 'events';
 
 declare class AgentLoop {
@@ -77,209 +80,6 @@ declare class LoopTraceEmitter {
 
 declare function buildTools(skills: RunnableSkill[]): OpenAIToolDef[];
 declare function buildSystemPrompt(prompt: string, skills: RunnableSkill[]): string;
-
-interface A2AConfig {
-    contractAddress: Address;
-    publicClient: PublicClient;
-    walletClient: WalletClient;
-}
-declare class A2AProtocol {
-    private address;
-    private publicClient;
-    private walletClient;
-    constructor(config: A2AConfig);
-    private get account();
-    createAgentCard(agentId: number, card: {
-        name: string;
-        description: string;
-        version: string;
-        capabilities: string[];
-        supportedTasks: string[];
-        commProtocol?: string;
-        authMethod?: string;
-        cardURI?: string;
-    }): Promise<{
-        cardId: number;
-        txHash: Hash;
-    }>;
-    getAgentCard(agentId: number): Promise<A2AAgentCard | null>;
-    createTask(agentId: number, taskType: string, input: string | Record<string, unknown>): Promise<{
-        taskId: number;
-        txHash: Hash;
-    }>;
-    completeTask(taskId: number, output: unknown, status?: number): Promise<Hash>;
-    getTask(taskId: number): Promise<A2ATask | null>;
-    getUserTasks(user: Address): Promise<number[]>;
-    getAgentTasks(agentId: number): Promise<A2ATask[]>;
-    getAddress(): Promise<Address>;
-    private _parseUintFromLog;
-}
-
-declare const ZERO_ADDRESS: Address;
-interface SubscriptionConfig {
-    contractAddress: Address;
-    publicClient: PublicClient;
-    walletClient: WalletClient;
-}
-/** PlanType enum: 0=Subscription, 1=UsageBased, 2=Hybrid. */
-type PlanType = 0 | 1 | 2;
-interface PlanDetail {
-    planId: number;
-    agentId: number;
-    /** Agent owner, derived via `identityRegistry.ownerOf(agentId)`. */
-    creator: Address;
-    /** Alias of `subscriptionPrice` (kept for existing callers). */
-    price: bigint;
-    /** Billing period name: day | week | month | quarter | year. */
-    period: string;
-    active: boolean;
-    /** ERC-20 pay token; address(0) = native token. */
-    payToken: Address;
-    /** Always 0 — ERC8004SubscriptionManager has no trial period. */
-    trialDays: number;
-    name: string;
-    description: string;
-    planType: PlanType;
-    subscriptionPrice: bigint;
-    usagePrice: bigint;
-    billingPeriod: number;
-    /** Max usage per billing period (0 = unlimited). */
-    maxUsage: bigint;
-    /** Total usage limit for usage-based plans (0 = unlimited). */
-    totalUsageLimit: bigint;
-    /** Platform fee snapshot in basis points (100 = 1%). */
-    platformFeePercentage: number;
-}
-interface SubscriptionDetail {
-    subscriptionId: number;
-    planId: number;
-    subscriber: Address;
-    agentId: number;
-    /** 0=Active, 1=Cancelled, 2=Expired, 3=PaymentFailed, 4=Suspended */
-    status: number;
-    planType: PlanType;
-    startedAt: number;
-    /** Next charge date. Usage-based plans keep this at the start date. */
-    nextBillingDate: number;
-    endDate: number;
-    /** Billing period name: day | week | month | quarter | year. */
-    period: string;
-    payToken: Address;
-    amountPaid: bigint;
-    currentPeriodUsage: bigint;
-    totalUsage: bigint;
-    remainingUsage: bigint;
-    lastPaymentDate: number;
-}
-declare const SUBSCRIPTION_PERIODS: readonly ["day", "week", "month", "quarter", "year"];
-type SubscriptionPeriod = (typeof SUBSCRIPTION_PERIODS)[number];
-interface CreatePlanParams {
-    agentId: number;
-    /** Plan name — required on-chain (non-empty). Defaults to `Plan #<agentId>`. */
-    name?: string;
-    description?: string;
-    /** 0=Subscription (default), 1=UsageBased, 2=Hybrid. */
-    planType?: PlanType;
-    /** Recurring price in wei / token units. Required unless planType=1. */
-    price?: bigint;
-    /** Per-use price. Required when planType is 1 or 2. */
-    usagePrice?: bigint;
-    /** Must be one of: day | week | month | quarter | year. */
-    period: SubscriptionPeriod;
-    /** ERC20 pay token; default zero address = native token. */
-    payToken?: Address;
-    /** Max usage per billing period (0 = unlimited). */
-    maxUsage?: bigint;
-    /** Total usage limit (0 = unlimited). */
-    totalUsageLimit?: bigint;
-}
-interface CreatePlanResult {
-    planId: number;
-    txHash: Hash;
-}
-interface SubscribeResult {
-    subscriptionId: number;
-    txHash: Hash;
-    subscriber: Address;
-    agentId: number;
-    /** Unix timestamp (seconds) of the next scheduled charge. */
-    nextBillingDate: number;
-}
-declare class SubscriptionManager {
-    private address;
-    private publicClient;
-    private walletClient;
-    constructor(config: SubscriptionConfig);
-    /**
-     * Resolve the caller account for write operations.
-     *
-     * Prefers `walletClient.account` (a full viem Account object with signing
-     * capability) over `getAddresses()[0]` (a bare address string). Passing a
-     * bare string as `account` makes viem route `writeContract` through
-     * `eth_sendTransaction` (node-managed accounts only), which fails for local
-     * signers; the full object enables local signing via `eth_sendRawTransaction`.
-     * In browser wallets (e.g. MetaMask) `client.account` is a json-rpc account
-     * and the provider signs, so both paths keep working.
-     */
-    private _resolveAccount;
-    /** Get the default platform fee in basis points (e.g. 250 = 2.5%). */
-    getPlatformFeeBps(): Promise<number>;
-    /** Check whether an ERC-20 token is accepted by the plan price oracle. */
-    isTokenWhitelisted(token: Address): Promise<boolean>;
-    /** Get full plan details; `creator` is the identity owner of `agentId`. */
-    getPlan(planId: number): Promise<PlanDetail>;
-    /**
-     * Create a subscription plan for an agent.
-     *
-     * @param params.period  Must be 'day' | 'week' | 'month' | 'quarter' | 'year'.
-     * @returns              { planId, txHash } (planId parsed from PlanCreated event)
-     */
-    createPlan(params: CreatePlanParams): Promise<CreatePlanResult>;
-    /**
-     * Subscribe to a plan.
-     * For ETH plans: pass valueWei = plan.price.
-     * For ERC20 plans: auto-detects from plan.payToken, calls approve + subscribe.
-     *                    User must have approved this contract for plan.price tokens.
-     *
-     * @returns SubscribeResult — subscriptionId/nextBillingDate/subscriber parsed
-     *          from the SubscriptionCreated event (no longer hardcoded to 0).
-     */
-    subscribe(planId: number, opts?: {
-        valueWei?: bigint;
-        approveTokenFirst?: boolean;
-    }): Promise<SubscribeResult>;
-    /**
-     * One-step createPlan + subscribe (two transactions).
-     * Saves the caller one round of plan lookup when the plan does not exist yet.
-     */
-    createPlanAndSubscribe(params: CreatePlanParams): Promise<CreatePlanResult & SubscribeResult>;
-    /** Cancel subscription. ERC8004SubscriptionManager settles payments immediately. */
-    cancel(subscriptionId: number): Promise<Hash>;
-    hasActiveSubscription(subscriber: Address, agentId: number): Promise<boolean>;
-    /**
-     * Latest subscription of `subscriber` for `agentId`.
-     *
-     * ERC8004SubscriptionManager indexes subscriptions by ID only, so this scans
-     * `getUserSubscriptions(subscriber)`. Prefers an active, non-expired entry;
-     * otherwise falls back to the newest one.
-     */
-    getSubscription(subscriber: Address, agentId: number): Promise<AgentSubscription | null>;
-    /** Full subscription detail (status, usage counters, payment token). */
-    getSubscriptionDetail(subscriptionId: number): Promise<SubscriptionDetail>;
-    /** All subscription IDs owned by a wallet. */
-    getUserSubscriptions(user: Address): Promise<number[]>;
-    private _readPlanRaw;
-    private _readSubscription;
-    private _readUserSubscriptions;
-    /** Plan creator — the identity (ERC-721) owner of `agentId`. */
-    private _agentOwner;
-    private _findEventLog;
-    /** Parse planId from the PlanCreated event in a transaction receipt. */
-    private _parsePlanIdFromReceipt;
-    /** Parse subscriptionId/subscriber/agentId/nextBillingDate from SubscriptionCreated. */
-    private _parseSubscribedFromReceipt;
-}
-declare function guardSubscription(manager: SubscriptionManager, user: Address, agentId: number): Promise<AgentSubscription>;
 
 declare const STANDARD_IDENTITY_ABI: {
     readonly setAgentURI: {
@@ -646,60 +446,6 @@ declare class AgentRegistry {
 /** Extract IPFS CID from an ipfs:// URI. */
 declare function cidFromURI(uri: string): string;
 
-interface ReputationConfig {
-    contractAddress: Address;
-    publicClient: PublicClient;
-}
-type ReputationFlavor = 'legacy' | 'standard';
-/** 归一化的信誉聚合结果（标准形参）。 */
-interface ReputationSummary {
-    count: number;
-    value: bigint;
-    valueDecimals: number;
-}
-/** 归一化的单条反馈（标准形参）。 */
-interface ReputationFeedback {
-    value: bigint;
-    valueDecimals: number;
-    tag1: string;
-    tag2: string;
-    isRevoked: boolean;
-}
-declare class ReputationRegistry {
-    private address;
-    private publicClient;
-    /** 实现风格探测结果（缓存）：standard=canonical / legacy=历史实现。 */
-    private flavor?;
-    constructor(config: ReputationConfig);
-    /**
-     * 尝试读取 legacy 视图 `getReputationSummary()`：
-     *   - 成功 → 判定 `'legacy'`
-     *   - 确定 revert → 判定 `'standard'`（canonical 无该视图，只有 `getSummary`）
-     * 结果缓存在实例上，因此 legacy 链**不会**因探测产生额外调用。
-     */
-    private legacyProbe;
-    /** 实现风格（缓存）：`'standard'`=官方 canonical / `'legacy'`=历史实现。 */
-    getFlavor(): Promise<ReputationFlavor>;
-    /**
-     * 聚合读取（标准形参）。
-     * @dev legacy：转调 `getReputationSummary`（uint8 均分）→ 归一化为 `valueDecimals=0`；
-     *      standard：转调标准 `getSummary`。
-     *      注意：standard 下 `clients` 为空会 revert（标准要求显式传入客户地址）。
-     */
-    getSummary(agentId: number, clients?: Address[], tag1?: string, tag2?: string): Promise<ReputationSummary>;
-    /** legacy 兼容聚合（uint8 均分）。standard 下由 `getSummary` 归一到 0-100。 */
-    getReputationSummary(agentId: number, clients?: Address[], tag1?: string, tag2?: string): Promise<{
-        count: number;
-        averageScore: number;
-    }>;
-    /** 单条反馈（标准形参）。 */
-    readFeedback(agentId: number, clientAddress: Address, index: number): Promise<ReputationFeedback>;
-    /** 给出反馈的客户地址列表（两版同签名）。 */
-    getClients(agentId: number): Promise<Address[]>;
-    /** 某客户在 agent 上的最后反馈索引（0 表示没有）。 */
-    getLastIndex(agentId: number, clientAddress: Address): Promise<number>;
-}
-
 interface PlatformToolDef {
     type: 'function';
     function: {
@@ -793,4 +539,4 @@ declare class A2ADaemon extends EventEmitter {
     private processPendingTask;
 }
 
-export { type A2AConfig as A, buildSystemPrompt as B, ContextCompactor as C, buildTools as D, cidFromURI as E, FactExtractor as F, type GetAllAgentsOptions as G, executePlatformTool as H, getAllPlatformToolNames as I, guardSubscription as J, parseTokenURIJSON as K, LoopTraceEmitter as L, type MetadataAttribute as M, toAttributes as N, wrapPlatformToolsAsSkills as O, type PlanDetail as P, type ReputationConfig as R, SubscriptionManager as S, ToolExecutor as T, ZERO_ADDRESS as Z, A2ADaemon as a, type A2ADaemonConfig as b, A2AProtocol as c, type A2ATaskResult as d, AgentLoop as e, AgentRegistry as f, type AgentRegistryConfig as g, type AgentSummary as h, type AgentSummaryMetadata as i, type CreatePlanParams as j, type CreatePlanResult as k, type PlanType as l, type PlatformToolContext as m, type PlatformToolDef as n, type ReputationFeedback as o, type ReputationFlavor as p, ReputationRegistry as q, type ReputationSummary as r, STANDARD_IDENTITY_ABI as s, SUBSCRIPTION_PERIODS as t, type StructuredAgentMetadata as u, type SubscribeResult as v, type SubscriptionConfig as w, type SubscriptionDetail as x, type SubscriptionPeriod as y, buildPlatformTools as z };
+export { A2ADaemon as A, ContextCompactor as C, FactExtractor as F, type GetAllAgentsOptions as G, LoopTraceEmitter as L, type MetadataAttribute as M, type PlatformToolContext as P, STANDARD_IDENTITY_ABI as S, ToolExecutor as T, type A2ADaemonConfig as a, type A2ATaskResult as b, AgentLoop as c, AgentRegistry as d, type AgentRegistryConfig as e, type AgentSummary as f, type AgentSummaryMetadata as g, type PlatformToolDef as h, type StructuredAgentMetadata as i, buildPlatformTools as j, buildSystemPrompt as k, buildTools as l, cidFromURI as m, executePlatformTool as n, getAllPlatformToolNames as o, parseTokenURIJSON as p, toAttributes as t, wrapPlatformToolsAsSkills as w };

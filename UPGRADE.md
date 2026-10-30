@@ -6,6 +6,10 @@
 > 回执与验签、收款地址读写、Webhook 订阅、一源多发发布计划收进一个类型化入口。
 
 - **新增子路径**：`@actora/sdk/passport`（根导出同时可用），无新增依赖。
+- **新增子路径（同版本补全）**：`@actora/sdk/payment`、`/subscription`、`/a2a`、`/reputation`、`/proofs`
+  —— 此前这几个模块只能用根入口，会把全部模块一起拉进来（根入口产物约 324 KB，`/payment` 约 16 KB、
+  `/proofs` 约 2 KB）。子路径与根导出内容一致，可混用。
+- **`sideEffects: false`**：包声明为无副作用，打包器可安全 tree-shake（此前的根入口整包引入）。
 - **错误语义**：`PassportApiError` 带 `code` / `status`；需要鉴权的方法在未配置
   `accessToken` / `apiKey` 时**本地抛 `UNAUTHORIZED`（401），不发请求**。
 - **无 API 破坏**，不升级也不影响既有调用。

@@ -1278,7 +1278,7 @@ POST /api/v1/payments
 | 0.20.0 | **payload 密钥派生 v3（WebAuthn PRF，非签名）**：新增 `mode: 'webauthn-prf-hkdf'`，IKM 改为 WebAuthn PRF 扩展输出（32 字节，由浏览器按 RP ID 绑定），HKDF 构造与 v1/v2 逐字节一致、`infoPrefix` 版本化为 `agent-payload-encryption/v3`；配套 `getPrfCapability()`（不弹窗探测）/ `createPrfCredential()` / `evaluatePrf()` / `PrfError`（`PRF_UNSUPPORTED` 等 4 码，**不支持时报可操作错误、绝不静默回退到签名派生**）；派生入口新增 `derivePrivateKeyFromIkm()` 与 `DEFAULT_PRF_SALT` / `DEFAULT_DERIVATION_INFO_PREFIX_V3`；新增 credential 绑定字段 `payload_key_credential`（`PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE` / `serializePayloadKeyCredential()` / `readPayloadKeyCredential()` / `AgentRegistry.setPayloadKeyCredential()`）。**v1/v2 保留且行为不变**，默认值不变、v3 为 opt-in |
 | 0.20.1 | **纯文档**：§5.12 新增「选型：四条路径怎么选」矩阵（v1 / v2 / v3 / 私钥托管并列对照），并明确「Runner 跑在服务端 ⇒ 私钥托管可完全规避 WebAuthn/PRF 的兼容性问题」及其代价（信任边界转移、不可轮换、丢失即永久解不开、提供的是服务端鉴权而非客户端自持 + 域绑定）。**无代码 / API / 行为变更** |
 | 0.20.6 | **包名与合约地址对齐（品牌退役）**：依赖 `@0xinfrax/payments ^0.3.0` → `@keelcodes/payments ^0.3.1`（公开 API 逐字节一致，仅品牌 / 命名空间变更）；`PAYMENT_VERSION` → `0.3.1`；`KNOWN_CHAINS` 的 BSC / Ethereum `ReputationRegistry` 改为官方 canonical `0x8004BAa1…9b63`（三链同址，legacy 仅剩 Sepolia）；README 同步 SM / A2A / Reputation 地址表与部署起始块。**无 API 破坏** |
-| 0.23.0 | **护照客户端**：新增子路径 `@actora/sdk/passport`（`PassportClient` / `PassportApiError`），覆盖 agent 护照、回执与验签、收款地址读写、Webhook 订阅、发布计划；需要鉴权的方法在无凭证时**本地抛 `UNAUTHORIZED` 且不发请求**。根导出同时可用。**无 API 破坏** |
+| 0.23.0 | **护照客户端 + 子路径补全**：① 新增 `@actora/sdk/passport`（`PassportClient` / `PassportApiError`），覆盖 agent 护照、回执与验签、收款地址读写、Webhook 订阅、发布计划；需要鉴权的方法在无凭证时**本地抛 `UNAUTHORIZED` 且不发请求**。② 补齐 `@actora/sdk/payment` / `/subscription` / `/a2a` / `/reputation` / `/proofs` 五个子路径（此前只能用根入口，会把全部模块一起拉进来）。③ 声明 `sideEffects: false`，支持打包器 tree-shaking。所有子路径在根导出中同时可用。**无 API 破坏** |
 
 ---
 

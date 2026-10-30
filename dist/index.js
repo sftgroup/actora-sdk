@@ -2732,6 +2732,8 @@ __export(index_exports, {
   PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE: () => PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE,
   PAYLOAD_KEY_MODE_ATTRIBUTE: () => PAYLOAD_KEY_MODE_ATTRIBUTE,
   PAYMENT_VERSION: () => PAYMENT_VERSION,
+  PassportApiError: () => PassportApiError,
+  PassportClient: () => PassportClient,
   PaymentsClient: () => import_payments3.PaymentsClient,
   PeriodClient: () => PeriodClient,
   PrfError: () => PrfError,
@@ -2858,9 +2860,6 @@ var ActoraError = class extends Error {
     this.name = "ActoraError";
   }
 };
-
-// src/core/index.ts
-init_crypto();
 
 // src/core/webauthn-prf.ts
 init_crypto();
@@ -5463,7 +5462,7 @@ var SubscriptionManager = class {
     return address;
   }
   // ── Config Read ──────────────────────────────────────────────────────────
-  /** Get the default platform fee in basis points (e.g. 250 = 2.5%). */
+  /** Get the default platform fee in basis points (250 = 2.5%). Actora currently sets this to 0. */
   async getPlatformFeeBps() {
     const result = await this.publicClient.readContract({
       address: this.address,
@@ -6773,18 +6772,32 @@ var SubscriptionPayments = class {
     const res = await this.client.access(subscriber, agentId, this.config.chain ?? "bsc");
     return res.active === true;
   }
-  /** x402 protocol discovery (price / pay-to wallet / network). */
-  async fetchX402Info() {
+  /**
+   * x402 protocol discovery (price / pay-to wallet / network).
+   * @param agentId 传入时返回**该 agent 的收款地址**（`agents.payout_address`），
+   *   让自动付款直接付给开发者；未配置该地址时网关回 409 PAYOUT_NOT_CONFIGURED。
+   */
+  async fetchX402Info(agentId) {
     if (!this.client) {
       throw new Error("fetchX402Info() requires a gatewayUrl");
     }
-    const info = await this.client.info();
+    if (agentId === void 0) {
+      const info2 = await this.client.info();
+      return {
+        enabled: Boolean(info2.x402?.enabled),
+        priceWei: info2.x402?.priceWei ?? "0",
+        payTo: info2.x402?.payTo ?? "",
+        network: info2.x402?.network ?? "",
+        chain: info2.x402?.chain ?? this.config.chain ?? "bsc"
+      };
+    }
+    const info = await this._fetchJson(`/api/v1/x402/info?agentId=${encodeURIComponent(String(agentId))}`);
     return {
-      enabled: Boolean(info.x402?.enabled),
-      priceWei: info.x402?.priceWei ?? "0",
-      payTo: info.x402?.payTo ?? "",
-      network: info.x402?.network ?? "",
-      chain: info.x402?.chain ?? this.config.chain ?? "bsc"
+      enabled: Boolean(info.enabled),
+      priceWei: info.priceWei ?? "0",
+      payTo: info.payTo ?? "",
+      network: info.network ?? "",
+      chain: info.chain ?? this.config.chain ?? "bsc"
     };
   }
   // ── Rails ───────────────────────────────────────────────────────────────
@@ -6836,9 +6849,12 @@ var SubscriptionPayments = class {
     if (!walletClient || !subscriptionManager) {
       throw new Error("x402 automatic payment needs a txHash, or a walletClient + subscriptionManager in the config");
     }
-    const info = await this.fetchX402Info();
-    if (!info.enabled || !info.payTo) {
-      throw new Error("x402 is not enabled on the Gateway (X402_ENABLED / X402_PAY_TO missing)");
+    const info = await this.fetchX402Info(input.agentId);
+    if (!info.payTo) {
+      throw new Error(`x402 payment target unavailable for agent ${input.agentId} (payout_address not configured)`);
+    }
+    if (!info.enabled) {
+      throw new Error("x402 is not enabled on the Gateway (X402_ENABLED missing)");
     }
     const priceWei = BigInt(info.priceWei || "0");
     const amount = input.priceWei !== void 0 ? input.priceWei > priceWei ? input.priceWei : priceWei : (async () => {
@@ -7057,10 +7073,10 @@ var SpendPolicyClient = class {
   }
   /** 超额审批队列（默认全部，可传 status 过滤）。 */
   async approvals(opts = {}) {
-    const qs = new URLSearchParams();
-    if (opts.status) qs.set("status", opts.status);
-    if (opts.limit) qs.set("limit", String(opts.limit));
-    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    const qs2 = new URLSearchParams();
+    if (opts.status) qs2.set("status", opts.status);
+    if (opts.limit) qs2.set("limit", String(opts.limit));
+    const suffix = qs2.toString() ? `?${qs2.toString()}` : "";
     const out = await this.request("GET", `/approvals${suffix}`);
     return out.approvals;
   }
@@ -8854,6 +8870,118 @@ async function verifyExecutionProof(baseUrl, proof, accessToken) {
     accessToken
   );
 }
+
+// src/passport/passport-client.ts
+var PassportApiError = class extends Error {
+  constructor(code, status, message) {
+    super(message ?? code);
+    this.code = code;
+    this.status = status;
+    this.name = "PassportApiError";
+  }
+  code;
+  status;
+};
+function qs(params) {
+  const search = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== void 0 && v !== "") search.set(k, String(v));
+  }
+  const s = search.toString();
+  return s ? `?${s}` : "";
+}
+var PassportClient = class {
+  constructor(opts) {
+    this.opts = opts;
+  }
+  opts;
+  get base() {
+    return this.opts.baseUrl.replace(/\/$/, "");
+  }
+  async call(path, init, requireAuth = false) {
+    const headers = {
+      ...init?.headers ?? {}
+    };
+    if (init?.body !== void 0) headers["Content-Type"] = "application/json";
+    if (this.opts.apiKey) headers["X-Api-Key"] = this.opts.apiKey;
+    if (this.opts.accessToken) headers.Authorization = `Bearer ${this.opts.accessToken}`;
+    if (requireAuth && !this.opts.accessToken && !this.opts.apiKey) {
+      throw new PassportApiError("UNAUTHORIZED", 401);
+    }
+    const res = await fetch(`${this.base}${path}`, { ...init, headers });
+    if (!res.ok) {
+      let code = `HTTP_${res.status}`;
+      let message;
+      try {
+        const body = await res.json();
+        if (body.code) code = body.code;
+        else if (body.error) code = body.error;
+        message = body.message;
+      } catch {
+      }
+      throw new PassportApiError(code, res.status, message);
+    }
+    return res.json();
+  }
+  // ── 护照（描述 / 端点 / 声誉）─────────────────────────────────────────────
+  /** `chain` 缺省时由网关跨链解析（central → bsc → ethereum → base）。 */
+  getAgent(agentId, chain) {
+    return this.call(`/api/v1/agents/${agentId}${qs({ chain })}`);
+  }
+  // ── 回执 ────────────────────────────────────────────────────────────────
+  /** 单张回执 + 平台验签结果（公开）。 */
+  getReceipt(receiptId) {
+    return this.call(`/api/v1/receipts/${encodeURIComponent(receiptId)}`);
+  }
+  /** 回执列表：`chain` / `agentId` / `subject` 至少给一个，否则网关 400。 */
+  async listReceipts(filter) {
+    const body = await this.call(
+      `/api/v1/receipts${qs({
+        chain: filter.chain,
+        agentId: filter.agentId,
+        subject: filter.subject,
+        before: filter.before,
+        limit: filter.limit
+      })}`
+    );
+    return body.receipts ?? [];
+  }
+  // ── 收款地址 ─────────────────────────────────────────────────────────────
+  getPayout(chain, agentId) {
+    return this.call(`/api/v1/agents/${chain}/${agentId}/payout`);
+  }
+  /**
+   * 设置 / 清除收款地址（仅 owner）。
+   * @param payoutAddress null = 撤回收款意图，此后该 agent 不再生成 402。
+   */
+  setPayout(chain, agentId, payoutAddress) {
+    return this.call(
+      `/api/v1/agents/${chain}/${agentId}/payout`,
+      { method: "PUT", body: JSON.stringify({ payoutAddress }) },
+      true
+    );
+  }
+  // ── Webhook ──────────────────────────────────────────────────────────────
+  async listWebhooks() {
+    const body = await this.call("/api/v1/webhooks", void 0, true);
+    return body.endpoints ?? [];
+  }
+  createWebhook(input) {
+    return this.call(
+      "/api/v1/webhooks",
+      { method: "POST", body: JSON.stringify(input) },
+      true
+    );
+  }
+  async revokeWebhook(id) {
+    await this.call(`/api/v1/webhooks/${encodeURIComponent(id)}`, { method: "DELETE" }, true);
+  }
+  // ── 一源多发 ─────────────────────────────────────────────────────────────
+  /** 各平台物料；`blocked` 的条目带 `reason`（不发外部请求）。 */
+  getPublishPlan(chain, agentId) {
+    return this.call(`/api/v1/agents/${chain}/${agentId}/publish-plan`);
+  }
+};
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   A2AClient,
@@ -8900,6 +9028,8 @@ async function verifyExecutionProof(baseUrl, proof, accessToken) {
   PAYLOAD_KEY_CREDENTIAL_ATTRIBUTE,
   PAYLOAD_KEY_MODE_ATTRIBUTE,
   PAYMENT_VERSION,
+  PassportApiError,
+  PassportClient,
   PaymentsClient,
   PeriodClient,
   PrfError,

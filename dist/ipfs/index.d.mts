@@ -1,4 +1,4 @@
-import { E as EncryptedPayload } from '../types-ATMM4oRG.mjs';
+import { E as EncryptedPayload } from '../types-C6xHfvpn.mjs';
 
 interface IPFSUploaderConfig {
     /** Pinata JWT token. Required for Pinata uploads. */
