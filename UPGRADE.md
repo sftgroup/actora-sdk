@@ -1,5 +1,22 @@
 # @actora/sdk Upgrade Guide
 
+## v0.23.0 → v0.23.1（2026-11-01，建议升级）
+
+> 主题：**法币订阅（Stripe）rail 恢复**。网关已自建 Stripe 轨（Checkout Session +
+> webhook 验签 + 订阅台账），SDK 的 `pay({ method: 'fiat' })` 不再抛错，改为转发意图。
+
+- **行为变更**：`SubscriptionPayments.pay({ method: 'fiat' })` 由「运行时抛
+  `was retired in @keelcodes/payments 0.3.0`」改为 **POST `/api/v1/payments`（`method: 'fiat'`）**
+  并返回 `{ method: 'fiat', sessionUrl, sessionId, redirect: true }`。
+- **调用方式**：拿到 `sessionUrl` 后由调用方跳转（`window.location.assign`）；支付成功后
+  Stripe 回调网关 webhook，订阅台账由服务端落账，SDK 侧无需再调 `verify`。
+- **前提**：网关已配置 `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`；未配置时网关返回
+  `503`，`/api/v1/payments/info` 的 `rails.fiat.enabled` 为 `false`，前端应据此隐藏入口。
+- **定价**：金额由网关按计划价服务端折算（`amountCents` 仅兼容保留、不采信），因此
+  客户端传错金额不会改变实收。
+- **无 API 破坏**：`PaySubscriptionInput` / `PaySubscriptionResult` 类型不变，`method: 'fiat'`
+  的返回类型此前已声明 `sessionUrl` / `sessionId` / `redirect`。不升级不影响 `chain` / `x402`。
+
 ## v0.22.0 → v0.23.0（2026-10-30，可选升级）
 
 > 主题：**新增护照客户端**。`@actora/sdk/passport` 提供 `PassportClient`，把 agent 护照、
@@ -32,6 +49,7 @@
 > 主题：**`@keelcodes/payments` 0.2.2 → 0.3.0 删除两条 rail**（该版本号沿用旧包名 `@0xinfrax/payments`）。
 > - **fiat（Stripe）**：`SubscriptionPayments.pay({ method: 'fiat' })` 保留方法签名但运行时抛错；
 >   Gateway 的 `POST /api/v1/fiat/checkout`、`POST /api/v1/fiat/webhook` 返回 `410`。
+>   （**v0.23.1 起已恢复**：网关自建 Stripe 轨，详见本文首节。）
 > - **MPP**：`MPPClient` 不再导出，`/api/v1/payments/mpp/*` 路由已删除。
 > - `PAYMENT_VERSION` 同步升为 `'0.3.0'`；`ChainKey` 直接沿用引擎的 `string`（不再自维护联合类型）。
 >

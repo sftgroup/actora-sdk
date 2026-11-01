@@ -69,8 +69,35 @@ var SubscriptionPayments = class {
     });
     return { method: "chain", subscriptionId: result.subscriptionId, txHash: result.txHash };
   }
-  async _payFiat(_input) {
-    throw new Error('method "fiat" was retired in @keelcodes/payments 0.3.0; use "chain" or "x402"');
+  async _payFiat(input) {
+    if (!this.client) throw new Error('method "fiat" requires a gatewayUrl');
+    if (!input.subscriber) throw new Error('method "fiat" requires a subscriber address');
+    if (!PERIODS.includes(input.period ?? "month")) {
+      throw new Error("period must be one of: day | week | month | year");
+    }
+    const data = await this._fetchJson("/api/v1/payments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        method: "fiat",
+        subscriber: input.subscriber,
+        agentId: input.agentId,
+        planId: input.planId,
+        period: input.period ?? "month",
+        currency: input.currency ?? "usd",
+        chain: this.config.chain ?? "bsc",
+        amountCents: input.amountCents,
+        successUrl: input.successUrl,
+        cancelUrl: input.cancelUrl
+      })
+    });
+    if (!data.sessionUrl) throw new Error("fiat: gateway did not return a checkout session url");
+    return {
+      method: "fiat",
+      sessionUrl: data.sessionUrl,
+      sessionId: data.sessionId ?? data.paymentId ?? "",
+      redirect: true
+    };
   }
   async _payX402(input) {
     if (!this.client) throw new Error('method "x402" requires a gatewayUrl');

@@ -1182,7 +1182,7 @@ BYOK（自带模型 Key）另用三个头逐请求覆盖：`X-LLM-Api-Key` / `X-
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/v1/payments` | **统一下单**。`purpose` = `agent-subscription`（默认）/ `tenant-plan` / `token-pack` / `a2a`；`method` = `chain` / `fiat` / `x402` / `mpp` |
+| `POST` | `/api/v1/payments` | **统一下单**。`purpose` = `agent-subscription`（默认）/ `tenant-plan` / `a2a`；`method` = `chain` / `fiat` / `x402` |
 | `POST` | `/api/v1/payments/verify` | 校验链上交易并记录回执（`{ txHash, chain }`；按 `txHash` 幂等，不再累加余额） |
 | `GET` | `/api/v1/payments/access` | 跨轨道访问检查（链上订阅 / x402 回执 / fiat 订阅） |
 | `GET` | `/api/v1/payments/info` · `/quote` | x402 发现信息（`priceWei` / `payTo` / `network`）与报价 |
