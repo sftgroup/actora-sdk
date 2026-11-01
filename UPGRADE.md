@@ -1,5 +1,18 @@
 # @actora/sdk Upgrade Guide
 
+## v0.23.1 → v0.23.2（2026-11-01，可选升级）
+
+> 主题：**A2A 按次支付类型对齐 082（美元单价 + USDC）**。网关改为按次固定 USDC 结算，
+> `GET /api/v1/a2a/task-result/:id` 新增 `payment_token` / `payment_price_usd_cents`。
+
+- **类型补全**：`A2ADelegatedTaskResult` 新增两个可选字段 ——
+  `payment_token?: string | null`（USDC 合约地址，`null` = 历史原生币任务）、
+  `payment_price_usd_cents?: number | null`（权威单价，美元美分）。
+- **口径变更**：`payment_amount_wei` 沿用旧字段名，但 082 起其含义为 **USDC 最小单位**
+  （6 位链 1 美分 = `1e4`；BSC 的 Binance-Peg USDC 为 18 位），按 `payment_token` 是否存在区分；
+  无 `payment_price_usd_cents` 时请按 `payment_token` 的精度换算，不要按 18 位硬编码。
+- **无 API 破坏**：纯类型补全，运行时行为不变；不升级也能正常调用，只是字段不可见。
+
 ## v0.23.0 → v0.23.1（2026-11-01，建议升级）
 
 > 主题：**法币订阅（Stripe）rail 恢复**。网关已自建 Stripe 轨（Checkout Session +

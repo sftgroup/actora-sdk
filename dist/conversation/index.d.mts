@@ -190,6 +190,10 @@ interface A2ADelegatedTaskResult {
         prepay: boolean;
         sessionKey: boolean;
     } | null;
+    /** 082：按次结算代币（USDC 合约地址）；NULL = 历史原生币任务。 */
+    payment_token?: string | null;
+    /** 082：按次权威单价（美元美分），优先用于展示。 */
+    payment_price_usd_cents?: number | null;
     created_at?: string;
     updated_at?: string;
 }
