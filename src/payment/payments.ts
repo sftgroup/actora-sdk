@@ -4,7 +4,7 @@
 // A single entry point for subscribing across all Actora payment rails:
 //
 //   method: 'chain'  → on-chain SubscriptionManager (native / ERC20, escrow)
-//   method: 'fiat'   → 已退役（@keelcodes/payments 0.3.0 移除 Stripe rail，运行时抛错）
+//   method: 'fiat'   → Stripe Checkout（网关自建 rail，返回 sessionUrl 供跳转）
 //   method: 'x402'   → native-token period payment via the unified endpoint
 //
 // 0.9.0: the fiat / x402 / access rails now talk to the generic
@@ -166,10 +166,38 @@ export class SubscriptionPayments {
     return { method: 'chain', subscriptionId: result.subscriptionId, txHash: result.txHash }
   }
 
-  private async _payFiat(_input: PaySubscriptionInput): Promise<PaySubscriptionResult> {
-    // @keelcodes/payments 0.3.0 移除 Stripe rail：保留方法名以维持类型兼容，
-    // 运行时显式失败，避免静默走不存在的通道。
-    throw new Error('method "fiat" was retired in @keelcodes/payments 0.3.0; use "chain" or "x402"')
+  private async _payFiat(input: PaySubscriptionInput): Promise<PaySubscriptionResult> {
+    // 2026-11-01：网关自建 Stripe rail 已接回（gateway/services/stripe.ts），
+    // SDK 只需转发意图；**金额由网关按计划价服务端折算**，amountCents 仅作兼容保留。
+    if (!this.client) throw new Error('method "fiat" requires a gatewayUrl')
+    if (!input.subscriber) throw new Error('method "fiat" requires a subscriber address')
+    if (!PERIODS.includes(input.period ?? 'month')) {
+      throw new Error('period must be one of: day | week | month | year')
+    }
+
+    const data = await this._fetchJson<{ sessionUrl?: string; sessionId?: string; paymentId?: string }>('/api/v1/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        method: 'fiat',
+        subscriber: input.subscriber,
+        agentId: input.agentId,
+        planId: input.planId,
+        period: input.period ?? 'month',
+        currency: input.currency ?? 'usd',
+        chain: this.config.chain ?? 'bsc',
+        amountCents: input.amountCents,
+        successUrl: input.successUrl,
+        cancelUrl: input.cancelUrl,
+      }),
+    })
+    if (!data.sessionUrl) throw new Error('fiat: gateway did not return a checkout session url')
+    return {
+      method: 'fiat',
+      sessionUrl: data.sessionUrl,
+      sessionId: data.sessionId ?? data.paymentId ?? '',
+      redirect: true,
+    }
   }
 
   private async _payX402(input: PaySubscriptionInput): Promise<PaySubscriptionResult> {
