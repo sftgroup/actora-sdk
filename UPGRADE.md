@@ -1,5 +1,32 @@
 # @actora/sdk Upgrade Guide
 
+## v0.23.2 → v0.24.0（2026-11-02，**破坏性变更**）
+
+> 主题：**移除 Agent 订阅的 fiat rail**。平台不再代收 Agent 订阅法币：法币由发布者
+> 自己的支付通道（`agent_listings.payment_link_url`）收取，付款后发布者把支付事件
+> 签名回传网关（`POST /api/v1/fiat/publisher-webhook/:chain/:agentId`），平台只验签
+> 并落订阅，不碰钱。`TenantPlanPayments`（平台自卖套餐）**不受影响**，仍支持 fiat。
+
+- **类型变更（breaking）**：`SubscriptionPaymentMethod` 由 `'chain' | 'fiat' | 'x402'`
+  收窄为 `'chain' | 'x402'`；`PaySubscriptionResult` 删除 fiat 分支；
+  `PaySubscriptionInput` 删除 `amountCents` / `currency` / `successUrl` / `cancelUrl`。
+- **运行时**：`pay()` 收到 `method: 'fiat'`（JS 绕过类型）会抛
+  `unsupported payment method: use "chain" or "x402"; fiat subscriptions use the publisher payment link`，
+  不再请求网关（网关对 agent-subscription 的 fiat 也恒为 409）。
+- **迁移方式**：
+
+```ts
+// 旧（0.23.x）
+const { sessionUrl } = await payments.pay({ method: 'fiat', planId, agentId, subscriber })
+
+// 新（0.24.0）：跳转发布者自己的收款页
+window.location.assign(listing.payment_link_url)
+// 订阅状态由发布者回传网关后自动生效，`hasAccess()` 无需改动
+```
+
+- **不受影响**：`chain` / `x402` 轨道、`hasAccess()`、`fetchX402Info()`，
+  以及 `TenantPlanPayments.buy({ method: 'fiat' })`。
+
 ## v0.23.1 → v0.23.2（2026-11-01，可选升级）
 
 > 主题：**A2A 按次支付类型对齐 082（美元单价 + USDC）**。网关改为按次固定 USDC 结算，

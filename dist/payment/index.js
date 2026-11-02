@@ -47,15 +47,17 @@ var SubscriptionPayments = class {
     switch (input.method) {
       case "chain":
         return this._payChain(input);
-      case "fiat":
-        return this._payFiat(input);
       case "x402":
         return this._payX402(input);
+      default:
+        throw new Error(
+          'unsupported payment method: use "chain" or "x402"; fiat subscriptions use the publisher payment link'
+        );
     }
   }
   /**
-   * Unified access check across all rails (chain OR fiat/x402) via the
-   * unified /api/v1/payments/access endpoint.
+   * Unified access check across all rails (chain OR x402 / publisher fiat) via
+   * the unified /api/v1/payments/access endpoint.
    */
   async hasAccess(agentId, subscriber) {
     if (!this.client) {
@@ -101,36 +103,6 @@ var SubscriptionPayments = class {
       approveTokenFirst: input.approveTokenFirst
     });
     return { method: "chain", subscriptionId: result.subscriptionId, txHash: result.txHash };
-  }
-  async _payFiat(input) {
-    if (!this.client) throw new Error('method "fiat" requires a gatewayUrl');
-    if (!input.subscriber) throw new Error('method "fiat" requires a subscriber address');
-    if (!PERIODS.includes(input.period ?? "month")) {
-      throw new Error("period must be one of: day | week | month | year");
-    }
-    const data = await this._fetchJson("/api/v1/payments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        method: "fiat",
-        subscriber: input.subscriber,
-        agentId: input.agentId,
-        planId: input.planId,
-        period: input.period ?? "month",
-        currency: input.currency ?? "usd",
-        chain: this.config.chain ?? "bsc",
-        amountCents: input.amountCents,
-        successUrl: input.successUrl,
-        cancelUrl: input.cancelUrl
-      })
-    });
-    if (!data.sessionUrl) throw new Error("fiat: gateway did not return a checkout session url");
-    return {
-      method: "fiat",
-      sessionUrl: data.sessionUrl,
-      sessionId: data.sessionId ?? data.paymentId ?? "",
-      redirect: true
-    };
   }
   async _payX402(input) {
     if (!this.client) throw new Error('method "x402" requires a gatewayUrl');

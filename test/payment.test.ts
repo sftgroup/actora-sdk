@@ -1,5 +1,6 @@
-// SubscriptionPayments — three-rail subscription payment unit tests.
-// 0.9.0: fiat/x402/access talk to the unified payments endpoint through
+// SubscriptionPayments — subscription payment unit tests.
+// 0.24.0: Agent-subscription fiat rail removed (publisher payment link + webhook).
+// 0.9.0: x402/access talk to the unified payments endpoint through
 // @keelcodes/payments' PaymentsClient; chain stays on SubscriptionManager.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { SubscriptionPayments } from '../src/payment/payments'
@@ -60,41 +61,12 @@ describe('SubscriptionPayments', () => {
     })
   })
 
-  describe('fiat rail', () => {
-    it('POSTs the intent to the unified endpoint and returns the Stripe checkout url', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({
-        method: 'fiat', paymentId: 'cs_1', sessionId: 'cs_1', sessionUrl: 'https://checkout.stripe.com/x', redirect: true,
-      }, 200))
-
-      const res = await make({ chain: 'base' }).pay({
-        method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc', period: 'year',
-        successUrl: 'https://actora.codes/ok', cancelUrl: 'https://actora.codes/cancel',
-      })
-
-      expect(res).toEqual({
-        method: 'fiat', sessionUrl: 'https://checkout.stripe.com/x', sessionId: 'cs_1', redirect: true,
-      })
-      const { url, method, body } = firstCall(fetchMock.mock.calls[0]!)
-      expect(url).toBe('https://gw.example.com/api/v1/payments')
-      expect(method).toBe('POST')
-      expect(body).toMatchObject({
-        method: 'fiat', subscriber: '0xabc', agentId: 3, planId: 2, period: 'year',
-        currency: 'usd', chain: 'base',
-        successUrl: 'https://actora.codes/ok', cancelUrl: 'https://actora.codes/cancel',
-      })
-    })
-
-    it('requires a gatewayUrl and a subscriber', async () => {
-      await expect(new SubscriptionPayments({}).pay({ method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc' }))
-        .rejects.toThrow('gatewayUrl')
-      await expect(make().pay({ method: 'fiat', planId: 2, agentId: 3 }))
-        .rejects.toThrow('subscriber address')
-    })
-
-    it('rejects a gateway reply without a checkout url', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({ method: 'fiat', paymentId: 'cs_1' }, 200))
-      await expect(make().pay({ method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc' }))
-        .rejects.toThrow('checkout session url')
+  describe('fiat rail (removed in 0.24.0)', () => {
+    it('rejects fiat at runtime instead of calling the gateway', async () => {
+      await expect(
+        make().pay({ method: 'fiat', planId: 2, agentId: 3, subscriber: '0xabc' } as never),
+      ).rejects.toThrow('fiat subscriptions use the publisher payment link')
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 

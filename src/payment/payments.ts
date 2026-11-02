@@ -1,17 +1,20 @@
 // ---------------------------------------------------------------------------
-// @actora/sdk — SubscriptionPayments: unified three-rail subscription payment
+// @actora/sdk — SubscriptionPayments: on-chain + x402 subscription payment
 // ---------------------------------------------------------------------------
-// A single entry point for subscribing across all Actora payment rails:
+// A single entry point for subscribing across the rails Actora still settles:
 //
 //   method: 'chain'  → on-chain SubscriptionManager (native / ERC20, escrow)
-//   method: 'fiat'   → Stripe Checkout（网关自建 rail，返回 sessionUrl 供跳转）
 //   method: 'x402'   → native-token period payment via the unified endpoint
 //
-// 0.9.0: the fiat / x402 / access rails now talk to the generic
-// `@keelcodes/payments` engine through the Gateway's unified endpoint
-// (/api/v1/payments) via PaymentsClient. Actora subscription semantics
-// (planId/agentId/subscription state) still live here — the generic module
-// never interprets them.
+// 0.24.0: the Agent-subscription fiat rail was removed. Fiat is collected by
+// the publisher's own payment channel (agent_listings.payment_link_url) and
+// activated through the publisher webhook — the platform never holds funds.
+// `TenantPlanPayments` (platform's own plans) keeps its fiat rail.
+//
+// 0.9.0: the x402 / access rails talk to the generic `@keelcodes/payments`
+// engine through the Gateway's unified endpoint (/api/v1/payments) via
+// PaymentsClient. Actora subscription semantics (planId/agentId/subscription
+// state) still live here — the generic module never interprets them.
 // ---------------------------------------------------------------------------
 
 import type { Address, Hash, WalletClient } from 'viem'
@@ -19,7 +22,7 @@ import { PaymentsClient } from '@keelcodes/payments'
 import type { ChainKey as PaymentsChainKey } from '@keelcodes/payments'
 import { SubscriptionManager } from '../subscription/subscription'
 
-export type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402'
+export type SubscriptionPaymentMethod = 'chain' | 'x402'
 export type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year'
 // @keelcodes/payments 自 0.2.0 起 ChainKey = string（不再枚举具体链），
 // SDK 直接沿用引擎类型，避免自维护枚举与新链不同步。
@@ -42,20 +45,12 @@ export interface PaySubscriptionInput {
   planId: number
   agentId: number
   method: SubscriptionPaymentMethod
-  /** Buyer wallet. Required for fiat / x402; chain resolves from the wallet client. */
+  /** Buyer wallet. Required for x402; chain resolves from the wallet client. */
   subscriber?: Address
   /** Chain rail: native value override (defaults to the plan price). */
   valueWei?: bigint
   /** Chain rail: approve the ERC20 token before subscribing. */
   approveTokenFirst?: boolean
-  /** Fiat rail: amount in minor units (cents). Optional — the Gateway
-   *  auto-prices from the on-chain plan when planId is sent without it. */
-  amountCents?: number
-  /** Fiat rail: currency code (default 'usd'). */
-  currency?: string
-  /** Fiat rail: redirect targets after Stripe checkout. */
-  successUrl?: string
-  cancelUrl?: string
   /** x402 rail: already-sent on-chain payment tx. When omitted and a wallet
    *  client is configured, the payment is sent automatically. */
   txHash?: string
@@ -69,7 +64,6 @@ export interface PaySubscriptionInput {
 
 export type PaySubscriptionResult =
   | { method: 'chain'; subscriptionId: number; txHash: Hash }
-  | { method: 'fiat'; sessionUrl: string; sessionId: string; redirect: true }
   | { method: 'x402'; subscriptionId: number; txHash: string; creditedWei?: string }
 
 /** x402 protocol discovery returned by the unified endpoint. */
@@ -99,16 +93,21 @@ export class SubscriptionPayments {
     switch (input.method) {
       case 'chain':
         return this._payChain(input)
-      case 'fiat':
-        return this._payFiat(input)
       case 'x402':
         return this._payX402(input)
+      default:
+        // 0.24.0 起 Agent 订阅没有平台代收的法币轨：法币由发布者自备收款页
+        // （agent_listings.payment_link_url）收取，经 publisher webhook 开通。
+        // 这里保留运行时兜底，避免 JS 调用方绕过类型后静默拿到 undefined。
+        throw new Error(
+          'unsupported payment method: use "chain" or "x402"; fiat subscriptions use the publisher payment link',
+        )
     }
   }
 
   /**
-   * Unified access check across all rails (chain OR fiat/x402) via the
-   * unified /api/v1/payments/access endpoint.
+   * Unified access check across all rails (chain OR x402 / publisher fiat) via
+   * the unified /api/v1/payments/access endpoint.
    */
   async hasAccess(agentId: number, subscriber: Address): Promise<boolean> {
     if (!this.client) {
@@ -164,40 +163,6 @@ export class SubscriptionPayments {
       approveTokenFirst: input.approveTokenFirst,
     })
     return { method: 'chain', subscriptionId: result.subscriptionId, txHash: result.txHash }
-  }
-
-  private async _payFiat(input: PaySubscriptionInput): Promise<PaySubscriptionResult> {
-    // 2026-11-01：网关自建 Stripe rail 已接回（gateway/services/stripe.ts），
-    // SDK 只需转发意图；**金额由网关按计划价服务端折算**，amountCents 仅作兼容保留。
-    if (!this.client) throw new Error('method "fiat" requires a gatewayUrl')
-    if (!input.subscriber) throw new Error('method "fiat" requires a subscriber address')
-    if (!PERIODS.includes(input.period ?? 'month')) {
-      throw new Error('period must be one of: day | week | month | year')
-    }
-
-    const data = await this._fetchJson<{ sessionUrl?: string; sessionId?: string; paymentId?: string }>('/api/v1/payments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        method: 'fiat',
-        subscriber: input.subscriber,
-        agentId: input.agentId,
-        planId: input.planId,
-        period: input.period ?? 'month',
-        currency: input.currency ?? 'usd',
-        chain: this.config.chain ?? 'bsc',
-        amountCents: input.amountCents,
-        successUrl: input.successUrl,
-        cancelUrl: input.cancelUrl,
-      }),
-    })
-    if (!data.sessionUrl) throw new Error('fiat: gateway did not return a checkout session url')
-    return {
-      method: 'fiat',
-      sessionUrl: data.sessionUrl,
-      sessionId: data.sessionId ?? data.paymentId ?? '',
-      redirect: true,
-    }
   }
 
   private async _payX402(input: PaySubscriptionInput): Promise<PaySubscriptionResult> {

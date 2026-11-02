@@ -4,7 +4,7 @@ export { ClientOptions, PaymentsClient, X402Client } from '@keelcodes/payments';
 import { f as SubscriptionManager } from '../subscription-D-kKp1BW.js';
 import '../types-C6xHfvpn.js';
 
-type SubscriptionPaymentMethod = 'chain' | 'fiat' | 'x402';
+type SubscriptionPaymentMethod = 'chain' | 'x402';
 type SubscriptionPeriod = 'day' | 'week' | 'month' | 'year';
 type ChainKey = ChainKey$1;
 interface SubscriptionPaymentsConfig {
@@ -23,20 +23,12 @@ interface PaySubscriptionInput {
     planId: number;
     agentId: number;
     method: SubscriptionPaymentMethod;
-    /** Buyer wallet. Required for fiat / x402; chain resolves from the wallet client. */
+    /** Buyer wallet. Required for x402; chain resolves from the wallet client. */
     subscriber?: Address;
     /** Chain rail: native value override (defaults to the plan price). */
     valueWei?: bigint;
     /** Chain rail: approve the ERC20 token before subscribing. */
     approveTokenFirst?: boolean;
-    /** Fiat rail: amount in minor units (cents). Optional — the Gateway
-     *  auto-prices from the on-chain plan when planId is sent without it. */
-    amountCents?: number;
-    /** Fiat rail: currency code (default 'usd'). */
-    currency?: string;
-    /** Fiat rail: redirect targets after Stripe checkout. */
-    successUrl?: string;
-    cancelUrl?: string;
     /** x402 rail: already-sent on-chain payment tx. When omitted and a wallet
      *  client is configured, the payment is sent automatically. */
     txHash?: string;
@@ -51,11 +43,6 @@ type PaySubscriptionResult = {
     method: 'chain';
     subscriptionId: number;
     txHash: Hash;
-} | {
-    method: 'fiat';
-    sessionUrl: string;
-    sessionId: string;
-    redirect: true;
 } | {
     method: 'x402';
     subscriptionId: number;
@@ -77,8 +64,8 @@ declare class SubscriptionPayments {
     /** Pay for (or renew) a subscription using the chosen rail. */
     pay(input: PaySubscriptionInput): Promise<PaySubscriptionResult>;
     /**
-     * Unified access check across all rails (chain OR fiat/x402) via the
-     * unified /api/v1/payments/access endpoint.
+     * Unified access check across all rails (chain OR x402 / publisher fiat) via
+     * the unified /api/v1/payments/access endpoint.
      */
     hasAccess(agentId: number, subscriber: Address): Promise<boolean>;
     /**
@@ -88,7 +75,6 @@ declare class SubscriptionPayments {
      */
     fetchX402Info(agentId?: number): Promise<X402Info>;
     private _payChain;
-    private _payFiat;
     private _payX402;
     /** Send the on-chain native transfer to the platform wallet (x402 rail). */
     private _autoFundX402;

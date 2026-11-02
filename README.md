@@ -1,4 +1,4 @@
-# @actora/sdk v0.23.0
+# @actora/sdk v0.24.0
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
@@ -233,19 +233,11 @@ const payments = new SubscriptionPayments({
 const res = await payments.pay({ method: 'chain', planId, agentId })
 // → { method: 'chain', subscriptionId, txHash }
 
-// 轨道 2：fiat —— Stripe 卡支付，无需钱包（需 gatewayUrl）
-const payments2 = new SubscriptionPayments({ gatewayUrl: 'https://actora.codes' })
-const { sessionUrl } = await payments2.pay({
-  method: 'fiat',
-  planId,
-  agentId,
-  subscriber: '0x...',                // 买家钱包
-  successUrl: 'https://your-app.com/success',
-  cancelUrl: 'https://your-app.com/cancel',
-})
-
-// 轨道 3：x402 —— 原生币按期支付（自动代付需 walletClient + subscriptionManager 读价格；
+// 轨道 2：x402 —— 原生币按期支付（自动代付需 walletClient + subscriptionManager 读价格；
 // 也可自己先发送原生币到平台 payTo 后传 txHash）
+// ⚠️ 法币不在 SDK 内：Agent 订阅的法币由发布者自备收款页收取
+// （`agent_listings.payment_link_url`），付款后由发布者的支付通道回调网关开通；
+// 平台不代收、不碰钱。`TenantPlanPayments`（平台自卖套餐）仍保留 fiat 轨。
 const payments3 = new SubscriptionPayments({
   gatewayUrl: 'https://actora.codes',
   subscriptionManager: sub,          // 读取计划价格（priceWei）
@@ -401,15 +393,14 @@ const detail = await sub.getSubscriptionDetail(subscriptionId)
 // status: 0=Inactive 1=Active 2=Expired 3=Cancelled（SDK 返回 pending/active/expired/cancelled）
 ```
 
-### 5.3 SubscriptionPayments —— 统一支付（chain / fiat / x402）
+### 5.3 SubscriptionPayments —— 统一支付（chain / x402）
 
-- **用途**：三条支付轨道统一入口。`chain` = 链上 SubscriptionManager；`fiat` = Stripe 卡；`x402` = 原生币按期支付（走网关统一端点）。
+- **用途**：两条支付轨道统一入口。`chain` = 链上 SubscriptionManager；`x402` = 原生币按期支付（走网关统一端点）。**Agent 订阅的法币不在 SDK 内**：由发布者自备收款页收取并提供回调（详见 `payment-architecture.md` §9.2）；`TenantPlanPayments` 的平台套餐仍支持 `fiat`。
 - **构造**：`new SubscriptionPayments({ gatewayUrl?, accessToken?, subscriptionManager?, walletClient?, chain? })`
   - `chain` 取值：`'sepolia' | 'bsc' | 'ethereum' | 'base'`（默认 `'bsc'`）
 - **关键方法**：`pay(PaySubscriptionInput)`、`hasAccess(agentId, subscriber)`（跨轨道访问检查）、`fetchX402Info()`（x402 发现：price/payTo/network）
-- **`PaySubscriptionInput` 字段**（以源码为准）：`planId, agentId, method, subscriber?, valueWei?, approveTokenFirst?, amountCents?, currency?, successUrl?, cancelUrl?, txHash?, priceWei?, period?`
-  - `priceWei`：中心化 Agent（无链上计划）时直接指定价格；
-  - `amountCents` 省略时网关按链上计划自动计价。
+- **`PaySubscriptionInput` 字段**（以源码为准）：`planId, agentId, method, subscriber?, valueWei?, approveTokenFirst?, txHash?, priceWei?, period?`
+  - `priceWei`：中心化 Agent（无链上计划）时直接指定价格。
 
 ```ts
 const payments = new SubscriptionPayments({ gatewayUrl: 'https://actora.codes', chain: 'base' })
@@ -1043,11 +1034,11 @@ metadata 的 `description`（回退 `name`）**，skills 取 `metadata_json.skil
 |------|------------------|-------------------|
 | Agent 载体 | 链上 NFT（`AgentRegistry` 铸造，正 ID） | 网关 DB 记录（`source='central'`，负 ID） |
 | 订阅计划 | `SubscriptionManager.createPlan`（链上合约） | `CentralAgentClient.createPlan`（`central_plans` 表） |
-| 付费 | `subscribe`（原生币/ERC20，托管 escrow） | `SubscriptionPayments.pay({ method: 'x402', priceWei })` 或 fiat |
+| 付费 | `subscribe`（原生币/ERC20，托管 escrow） | `SubscriptionPayments.pay({ method: 'x402', priceWei })`；法币走发布者收款页 |
 | 鉴权判定 | 链上 `hasActiveSubscription` | 网关 `checkSubscription`（`fiat_subscriptions`） |
 | 适用场景 | 需要公开可验证、用户自持钱包、跨平台互操作 | 平台自己建 Agent、快速上架、无需用户钱包的 B 端 |
 
-**流程差异**：链上 Agent 的用户必须「铸造者/订阅者」都有钱包且在同一链；中心化 Agent 的订阅方无需钱包（fiat 卡付），B 端拿到 `planId` + `priceWei` 直接调统一支付即可。
+**流程差异**：链上 Agent 的用户必须「铸造者/订阅者」都有钱包且在同一链；中心化 Agent 的订阅方可用 x402（无需钱包私钥以外的配置），或由发布者的收款页处理法币，付款后回调网关开通。
 
 ---
 
@@ -1182,7 +1173,7 @@ BYOK（自带模型 Key）另用三个头逐请求覆盖：`X-LLM-Api-Key` / `X-
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/v1/payments` | **统一下单**。`purpose` = `agent-subscription`（默认）/ `tenant-plan` / `a2a`；`method` = `chain` / `fiat` / `x402` |
+| `POST` | `/api/v1/payments` | **统一下单**。`purpose` = `agent-subscription`（默认）/ `tenant-plan` / `a2a`；`method` = `chain` / `x402`（`fiat` 仅 `tenant-plan`；Agent 订阅法币走发布者收款页） |
 | `POST` | `/api/v1/payments/verify` | 校验链上交易并记录回执（`{ txHash, chain }`；按 `txHash` 幂等，不再累加余额） |
 | `GET` | `/api/v1/payments/access` | 跨轨道访问检查（链上订阅 / x402 回执 / fiat 订阅） |
 | `GET` | `/api/v1/payments/info` · `/quote` | x402 发现信息（`priceWei` / `payTo` / `network`）与报价 |
