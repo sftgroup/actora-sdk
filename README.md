@@ -1,4 +1,4 @@
-# @actora/sdk v0.24.0
+# @actora/sdk v0.24.1
 
 **去中心化 AI Agent 平台 SDK** —— 链上铸造 / 订阅 / 支付（多链）+ 托管对话（REST/SSE）+ 多链中心化市场，面向 B 端（合作伙伴）接入。
 
