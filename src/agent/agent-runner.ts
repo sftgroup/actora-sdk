@@ -111,6 +111,12 @@ export interface RunnableSkill {
   /** If mode='a2a', the on-chain Agent ID being delegated to */
   a2aTargetAgentId?: number
   /**
+   * false = declarative (open) skill with no local executor. Defaults to true.
+   * Callers that surface tools to an LLM must filter these out — invoking them
+   * always throws.
+   */
+  available?: boolean
+  /**
    * Execute this skill with the given input.
    * - Open: runs locally (caller provides implementation)
    * - MCP: POSTs to the publisher's MCP server
@@ -272,6 +278,7 @@ export class AgentRunner {
   /** Wrap a SkillDef into a RunnableSkill with execute(). */
   private _wrapSkill(skill: SkillDef): RunnableSkill {
     let mode: RunnableSkill['mode'] = 'open'
+    let available = true
     let executeFn: (input: Record<string, unknown>) => Promise<unknown>
 
     if (skill.execution) {
@@ -294,6 +301,8 @@ export class AgentRunner {
         )
       }
     } else {
+      // No execution block and no local implementation → declarative skill.
+      available = false
       executeFn = async () => {
         throw new ActoraError(
           ActoraErrorCode.INVALID_SCHEMA,
@@ -309,6 +318,7 @@ export class AgentRunner {
       inputSchema: skill.inputSchema as unknown as Record<string, unknown>,
       outputSchema: skill.outputSchema as unknown as Record<string, unknown>,
       mode,
+      available,
       execute: executeFn,
       /** If A2A, carry delegation metadata so the LLM can see it */
       a2aTargetAgentId: skill.execution?.type === 'a2a' ? (skill.execution as import('../core/types').A2ASkillExecution).targetAgentId : undefined,

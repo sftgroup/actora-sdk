@@ -185,7 +185,8 @@ export async function executePlatformTool(
       }
       case 'actora_gateway_models': {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error('Gateway not configured')
-        const res = await fetch(`${ctx.gatewayUrl}/api/v1/models`, {
+        // 模型列表挂在 tenant router 下；`/api/v1/models` 不在网关白名单内，会直接 404。
+        const res = await fetch(`${ctx.gatewayUrl}/api/v1/tenant/models`, {
           headers: { 'Authorization': `Bearer ${ctx.gatewayToken}` },
         })
         return res.json()

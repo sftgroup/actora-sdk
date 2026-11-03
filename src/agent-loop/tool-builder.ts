@@ -46,9 +46,10 @@ function convertProperties(properties: Record<string, Record<string, unknown>>):
 }
 
 export function buildTools(skills: RunnableSkill[]): OpenAIToolDef[] {
-  if (!skills || skills.length === 0) return []
+  const usable = (skills ?? []).filter(skill => skill.available !== false)
+  if (usable.length === 0) return []
 
-  return skills.map(skill => ({
+  return usable.map(skill => ({
     type: 'function' as const,
     function: {
       name: skill.name,
@@ -59,9 +60,10 @@ export function buildTools(skills: RunnableSkill[]): OpenAIToolDef[] {
 }
 
 export function buildSystemPrompt(prompt: string, skills: RunnableSkill[]): string {
-  if (!skills || skills.length === 0) return prompt
+  const usable = (skills ?? []).filter(skill => skill.available !== false)
+  if (usable.length === 0) return prompt
 
-  const skillList = skills
+  const skillList = usable
     .map(s => `- **${s.name}**: ${s.description}`)
     .join('\n')
 

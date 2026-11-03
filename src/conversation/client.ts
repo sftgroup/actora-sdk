@@ -64,6 +64,13 @@ export interface ConversationChatParams {
   skills?: ConversationSkillDef[]
   /** BYOK: id of a stored tenant-owned API key (resolved server-side by the Gateway) */
   tenantKeyId?: string
+  /**
+   * Stable idempotency key for this run (sent as `X-Idempotency-Key`).
+   * Spend-policy approvals are keyed by it: approve in the UI, then resend the
+   * SAME message with the SAME key so the approval is consumed instead of a
+   * new one being created.
+   */
+  idempotencyKey?: string
 }
 
 /**
@@ -177,8 +184,26 @@ export class ConversationTaskError extends Error {
   }
 }
 
-// ── A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3) ────────
+/**
+ * Non-2xx response from `POST /api/v1/agent/runs`.
+ * Keeps the structured 402 fields (spend-policy approval) so callers can
+ * show the approval prompt and resend with the same `idempotencyKey`.
+ */
+export class ConversationRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly approvalId?: number,
+    readonly refId?: string,
+    readonly payment?: unknown,
+  ) {
+    super(message)
+    this.name = 'ConversationRequestError'
+  }
+}
 
+// ── A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3) ────────
 /** `a2a_task_results.status` values (Gateway worker). */
 export const A2A_STATUS = {
   PROCESSING: 1,
@@ -253,26 +278,41 @@ export class ConversationClient {
     const headers = this._headers()
     if (params.endUserId) headers['X-End-User-Id'] = params.endUserId
 
+    if (params.idempotencyKey) headers['X-Idempotency-Key'] = params.idempotencyKey
+
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 120_000)
     const onExternalAbort = () => controller.abort()
     opts?.signal?.addEventListener('abort', onExternalAbort, { once: true })
 
     try {
+      // idempotencyKey 只作为请求头传输，不进入下游 body。
+      const payload: Record<string, unknown> = { ...params }
+      delete payload.idempotencyKey
       const res = await fetch(`${this.baseUrl}/api/v1/agent/runs`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(params),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       })
 
       if (!res.ok) {
-        let detail = ''
-        try {
-          const body = await res.json()
-          detail = body?.error ?? ''
-        } catch {}
-        throw new Error(`Conversation request failed (HTTP ${res.status}) ${detail}`.trim())
+        let body: {
+          error?: string
+          code?: string
+          approvalId?: number
+          refId?: string
+          payment?: unknown
+        } = {}
+        try { body = await res.json() } catch {}
+        throw new ConversationRequestError(
+          `Conversation request failed (HTTP ${res.status}) ${body?.error ?? ''}`.trim(),
+          res.status,
+          body?.code,
+          body?.approvalId,
+          body?.refId,
+          body?.payment,
+        )
       }
 
       if (!res.body) {

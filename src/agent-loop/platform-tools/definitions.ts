@@ -213,16 +213,6 @@ const subscriptionTools: PlatformToolDef[] = [
   {
     type: 'function',
     function: {
-      name: 'actora_subscription_release',
-      description: 'Deprecated: ERC8004SubscriptionManager settles payments on subscribe/renew, so there is no escrow to release.',
-      parameters: object({
-        subscriptionId: integer('The subscription ID'),
-      }, required(['subscriptionId'])),
-    },
-  },
-  {
-    type: 'function',
-    function: {
       name: 'actora_subscription_fee',
       description: 'Get the current platform fee in basis points (e.g. 250 = 2.5%).',
       parameters: object({}),
@@ -289,18 +279,6 @@ const a2aTools: PlatformToolDef[] = [
 // ── 4. ReputationRegistry Tools ────────────────────────────────────────────
 
 const reputationTools: PlatformToolDef[] = [
-  {
-    type: 'function',
-    function: {
-      name: 'actora_reputation_rate',
-      description: 'Rate an agent (1-5) and leave a comment on-chain.',
-      parameters: object({
-        agentId: integer('The agent ID to rate'),
-        rating: integer('Rating from 1 (worst) to 5 (best)'),
-        comment: str('Optional review comment'),
-      }, required(['agentId', 'rating'])),
-    },
-  },
   {
     type: 'function',
     function: {
