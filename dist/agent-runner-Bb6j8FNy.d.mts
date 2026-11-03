@@ -1,4 +1,4 @@
-import { E as EncryptedPayload, c as AgentPrivatePayload, b as AgentPayload, P as PackResult } from './types-C6xHfvpn.js';
+import { E as EncryptedPayload, c as AgentPrivatePayload, b as AgentPayload, P as PackResult } from './types-C6xHfvpn.mjs';
 
 interface IPFSFetcherConfig {
     /** Primary IPFS gateway (default: ipfs.io) */
@@ -112,6 +112,12 @@ interface RunnableSkill {
     mode: 'open' | 'mcp' | 'a2a';
     /** If mode='a2a', the on-chain Agent ID being delegated to */
     a2aTargetAgentId?: number;
+    /**
+     * false = declarative (open) skill with no local executor. Defaults to true.
+     * Callers that surface tools to an LLM must filter these out — invoking them
+     * always throws.
+     */
+    available?: boolean;
     /**
      * Execute this skill with the given input.
      * - Open: runs locally (caller provides implementation)

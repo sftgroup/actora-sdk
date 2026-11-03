@@ -480,6 +480,7 @@ var AgentRunner = class {
   /** Wrap a SkillDef into a RunnableSkill with execute(). */
   _wrapSkill(skill) {
     let mode = "open";
+    let available = true;
     let executeFn;
     if (skill.execution) {
       if (skill.execution.type === "mcp") {
@@ -501,6 +502,7 @@ var AgentRunner = class {
         );
       }
     } else {
+      available = false;
       executeFn = async () => {
         throw new ActoraError(
           "INVALID_SCHEMA" /* INVALID_SCHEMA */,
@@ -514,6 +516,7 @@ var AgentRunner = class {
       inputSchema: skill.inputSchema,
       outputSchema: skill.outputSchema,
       mode,
+      available,
       execute: executeFn,
       /** If A2A, carry delegation metadata so the LLM can see it */
       a2aTargetAgentId: skill.execution?.type === "a2a" ? skill.execution.targetAgentId : void 0

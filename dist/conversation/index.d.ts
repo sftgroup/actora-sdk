@@ -53,6 +53,13 @@ interface ConversationChatParams {
     skills?: ConversationSkillDef[];
     /** BYOK: id of a stored tenant-owned API key (resolved server-side by the Gateway) */
     tenantKeyId?: string;
+    /**
+     * Stable idempotency key for this run (sent as `X-Idempotency-Key`).
+     * Spend-policy approvals are keyed by it: approve in the UI, then resend the
+     * SAME message with the SAME key so the approval is consumed instead of a
+     * new one being created.
+     */
+    idempotencyKey?: string;
 }
 /**
  * On-chain rail (2026-08-08): the user's own wallet must create the A2A task —
@@ -165,6 +172,19 @@ declare class ConversationTaskError extends Error {
     readonly code?: string;
     constructor(status: number, message: string, code?: string);
 }
+/**
+ * Non-2xx response from `POST /api/v1/agent/runs`.
+ * Keeps the structured 402 fields (spend-policy approval) so callers can
+ * show the approval prompt and resend with the same `idempotencyKey`.
+ */
+declare class ConversationRequestError extends Error {
+    readonly status: number;
+    readonly code?: string | undefined;
+    readonly approvalId?: number | undefined;
+    readonly refId?: string | undefined;
+    readonly payment?: unknown | undefined;
+    constructor(message: string, status: number, code?: string | undefined, approvalId?: number | undefined, refId?: string | undefined, payment?: unknown | undefined);
+}
 /** `a2a_task_results.status` values (Gateway worker). */
 declare const A2A_STATUS: {
     readonly PROCESSING: 1;
@@ -274,4 +294,4 @@ declare class ConversationClient {
     getSessionKeyInfo(): Promise<SessionKeyInfo>;
 }
 
-export { type A2ADelegatedTaskResult, A2A_STATUS, type ConversationChatParams, type ConversationChatResult, ConversationClient, type ConversationClientConfig, type ConversationCreateSessionParams, type ConversationCreateTaskParams, type ConversationSSEEvent, type ConversationSkillDef, type ConversationTask, ConversationTaskError, type ConversationTaskStatus, type OnChainApprovalRequest, type SessionKeyInfo };
+export { type A2ADelegatedTaskResult, A2A_STATUS, type ConversationChatParams, type ConversationChatResult, ConversationClient, type ConversationClientConfig, type ConversationCreateSessionParams, type ConversationCreateTaskParams, ConversationRequestError, type ConversationSSEEvent, type ConversationSkillDef, type ConversationTask, ConversationTaskError, type ConversationTaskStatus, type OnChainApprovalRequest, type SessionKeyInfo };

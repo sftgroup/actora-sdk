@@ -22,6 +22,7 @@ var conversation_exports = {};
 __export(conversation_exports, {
   A2A_STATUS: () => A2A_STATUS,
   ConversationClient: () => ConversationClient,
+  ConversationRequestError: () => ConversationRequestError,
   ConversationTaskError: () => ConversationTaskError
 });
 module.exports = __toCommonJS(conversation_exports);
@@ -36,6 +37,22 @@ var ConversationTaskError = class extends Error {
     this.status = status;
     this.code = code;
   }
+};
+var ConversationRequestError = class extends Error {
+  constructor(message, status, code, approvalId, refId, payment) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.approvalId = approvalId;
+    this.refId = refId;
+    this.payment = payment;
+    this.name = "ConversationRequestError";
+  }
+  status;
+  code;
+  approvalId;
+  refId;
+  payment;
 };
 var A2A_STATUS = {
   PROCESSING: 1,
@@ -73,25 +90,34 @@ var ConversationClient = class {
   async *stream(params, opts) {
     const headers = this._headers();
     if (params.endUserId) headers["X-End-User-Id"] = params.endUserId;
+    if (params.idempotencyKey) headers["X-Idempotency-Key"] = params.idempotencyKey;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 12e4);
     const onExternalAbort = () => controller.abort();
     opts?.signal?.addEventListener("abort", onExternalAbort, { once: true });
     try {
+      const payload = { ...params };
+      delete payload.idempotencyKey;
       const res = await fetch(`${this.baseUrl}/api/v1/agent/runs`, {
         method: "POST",
         headers,
-        body: JSON.stringify(params),
+        body: JSON.stringify(payload),
         signal: controller.signal
       });
       if (!res.ok) {
-        let detail = "";
+        let body = {};
         try {
-          const body = await res.json();
-          detail = body?.error ?? "";
+          body = await res.json();
         } catch {
         }
-        throw new Error(`Conversation request failed (HTTP ${res.status}) ${detail}`.trim());
+        throw new ConversationRequestError(
+          `Conversation request failed (HTTP ${res.status}) ${body?.error ?? ""}`.trim(),
+          res.status,
+          body?.code,
+          body?.approvalId,
+          body?.refId,
+          body?.payment
+        );
       }
       if (!res.body) {
         throw new Error("Conversation stream unavailable");
@@ -300,6 +326,7 @@ var ConversationClient = class {
 0 && (module.exports = {
   A2A_STATUS,
   ConversationClient,
+  ConversationRequestError,
   ConversationTaskError
 });
 //# sourceMappingURL=index.js.map

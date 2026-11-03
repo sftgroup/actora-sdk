@@ -566,8 +566,9 @@ function convertProperties(properties) {
   return out;
 }
 function buildTools(skills) {
-  if (!skills || skills.length === 0) return [];
-  return skills.map((skill) => ({
+  const usable = (skills ?? []).filter((skill) => skill.available !== false);
+  if (usable.length === 0) return [];
+  return usable.map((skill) => ({
     type: "function",
     function: {
       name: skill.name,
@@ -577,8 +578,9 @@ function buildTools(skills) {
   }));
 }
 function buildSystemPrompt(prompt, skills) {
-  if (!skills || skills.length === 0) return prompt;
-  const skillList = skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
+  const usable = (skills ?? []).filter((skill) => skill.available !== false);
+  if (usable.length === 0) return prompt;
+  const skillList = usable.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
   return `${prompt}
 
 ## Available Tools
@@ -1164,16 +1166,6 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "actora_subscription_release",
-      description: "Deprecated: ERC8004SubscriptionManager settles payments on subscribe/renew, so there is no escrow to release.",
-      parameters: object({
-        subscriptionId: integer("The subscription ID")
-      }, required(["subscriptionId"]))
-    }
-  },
-  {
-    type: "function",
-    function: {
       name: "actora_subscription_fee",
       description: "Get the current platform fee in basis points (e.g. 250 = 2.5%).",
       parameters: object({})
@@ -1234,18 +1226,6 @@ var a2aTools = [
   }
 ];
 var reputationTools = [
-  {
-    type: "function",
-    function: {
-      name: "actora_reputation_rate",
-      description: "Rate an agent (1-5) and leave a comment on-chain.",
-      parameters: object({
-        agentId: integer("The agent ID to rate"),
-        rating: integer("Rating from 1 (worst) to 5 (best)"),
-        comment: str("Optional review comment")
-      }, required(["agentId", "rating"]))
-    }
-  },
   {
     type: "function",
     function: {
@@ -1628,7 +1608,7 @@ async function executePlatformTool(toolName, args, ctx) {
       }
       case "actora_gateway_models": {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error("Gateway not configured");
-        const res = await fetch(`${ctx.gatewayUrl}/api/v1/models`, {
+        const res = await fetch(`${ctx.gatewayUrl}/api/v1/tenant/models`, {
           headers: { "Authorization": `Bearer ${ctx.gatewayToken}` }
         });
         return res.json();

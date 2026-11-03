@@ -2705,6 +2705,7 @@ __export(index_exports, {
   ConfigurationRegistry: () => ConfigurationRegistry,
   ContextCompactor: () => ContextCompactor,
   ConversationClient: () => ConversationClient,
+  ConversationRequestError: () => ConversationRequestError,
   ConversationTaskError: () => ConversationTaskError,
   DEFAULT_DERIVATION_INFO_PREFIX: () => DEFAULT_DERIVATION_INFO_PREFIX,
   DEFAULT_DERIVATION_INFO_PREFIX_V2: () => DEFAULT_DERIVATION_INFO_PREFIX_V2,
@@ -3456,6 +3457,7 @@ var AgentRunner = class {
   /** Wrap a SkillDef into a RunnableSkill with execute(). */
   _wrapSkill(skill) {
     let mode = "open";
+    let available = true;
     let executeFn;
     if (skill.execution) {
       if (skill.execution.type === "mcp") {
@@ -3477,6 +3479,7 @@ var AgentRunner = class {
         );
       }
     } else {
+      available = false;
       executeFn = async () => {
         throw new ActoraError(
           "INVALID_SCHEMA" /* INVALID_SCHEMA */,
@@ -3490,6 +3493,7 @@ var AgentRunner = class {
       inputSchema: skill.inputSchema,
       outputSchema: skill.outputSchema,
       mode,
+      available,
       execute: executeFn,
       /** If A2A, carry delegation metadata so the LLM can see it */
       a2aTargetAgentId: skill.execution?.type === "a2a" ? skill.execution.targetAgentId : void 0
@@ -3650,8 +3654,9 @@ function convertProperties(properties) {
   return out;
 }
 function buildTools(skills) {
-  if (!skills || skills.length === 0) return [];
-  return skills.map((skill) => ({
+  const usable = (skills ?? []).filter((skill) => skill.available !== false);
+  if (usable.length === 0) return [];
+  return usable.map((skill) => ({
     type: "function",
     function: {
       name: skill.name,
@@ -3661,8 +3666,9 @@ function buildTools(skills) {
   }));
 }
 function buildSystemPrompt(prompt, skills) {
-  if (!skills || skills.length === 0) return prompt;
-  const skillList = skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
+  const usable = (skills ?? []).filter((skill) => skill.available !== false);
+  if (usable.length === 0) return prompt;
+  const skillList = usable.map((s) => `- **${s.name}**: ${s.description}`).join("\n");
   return `${prompt}
 
 ## Available Tools
@@ -4248,16 +4254,6 @@ var subscriptionTools = [
   {
     type: "function",
     function: {
-      name: "actora_subscription_release",
-      description: "Deprecated: ERC8004SubscriptionManager settles payments on subscribe/renew, so there is no escrow to release.",
-      parameters: object({
-        subscriptionId: integer("The subscription ID")
-      }, required(["subscriptionId"]))
-    }
-  },
-  {
-    type: "function",
-    function: {
       name: "actora_subscription_fee",
       description: "Get the current platform fee in basis points (e.g. 250 = 2.5%).",
       parameters: object({})
@@ -4318,18 +4314,6 @@ var a2aTools = [
   }
 ];
 var reputationTools = [
-  {
-    type: "function",
-    function: {
-      name: "actora_reputation_rate",
-      description: "Rate an agent (1-5) and leave a comment on-chain.",
-      parameters: object({
-        agentId: integer("The agent ID to rate"),
-        rating: integer("Rating from 1 (worst) to 5 (best)"),
-        comment: str("Optional review comment")
-      }, required(["agentId", "rating"]))
-    }
-  },
   {
     type: "function",
     function: {
@@ -4712,7 +4696,7 @@ async function executePlatformTool(toolName, args, ctx) {
       }
       case "actora_gateway_models": {
         if (!ctx.gatewayUrl || !ctx.gatewayToken) throw new Error("Gateway not configured");
-        const res = await fetch(`${ctx.gatewayUrl}/api/v1/models`, {
+        const res = await fetch(`${ctx.gatewayUrl}/api/v1/tenant/models`, {
           headers: { "Authorization": `Bearer ${ctx.gatewayToken}` }
         });
         return res.json();
@@ -8493,6 +8477,22 @@ var ConversationTaskError = class extends Error {
     this.code = code;
   }
 };
+var ConversationRequestError = class extends Error {
+  constructor(message, status, code, approvalId, refId, payment) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.approvalId = approvalId;
+    this.refId = refId;
+    this.payment = payment;
+    this.name = "ConversationRequestError";
+  }
+  status;
+  code;
+  approvalId;
+  refId;
+  payment;
+};
 var A2A_STATUS = {
   PROCESSING: 1,
   DONE: 2,
@@ -8529,25 +8529,34 @@ var ConversationClient = class {
   async *stream(params, opts) {
     const headers = this._headers();
     if (params.endUserId) headers["X-End-User-Id"] = params.endUserId;
+    if (params.idempotencyKey) headers["X-Idempotency-Key"] = params.idempotencyKey;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? 12e4);
     const onExternalAbort = () => controller.abort();
     opts?.signal?.addEventListener("abort", onExternalAbort, { once: true });
     try {
+      const payload = { ...params };
+      delete payload.idempotencyKey;
       const res = await fetch(`${this.baseUrl}/api/v1/agent/runs`, {
         method: "POST",
         headers,
-        body: JSON.stringify(params),
+        body: JSON.stringify(payload),
         signal: controller.signal
       });
       if (!res.ok) {
-        let detail = "";
+        let body = {};
         try {
-          const body = await res.json();
-          detail = body?.error ?? "";
+          body = await res.json();
         } catch {
         }
-        throw new Error(`Conversation request failed (HTTP ${res.status}) ${detail}`.trim());
+        throw new ConversationRequestError(
+          `Conversation request failed (HTTP ${res.status}) ${body?.error ?? ""}`.trim(),
+          res.status,
+          body?.code,
+          body?.approvalId,
+          body?.refId,
+          body?.payment
+        );
       }
       if (!res.body) {
         throw new Error("Conversation stream unavailable");
@@ -9000,6 +9009,7 @@ var PassportClient = class {
   ConfigurationRegistry,
   ContextCompactor,
   ConversationClient,
+  ConversationRequestError,
   ConversationTaskError,
   DEFAULT_DERIVATION_INFO_PREFIX,
   DEFAULT_DERIVATION_INFO_PREFIX_V2,
