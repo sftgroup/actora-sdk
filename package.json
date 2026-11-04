@@ -115,7 +115,7 @@
     "mcp",
     "a2a"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@keelcodes/payments": "^0.3.1",
     "@noble/ciphers": "^1.0.0",

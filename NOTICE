@@ -3,12 +3,12 @@
 Actora (internal codename: Agentx)
 Copyright (c) 2026 sftgroup
 
-This product is licensed under the MIT License (see [LICENSE](./LICENSE)).
+Licensed under the Apache License, Version 2.0 (see [LICENSE](./LICENSE)).
 
 ## Third-party components
 
 The repository includes or depends on the following third-party software. Their
-licenses apply to those components; the MIT license of this repository does not
+licenses apply to those components; the licenses of this repository do not
 override them.
 
 | Component | Version / source | License | Notes |
@@ -18,8 +18,7 @@ override them.
 
 ## Trademarks
 
-"Actora", "Agentx" and associated logos are **not** licensed under the MIT
-License. See [TRADEMARK.md](./TRADEMARK.md).
+"Actora", "Agentx" and associated logos are **not** licensed under the Apache-2.0 license. See [TRADEMARK.md](./TRADEMARK.md).
 
 ## Security disclosures
 

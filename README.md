@@ -1282,3 +1282,8 @@ POST /api/v1/payments
 - `examples/mint-and-subscribe.mjs` —— 链上完整流程（选链 → 铸造 → 建计划 → 订阅 → 验证）
 - `examples/conversation-bend.mjs` —— B 端托管对话（chat + stream，BYOK）
 - `examples/central-agent-bend.mjs` —— 中心化市场（list / create / createPlan）
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+The "Actora" name and logo are not licensed — see [TRADEMARK.md](TRADEMARK.md).

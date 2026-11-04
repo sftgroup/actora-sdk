@@ -26,5 +26,5 @@ Developer Certificate of Origin 1.1 (<https://developercertificate.org/>).
 
 ## License
 
-By contributing you agree that your contributions are licensed under the MIT
-License. The "Actora" name and logo are not licensed — see [TRADEMARK.md](./TRADEMARK.md).
+By contributing you agree that your contributions are licensed under the
+Apache License, Version 2.0. The "Actora" name and logo are not licensed — see [TRADEMARK.md](./TRADEMARK.md).
