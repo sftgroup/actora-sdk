@@ -5,9 +5,9 @@
 //
 //   ① submitSettlement        —— EOA 付款方离线签 EIP-712 `SettlementProof`，
 //                                网关核对 PC-4 结算记录后由 writer 上链。
-//   ② submitSubscriptionSettlement —— 链上订阅（含 AA 自动续订）**无需签名**：
-//                                证据直接取自 SubscriptionManager 的公开状态，
-//                                任何人都能提交，第三方可独立复核。
+//   ② submitSubscriptionSettlement —— 链上订阅**无需签名**：证据直接取自
+//                                SubscriptionManager 的公开状态，任何人都能提交，
+//                                第三方可独立复核。（AA 自动续订已于 2026-11-08 下线。）
 //
 // getSettlementDomain 返回 EIP-712 域 + 结构体类型，保证客户端与合约逐字一致。
 // ---------------------------------------------------------------------------
@@ -37,7 +37,10 @@ export const SETTLEMENT_PROOF_TYPES = {
 
 const PRIMARY_TYPE = 'SettlementProof' as const
 
-/** 结算 rail 命名空间；用于推导 `settlementRef`。 */
+/**
+ * 结算 rail 命名空间；用于推导 `settlementRef`。
+ * `sessionKey` 为历史 rail：2026-11-08 AA 下线后不再产生新记录，保留用于复核历史回执。
+ */
 export type SettlementRail = 'erc8183' | 'milestone' | 'x402' | 'sessionKey'
 
 /**

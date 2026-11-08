@@ -186,8 +186,8 @@ export class ConversationTaskError extends Error {
 
 /**
  * Non-2xx response from `POST /api/v1/agent/runs`.
- * Keeps the structured 402 fields (spend-policy approval) so callers can
- * show the approval prompt and resend with the same `idempotencyKey`.
+ * Keeps the structured 402 payment fields so callers can pay and resend
+ * with the same `idempotencyKey`.
  */
 export class ConversationRequestError extends Error {
   constructor(
@@ -203,7 +203,7 @@ export class ConversationRequestError extends Error {
   }
 }
 
-// ── A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3) ────────
+// ── A2A delegated tasks ──────────────────────────────────────────────────
 /** `a2a_task_results.status` values (Gateway worker). */
 export const A2A_STATUS = {
   PROCESSING: 1,
@@ -225,8 +225,8 @@ export interface A2ADelegatedTaskResult {
   payment_target_agent_id?: number | null
   payment_ref?: string | null
   payment_pending_since?: string | null
-  /** Payment options offered while `status === A2A_STATUS.AWAITING_PAYMENT` (REQ-2). */
-  payment_pay_options?: { prepay: boolean; sessionKey: boolean } | null
+  /** 历史字段（REQ-2）：`sessionKey` 自 2026-11-08 AA 下线起不再置位，保留以兼容旧行。 */
+  payment_pay_options?: { prepay: boolean; sessionKey?: boolean } | null
   /** 082：按次结算代币（USDC 合约地址）；NULL = 历史原生币任务。 */
   payment_token?: string | null
   /** 082：按次权威单价（美元美分），优先用于展示。 */
@@ -235,16 +235,9 @@ export interface A2ADelegatedTaskResult {
   updated_at?: string
 }
 
-/** Session Key engine capability info (GET /api/v1/a2a/session-key/info). */
-export interface SessionKeyInfo {
-  enabled: boolean
-  chain: string
-  chainId: number
-  baseUrl: string
-}
-
-// 2026-10-23：`GET /api/v1/billing/balance` 已随 x402 v2 下线（不预充值、不记账），
-// 余额预检与按次 session 授权状态改由 `SpendPolicyClient.sessions()` 提供。
+// 2026-10-23：`GET /api/v1/billing/balance` 已随 x402 v2 下线（不预充值、不记账）。
+// 2026-11-08：`GET /api/v1/a2a/session-key/info` 与 `POST /api/v1/a2a/tasks/:id/retry`
+// 随 AA 下线删除，SDK 不再提供 `getSessionKeyInfo()` / `retryA2ATask()`。
 
 export class ConversationClient {
   private readonly baseUrl: string
@@ -479,7 +472,7 @@ export class ConversationClient {
     return body as ConversationTask
   }
 
-  // ── A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3) ─────
+  // ── A2A delegated tasks ─────────────────────────────────────────────────
 
   /** Fetch an A2A delegated-task result row (`a2a_task_results`). */
   async getA2ATaskResult(taskId: string | number): Promise<A2ADelegatedTaskResult> {
@@ -493,46 +486,5 @@ export class ConversationClient {
       )
     }
     return body as A2ADelegatedTaskResult
-  }
-
-  /**
-   * Re-activate an `awaiting_payment` A2A task after the end user has
-   * authorized (and funded) a Session Key. Does NOT deduct from the ledger —
-   * the worker re-runs and auto-pays via the session-key branch. The client
-   * must be configured with `endUserId` = the task's `payment_payer` (or the
-   * caller holds an admin key).
-   */
-  async retryA2ATask(taskId: string | number): Promise<{ retried: boolean; taskId: number }> {
-    const res = await fetch(`${this.baseUrl}/api/v1/a2a/tasks/${taskId}/retry`, {
-      method: 'POST',
-      headers: this._headers(),
-    })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      throw new ConversationTaskError(
-        res.status,
-        body?.error || `A2A task retry failed (HTTP ${res.status})`,
-        body?.code,
-      )
-    }
-    return body as { retried: boolean; taskId: number }
-  }
-
-  /**
-   * Session Key engine capability info — used by an end-user frontend to reach
-   * the engine's public `nonce` / `createSession` endpoints directly
-   * (EIP-712-verified; the session private key never transits the Gateway).
-   */
-  async getSessionKeyInfo(): Promise<SessionKeyInfo> {
-    const res = await fetch(`${this.baseUrl}/api/v1/a2a/session-key/info`, { headers: this._headers() })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      throw new ConversationTaskError(
-        res.status,
-        body?.error || `Session-key info lookup failed (HTTP ${res.status})`,
-        body?.code,
-      )
-    }
-    return body as SessionKeyInfo
   }
 }

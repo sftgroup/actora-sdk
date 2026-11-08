@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 // A single entry point for subscribing across the rails Actora still settles:
 //
-//   method: 'chain'  → on-chain SubscriptionManager (native / ERC20, escrow)
-//   method: 'x402'   → native-token period payment via the unified endpoint
+//   method: 'chain'  → on-chain SubscriptionManager (native / ERC20; v3 has no escrow)
+//   method: 'x402'   → native-token period payment direct to the publisher payout address
 //
 // 0.24.0: the Agent-subscription fiat rail was removed. Fiat is collected by
 // the publisher's own payment channel (agent_listings.payment_link_url) and

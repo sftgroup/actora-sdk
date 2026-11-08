@@ -32,7 +32,10 @@ declare const SETTLEMENT_PROOF_TYPES: {
         readonly type: "uint64";
     }];
 };
-/** 结算 rail 命名空间；用于推导 `settlementRef`。 */
+/**
+ * 结算 rail 命名空间；用于推导 `settlementRef`。
+ * `sessionKey` 为历史 rail：2026-11-08 AA 下线后不再产生新记录，保留用于复核历史回执。
+ */
 type SettlementRail = 'erc8183' | 'milestone' | 'x402' | 'sessionKey';
 /**
  * 同一 job 下所有结算的聚合键（信誉按 taskRef 汇总）。

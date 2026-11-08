@@ -1128,7 +1128,7 @@ var subscriptionTools = [
     type: "function",
     function: {
       name: "actora_subscription_detail",
-      description: "Get full subscription details including trial info, payment token, amount paid, escrow status.",
+      description: "Get full subscription details including trial info, payment token and amount paid.",
       parameters: object({
         subscriptionId: integer("The subscription ID")
       }, required(["subscriptionId"]))

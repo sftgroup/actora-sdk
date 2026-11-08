@@ -174,8 +174,8 @@ declare class ConversationTaskError extends Error {
 }
 /**
  * Non-2xx response from `POST /api/v1/agent/runs`.
- * Keeps the structured 402 fields (spend-policy approval) so callers can
- * show the approval prompt and resend with the same `idempotencyKey`.
+ * Keeps the structured 402 payment fields so callers can pay and resend
+ * with the same `idempotencyKey`.
  */
 declare class ConversationRequestError extends Error {
     readonly status: number;
@@ -205,10 +205,10 @@ interface A2ADelegatedTaskResult {
     payment_target_agent_id?: number | null;
     payment_ref?: string | null;
     payment_pending_since?: string | null;
-    /** Payment options offered while `status === A2A_STATUS.AWAITING_PAYMENT` (REQ-2). */
+    /** 历史字段（REQ-2）：`sessionKey` 自 2026-11-08 AA 下线起不再置位，保留以兼容旧行。 */
     payment_pay_options?: {
         prepay: boolean;
-        sessionKey: boolean;
+        sessionKey?: boolean;
     } | null;
     /** 082：按次结算代币（USDC 合约地址）；NULL = 历史原生币任务。 */
     payment_token?: string | null;
@@ -216,13 +216,6 @@ interface A2ADelegatedTaskResult {
     payment_price_usd_cents?: number | null;
     created_at?: string;
     updated_at?: string;
-}
-/** Session Key engine capability info (GET /api/v1/a2a/session-key/info). */
-interface SessionKeyInfo {
-    enabled: boolean;
-    chain: string;
-    chainId: number;
-    baseUrl: string;
 }
 declare class ConversationClient {
     private readonly config;
@@ -275,23 +268,6 @@ declare class ConversationClient {
     cancelTask(taskId: string): Promise<ConversationTask>;
     /** Fetch an A2A delegated-task result row (`a2a_task_results`). */
     getA2ATaskResult(taskId: string | number): Promise<A2ADelegatedTaskResult>;
-    /**
-     * Re-activate an `awaiting_payment` A2A task after the end user has
-     * authorized (and funded) a Session Key. Does NOT deduct from the ledger —
-     * the worker re-runs and auto-pays via the session-key branch. The client
-     * must be configured with `endUserId` = the task's `payment_payer` (or the
-     * caller holds an admin key).
-     */
-    retryA2ATask(taskId: string | number): Promise<{
-        retried: boolean;
-        taskId: number;
-    }>;
-    /**
-     * Session Key engine capability info — used by an end-user frontend to reach
-     * the engine's public `nonce` / `createSession` endpoints directly
-     * (EIP-712-verified; the session private key never transits the Gateway).
-     */
-    getSessionKeyInfo(): Promise<SessionKeyInfo>;
 }
 
-export { type A2ADelegatedTaskResult, A2A_STATUS, type ConversationChatParams, type ConversationChatResult, ConversationClient, type ConversationClientConfig, type ConversationCreateSessionParams, type ConversationCreateTaskParams, ConversationRequestError, type ConversationSSEEvent, type ConversationSkillDef, type ConversationTask, ConversationTaskError, type ConversationTaskStatus, type OnChainApprovalRequest, type SessionKeyInfo };
+export { type A2ADelegatedTaskResult, A2A_STATUS, type ConversationChatParams, type ConversationChatResult, ConversationClient, type ConversationClientConfig, type ConversationCreateSessionParams, type ConversationCreateTaskParams, ConversationRequestError, type ConversationSSEEvent, type ConversationSkillDef, type ConversationTask, ConversationTaskError, type ConversationTaskStatus, type OnChainApprovalRequest };

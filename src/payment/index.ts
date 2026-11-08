@@ -38,23 +38,8 @@ export { A2AClient } from './a2a-client'
 export { PeriodClient } from './period-client'
 export type { ClientOptions } from '@keelcodes/payments'
 
-// P6.2: spend policy (business limits → Gator caveat mapping) + approval queue.
-export { SpendPolicyClient } from './spend-policy'
-export type {
-  SpendChain,
-  SpendPolicy,
-  SpendPolicyDoc,
-  SpendPolicyClientConfig,
-  SpendGateResult,
-  SpendApproval,
-  SpendDecisionCode,
-  GatorCaveat,
-  SpendSession,
-  EnableSpendSessionResult,
-  ConfirmSpendSessionResult,
-  SpendSessionRevokeDraft,
-  SpendSessionRevokeResult,
-} from './spend-policy'
+// P6.2 spend policy / session 授权已于 2026-11-08 随 AA 下线移除
+// （网关删除 `/api/v1/spend-policy/*`，`SpendPolicyClient` 不再导出）。
 
 /** 对齐的通用支付引擎版本（`@keelcodes/payments`）。 */
 export const PAYMENT_VERSION = '0.3.1'

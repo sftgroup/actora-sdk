@@ -194,7 +194,7 @@ describe('ConversationClient — parallel tasks (P8/P9)', () => {
     })
   })
 
-  describe('A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3)', () => {
+  describe('A2A delegated tasks (AItrader REQ-1/2/3)', () => {
     it('getA2ATaskResult GETs /api/v1/a2a/task-result/:id and returns the row', async () => {
       const row = {
         task_id: 7,
@@ -202,34 +202,14 @@ describe('ConversationClient — parallel tasks (P8/P9)', () => {
         payment_pay_to: '0xpay',
         payment_amount_wei: '1000000000000000',
         payment_payer: '0xuser',
-        payment_pay_options: { prepay: true, sessionKey: true },
+        payment_pay_options: { prepay: true },
       }
       fetchMock.mockResolvedValue(jsonResponse(row))
       const res = await makeClient().getA2ATaskResult(7)
       expect(res).toMatchObject({ task_id: 7, status: A2A_STATUS.AWAITING_PAYMENT })
-      expect(res.payment_pay_options?.sessionKey).toBe(true)
+      expect(res.payment_pay_options?.prepay).toBe(true)
       const { url } = firstCall(fetchMock.mock.calls[0]!)
       expect(url).toBe('https://gw.example.com/api/v1/a2a/task-result/7')
-    })
-
-    it('retryA2ATask POSTs /api/v1/a2a/tasks/:id/retry', async () => {
-      const client = makeClient({ endUserId: '0xuser' })
-      fetchMock.mockResolvedValue(jsonResponse({ retried: true, taskId: 7 }))
-      const res = await client.retryA2ATask(7)
-      expect(res).toEqual({ retried: true, taskId: 7 })
-      const call = fetchMock.mock.calls[0]!
-      const { url, method, headers } = firstCall(call)
-      expect(url).toBe('https://gw.example.com/api/v1/a2a/tasks/7/retry')
-      expect(method).toBe('POST')
-      expect(headers['X-End-User-Id']).toBe('0xuser')
-    })
-
-    it('getSessionKeyInfo returns engine capability info', async () => {
-      fetchMock.mockResolvedValue(jsonResponse({ enabled: true, chain: 'bsc', chainId: 56, baseUrl: 'https://sk.example' }))
-      const res = await makeClient().getSessionKeyInfo()
-      expect(res).toMatchObject({ enabled: true, chain: 'bsc', chainId: 56 })
-      const { url } = firstCall(fetchMock.mock.calls[0]!)
-      expect(url).toBe('https://gw.example.com/api/v1/a2a/session-key/info')
     })
 
     it('throws ConversationTaskError on non-2xx', async () => {

@@ -1,5 +1,40 @@
 # @actora/sdk Upgrade Guide
 
+> ⚠️ **2026-11-08（AA 下线）**：网关已删除自动续订（`/billing/auto-renew/*`）、按次 session 授权
+> （`/spend-policy/*`、`/a2a/session-key/info`）与 `POST /a2a/tasks/:id/resume`。本文件中描述这些
+> 能力的旧版本升级说明仅作历史记录；新接入请使用「加密货币直付 / Stripe 订阅 + x402 按次直付」。
+
+## v0.24.1 → v0.25.0（2026-11-08，**破坏性变更**）
+
+> 主题：**移除 AA（ERC-4337）相关的客户端 API**。平台已下线自动续订、按次 session 授权与
+> 派生智能账户代扣，网关对应路由已删除；SDK 中指向这些端点的类/方法一并移除，避免调用方
+> 拿到 404。订阅改为加密货币直付开发者 `payout_address`（或 `chain` rail），按次统一走 x402。
+
+- **移除的 API（breaking）**：
+  - `SpendPolicyClient` 及其全部类型（`SpendChain` / `SpendPolicy` / `SpendPolicyDoc` /
+    `SpendPolicyClientConfig` / `SpendGateResult` / `SpendApproval` / `SpendDecisionCode` /
+    `GatorCaveat` / `SpendSession` / `EnableSpendSessionResult` / `ConfirmSpendSessionResult` /
+    `SpendSessionRevokeDraft` / `SpendSessionRevokeResult`）—— 网关 `/api/v1/spend-policy/*` 已删除；
+  - `ConversationClient.getSessionKeyInfo()` —— 网关 `/api/v1/a2a/session-key/info` 已删除；
+  - `ConversationClient.retryA2ATask()` —— 网关 `POST /api/v1/a2a/tasks/:id/retry` 已删除；
+  - `SessionKeyInfo` 类型。
+- **类型调整**：`A2ADelegatedTaskResult.payment_pay_options.sessionKey` 改为可选（历史字段，
+  新任务不再返回该字段）。
+- **保留但不再产生新数据**：`SettlementRail` 中的 `'sessionKey'` 仅用于复核历史结算回执。
+- **迁移方式**：
+
+```ts
+// 旧（≤0.24.1）：按次调用依赖 session 授权
+const session = await conversation.getSessionKeyInfo()
+await conversation.retryA2ATask(taskId)
+
+// 新（0.25.0）：按次走 x402 直付，拿 402 的 payTo/token/amount 付款后带 txHash 重试
+const res = await conversation.chat({ agentId, message, payment_tx: txHash })
+
+// 订阅：chain rail（SubscriptionManager）或直付开发者 payout_address
+await payments.pay({ method: 'x402', planId, agentId, subscriber, period: 'month' })
+```
+
 ## v0.23.2 → v0.24.0（2026-11-02，**破坏性变更**）
 
 > 主题：**移除 Agent 订阅的 fiat rail**。平台不再代收 Agent 订阅法币：法币由发布者

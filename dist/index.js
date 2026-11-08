@@ -2747,7 +2747,6 @@ __export(index_exports, {
   STANDARD_IDENTITY_ABI: () => STANDARD_IDENTITY_ABI,
   SUBSCRIPTION_PERIODS: () => SUBSCRIPTION_PERIODS,
   SUBSCRIPTION_VERSION: () => SUBSCRIPTION_VERSION,
-  SpendPolicyClient: () => SpendPolicyClient,
   SubscriptionManager: () => SubscriptionManager,
   SubscriptionPayments: () => SubscriptionPayments,
   TenantPlanPayments: () => TenantPlanPayments,
@@ -4216,7 +4215,7 @@ var subscriptionTools = [
     type: "function",
     function: {
       name: "actora_subscription_detail",
-      description: "Get full subscription details including trial info, payment token, amount paid, escrow status.",
+      description: "Get full subscription details including trial info, payment token and amount paid.",
       parameters: object({
         subscriptionId: integer("The subscription ID")
       }, required(["subscriptionId"]))
@@ -7002,102 +7001,6 @@ var PeriodClient = class {
   }
 };
 
-// src/payment/spend-policy.ts
-var SpendPolicyClient = class {
-  constructor(config) {
-    this.config = config;
-    this.baseUrl = config.gatewayUrl.replace(/\/$/, "");
-  }
-  config;
-  baseUrl;
-  async request(method, path, body) {
-    const headers = {};
-    if (body !== void 0) headers["Content-Type"] = "application/json";
-    if (this.config.apiKey) headers["X-Api-Key"] = this.config.apiKey;
-    if (this.config.accessToken) headers["Authorization"] = `Bearer ${this.config.accessToken}`;
-    if (!this.config.apiKey && !this.config.accessToken) {
-      throw new Error("SpendPolicyClient requires either apiKey or accessToken");
-    }
-    const res = await fetch(`${this.baseUrl}/api/v1/spend-policy${path}`, {
-      method,
-      headers,
-      body: body !== void 0 ? JSON.stringify(body) : void 0
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const detail = json?.message ?? json?.error ?? `HTTP ${res.status}`;
-      throw new Error(`Spend policy request failed: ${detail}`);
-    }
-    return json;
-  }
-  /** 该钱包全部链的策略。 */
-  async list() {
-    const out = await this.request("GET", "");
-    return out.policies;
-  }
-  /** 单链策略 + 派生的 Gator caveat 组合。 */
-  get(chain) {
-    return this.request("GET", `/${chain}`);
-  }
-  /** 写入 / 更新策略（非法字段网关返回 400）。 */
-  put(chain, policy, enabled = true) {
-    return this.request("PUT", `/${chain}`, { policy, enabled });
-  }
-  /** 停用策略（保留记录，可重新 put 启用）。 */
-  disable(chain) {
-    return this.request("DELETE", `/${chain}`);
-  }
-  /**
-   * dry-run 校验一笔支出（不落流水、不代付）。
-   * `refId` 建议传任务/订单稳定 ID：超额时会据此进入审批队列并去重。
-   */
-  check(input) {
-    return this.request("POST", "/check", input);
-  }
-  /** 超额审批队列（默认全部，可传 status 过滤）。 */
-  async approvals(opts = {}) {
-    const qs2 = new URLSearchParams();
-    if (opts.status) qs2.set("status", opts.status);
-    if (opts.limit) qs2.set("limit", String(opts.limit));
-    const suffix = qs2.toString() ? `?${qs2.toString()}` : "";
-    const out = await this.request("GET", `/approvals${suffix}`);
-    return out.approvals;
-  }
-  /** 人工审批（approve 只能被消费一次；reject 后同一 refId 永久拒绝）。 */
-  async decide(id, decision) {
-    const out = await this.request("POST", `/approvals/${id}/decide`, { decision });
-    return out.approval;
-  }
-  // ── 按次 session 授权（Keel v1；不预充值、不记账）─────────────────────
-  /** 我的全部链 session 授权状态。 */
-  async sessions() {
-    const out = await this.request("GET", "/session");
-    return out.sessions;
-  }
-  /**
-   * 第一步：创建 session（必要时顺带部署智能账户）并返回 owner 待签 digest。
-   * 用户对 `digest` 裸签后调用 `confirmSession` 上链。
-   */
-  enableSession(input = {}) {
-    return this.request("POST", "/session/enable", input);
-  }
-  /** 第二步：提交 owner 裸签（65 字节 hex）完成授权。 */
-  confirmSession(input) {
-    return this.request("POST", "/session/confirm", input);
-  }
-  /**
-   * 撤销第一步：冻结撤销 op 并返回待签 digest（网关落草稿，避免 nonce/gas 变化导致签名失配）。
-   * v0 存量 session 无法在链上定位，网关返回 409，需重新 `enableSession` 迁移到 v1。
-   */
-  prepareSessionRevoke(input = {}) {
-    return this.request("POST", "/session/revoke", input);
-  }
-  /** 撤销第二步：带回第一步的 `digest` 的 owner 签名提交上链。 */
-  revokeSession(input) {
-    return this.request("POST", "/session/revoke", input);
-  }
-};
-
 // src/payment/index.ts
 var PAYMENT_VERSION = "0.3.1";
 
@@ -8707,7 +8610,7 @@ var ConversationClient = class {
     }
     return body;
   }
-  // ── A2A delegated tasks & Session Key auto-pay (AItrader REQ-1/2/3) ─────
+  // ── A2A delegated tasks ─────────────────────────────────────────────────
   /** Fetch an A2A delegated-task result row (`a2a_task_results`). */
   async getA2ATaskResult(taskId) {
     const res = await fetch(`${this.baseUrl}/api/v1/a2a/task-result/${taskId}`, { headers: this._headers() });
@@ -8716,45 +8619,6 @@ var ConversationClient = class {
       throw new ConversationTaskError(
         res.status,
         body?.error || `A2A task result lookup failed (HTTP ${res.status})`,
-        body?.code
-      );
-    }
-    return body;
-  }
-  /**
-   * Re-activate an `awaiting_payment` A2A task after the end user has
-   * authorized (and funded) a Session Key. Does NOT deduct from the ledger —
-   * the worker re-runs and auto-pays via the session-key branch. The client
-   * must be configured with `endUserId` = the task's `payment_payer` (or the
-   * caller holds an admin key).
-   */
-  async retryA2ATask(taskId) {
-    const res = await fetch(`${this.baseUrl}/api/v1/a2a/tasks/${taskId}/retry`, {
-      method: "POST",
-      headers: this._headers()
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new ConversationTaskError(
-        res.status,
-        body?.error || `A2A task retry failed (HTTP ${res.status})`,
-        body?.code
-      );
-    }
-    return body;
-  }
-  /**
-   * Session Key engine capability info — used by an end-user frontend to reach
-   * the engine's public `nonce` / `createSession` endpoints directly
-   * (EIP-712-verified; the session private key never transits the Gateway).
-   */
-  async getSessionKeyInfo() {
-    const res = await fetch(`${this.baseUrl}/api/v1/a2a/session-key/info`, { headers: this._headers() });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new ConversationTaskError(
-        res.status,
-        body?.error || `Session-key info lookup failed (HTTP ${res.status})`,
         body?.code
       );
     }
@@ -9051,7 +8915,6 @@ var PassportClient = class {
   STANDARD_IDENTITY_ABI,
   SUBSCRIPTION_PERIODS,
   SUBSCRIPTION_VERSION,
-  SpendPolicyClient,
   SubscriptionManager,
   SubscriptionPayments,
   TenantPlanPayments,
